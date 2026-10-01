@@ -20,7 +20,7 @@ The node is a real product architecture, not a disposable development-board prot
 - GNSS positioning and timing: multi-constellation, external active antenna, UART, PPS, reset, software-accessible timing
 - Gigabit Ethernet through an Amphenol LTW RCP-5SPFFH-SCU7001 sealed panel feed-through (B-06, D-022), no PoE, no Ethernet LEDs
 - Removable external battery pack designed by this project (3S2P 18650, about 76 Wh, decided September 30, 2026; 9 to 12.6 V in use, swapped without tools, charged in the radio while installed, through a sealed USB-C DATA / CHARGE port), reverse-polarity and transient protection, eFuse current limiting, regulated 5 V and 3.3 V, independently switchable radios, hardware supervision and watchdog
-- Node-side half-duplex voice/PTT using an external OpenVLM USB audio module and its supported PTT handset accessory; battery voltage, current, and power telemetry; board, radio, and CPU thermal telemetry; hardware-aware mesh telemetry exposed to software
+- Node-side half-duplex voice/PTT through an external OpenVLM USB audio/PTT module and supported handset; the handset supplies speaker and microphone, with no built-in carrier speaker/microphone. Battery voltage, current, and power telemetry; board, radio, and CPU thermal telemetry; hardware-aware mesh telemetry exposed to software
 - Fanless operation, aluminum enclosure baseline, external RF, external battery, external Ethernet
 - No normal-use physical controls, no user-facing status LEDs, no required external debug connector; normal operation is controlled from an end-user device (EUD)
 
@@ -274,7 +274,8 @@ Current logical map:
 | 20 | INA228_ALERT_N | Battery monitor alert |
 | 21 | WIFI_WDIS1_N | Wi-Fi RF disable (provisional) |
 | 22 | WIFI_WDIS2_N | Bluetooth disable (provisional) |
-| 23 to 27 | Reserved | Future expansion |
+| 23 | VLM_USB_FAULT_N | OpenVLM port-3 VBUS switch / downstream overcurrent fault |
+| 24 to 27 | Reserved | Future expansion |
 
 Dedicated signals: SYS_PMIC_EN (CM5 PMIC enable), TP_PWR_BUTTON (internal test pad), and TP_NBOOT (internal test pad). GPIO 18 and 19 must be driven open-drain (output low to assert, input to release) because the GW16170 pull-ups return to its switched 3.3 V rail. All CM5 GPIO run at 3.3 V with GPIO_VREF tied to 3.3 V. GPIO 21 and 22 are provisional until the AIW-170BQ pin table is available.
 
