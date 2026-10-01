@@ -251,8 +251,8 @@ Current logical map:
 
 | GPIO | Signal | Function |
 |---|---|---|
-| 0 | GNSS_UART_TX | GNSS UART |
-| 1 | GNSS_UART_RX | GNSS UART |
+| 0 | Reserved / unassigned | I2C0 alternate-function available; not used by V1 GNSS |
+| 1 | Reserved / unassigned | I2C0 alternate-function available; not used by V1 GNSS |
 | 2 | SYS_I2C_SDA | System I2C |
 | 3 | SYS_I2C_SCL | System I2C |
 | 4 | HALOW_PWR_EN | HaLow power enable |
@@ -265,8 +265,8 @@ Current logical map:
 | 11 | SUPERVISOR_WDO | Watchdog status |
 | 12 | POWER_GOOD | Power-good |
 | 13 | EFUSE_FAULT | eFuse fault |
-| 14 | USB_HUB_RESET_N | USB hub reset |
-| 15 | HALOW_USB_FAULT_N | HaLow USB fault |
+| 14 | GNSS_UART_TX | GNSS UART0 TX |
+| 15 | GNSS_UART_RX | GNSS UART0 RX |
 | 16 | BT_USB_FAULT_N | Bluetooth USB fault |
 | 17 | ETH_SYNC_OUT | Ethernet timing |
 | 18 | HALOW_RESET_N | HaLow reset (M.2 pin 56), open-drain |
@@ -274,9 +274,11 @@ Current logical map:
 | 20 | INA228_ALERT_N | Battery monitor alert |
 | 21 | WIFI_WDIS1_N | Wi-Fi RF disable (provisional) |
 | 22 | WIFI_WDIS2_N | Bluetooth disable (provisional) |
-| 23 to 27 | Reserved | Future expansion |
+| 23 | USB_HUB_RESET_N | USB hub reset |
+| 24 | HALOW_USB_FAULT_N | HaLow USB fault |
+| 25 to 27 | Reserved | Future expansion |
 
-Dedicated signals: SYS_PMIC_EN (CM5 PMIC enable), TP_PWR_BUTTON (internal test pad), and TP_NBOOT (internal test pad). GPIO 18 and 19 must be driven open-drain (output low to assert, input to release) because the GW16170 pull-ups return to its switched 3.3 V rail. All CM5 GPIO run at 3.3 V with GPIO_VREF tied to 3.3 V. GPIO 21 and 22 are provisional until the AIW-170BQ pin table is available.
+Dedicated signals: SYS_PMIC_EN (CM5 PMIC enable), TP_PWR_BUTTON (internal test pad), and TP_NBOOT (internal test pad). GPIO 18 and 19 must be driven open-drain (output low to assert, input to release) because the GW16170 pull-ups return to its switched 3.3 V rail. All CM5 GPIO run at 3.3 V with GPIO_VREF tied to 3.3 V. GPIO 21 and 22 remain provisional pending the host-level decision for AIW W_DISABLE2# (Bluetooth enable); AIW W_DISABLE1# is reserved. GPIO23 and GPIO24 are the proposed relocations for USB_HUB_RESET_N and HALOW_USB_FAULT_N.
 
 ## 17. Schematic sheets
 
