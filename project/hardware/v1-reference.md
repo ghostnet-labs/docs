@@ -18,7 +18,7 @@ The node is a real product architecture, not a disposable development-board prot
 - 900 MHz-class Wi-Fi HaLow mesh (North American 902 to 928 MHz), external antenna, USB interface, hardware power isolation
 - 2.4/5/6 GHz Wi-Fi, 2T2R, external antennas, PCIe WLAN plus USB Bluetooth
 - GNSS positioning and timing: multi-constellation, external active antenna, UART, PPS, reset, software-accessible timing
-- Gigabit Ethernet through an Amphenol LTW RCP-6APFFH-SCM7001 sealed connector with discrete magnetics, no PoE, no Ethernet LEDs
+- Gigabit Ethernet through an Amphenol LTW RCP-5SPFFH-SCU7001 sealed panel feed-through (B-06, D-022), no PoE, no Ethernet LEDs
 - Removable external battery pack designed by this project (3S2P 18650, about 76 Wh, decided September 30, 2026; 9 to 12.6 V in use, swapped without tools, charged in the radio while installed, through a sealed USB-C DATA / CHARGE port), reverse-polarity and transient protection, eFuse current limiting, regulated 5 V and 3.3 V, independently switchable radios, hardware supervision and watchdog
 - Battery voltage, current, and power telemetry; board, radio, and CPU thermal telemetry; hardware-aware mesh telemetry exposed to software
 - Fanless operation, aluminum enclosure baseline, external RF, external battery, external Ethernet
@@ -122,9 +122,9 @@ RF protection: do not automatically populate a generic TVS on the GNSS RF line. 
 
 ## 10. Ethernet: sealed Gigabit connector
 
-Decision (B-06, D-010): the Ethernet port is the Amphenol LTW RCP-6APFFH-SCM7001 sealed Gigabit Ethernet connector (IP67 mated, shielded Cat6A). The M12 X-coded option and the Glenair Series 80 Mighty Mouse candidate are retired (R-04). Not yet chosen: the magnetics module, the ESD and surge device, and the enclosure integration and mating cable, which must be validated. Request the connector drawing and STEP model from Amphenol LTW.
+Decision (B-06, D-022): the Ethernet port is the Amphenol LTW RCP-5SPFFH-SCU7001 sealed panel feed-through (IP67 with the port open or mated, shielded Cat5e, 13/16"-28 UNS thread, panel cut-out 20.8 mm with a 19.4 mm flat). A CAP-WACMSPC1 screw cap on a rubber strap covers the port when unused. The M12 X-coded option and the Glenair Series 80 Mighty Mouse candidate are retired (R-04), as are the Cat6A RCP-6APFFH-SCM7001 (R-15) and the Bel 1840888-4 as the wall connector (R-16). The feed-through ends in an RJ45 socket inside the wall, so the carrier needs a board-side RJ45 and a short internal patch cable. Not yet chosen: the board-side jack, the magnetics, the ESD and surge device, and the internal cable. The maker's drawings and 3D model are in the project files under v1-cad/step/.
 
-Consequences: the connector has no built-in magnetics, so the board carries a discrete four-channel 1000BASE-T magnetics module close to the connector, plus a low-capacitance ESD and surge device. The CM5 already includes the BCM54210PE Gigabit PHY, so the design routes four 100 ohm differential MDI pairs from the CM5 through the magnetics to the connector, and no external PHY is used. The connector is sealed to the enclosure wall, and the shield follows the chassis rule below. Whether the connector offers any protection against shorting when submerged has not been reviewed. This replaces the earlier plan for a Bel/TRP 1840888-4 RJ45 MagJack with built-in magnetics. Magnetics part: not yet selected.
+Consequences: the feed-through has no magnetics. The board carries them, either as a discrete four-channel 1000BASE-T module or inside the board-side jack, plus a low-capacitance ESD and surge device. The CM5 already includes the BCM54210PE Gigabit PHY, so the design routes four 100 ohm differential MDI pairs from the CM5 through the magnetics to the connector, and no external PHY is used. The connector is sealed to the enclosure wall, and the shield follows the chassis rule below. Whether the connector offers any protection against shorting when submerged has not been reviewed. Magnetics part and board-side jack: not yet selected.
 
 Not selected: an external PHY (duplicates CM5 function and adds power, area, cost, and complexity), PoE (not required, adds power-path and thermal complexity), and Ethernet LEDs (status belongs in software and the EUD).
 
@@ -308,7 +308,7 @@ First-pass 2D floorplan (September 30, 2026, nominal part sizes, board origin at
 
 Result: no overlaps on either side, with 55 percent of the top side and 16 percent of the bottom side occupied, so the 117 x 67 mm target holds at this level of detail. Rules checked in the script: no switching part sits over or under an RF module on either side, and every power part is at least 15 mm from the GNSS receiver. Centre distances to the GNSS receiver: HaLow about 96 mm, Wi-Fi about 37 mm, 3.3 V buck about 47 mm, Ethernet connector about 92 mm. The Wi-Fi distance is the one to review against the coexistence results.
 
-Limits of this check: sizes are nominal, not manufacturer drawings. The Ethernet connector keepout (20 x 20 mm) and the magnetics module (14 x 9 mm) are placeholders until the Amphenol LTW connector drawing and a magnetics part are chosen. With the standard jack gone, top-side occupancy is 58 percent and the checks above still pass. The antenna connector position on each M.2 card is assumed to be the end opposite the socket, which is unverified for the GW16170. Estimated stack height: the earlier figure of about 27 mm for the radio body (the pack now adds about 46 mm, master M-02) assumed a 13.4 mm standard jack and is now an upper bound. The tallest top-side part is likely the CM5 on its connectors (about 7.4 mm connector stack plus the module, unverified), and the 3D assembly must recompute it. This does not replace the STEP-based 3D collision check.
+Limits of this check: sizes are nominal, not manufacturer drawings. The Ethernet connector keepout (20 x 20 mm) and the magnetics module (14 x 9 mm) are placeholders. They are too small for the D-022 feed-through, which with its plug and cable bend needs about 42 mm of depth and 25 mm of height (GHO-7). With the standard jack gone, top-side occupancy is 58 percent and the checks above still pass. The antenna connector position on each M.2 card is assumed to be the end opposite the socket, which is unverified for the GW16170. Estimated stack height: the earlier figure of about 27 mm for the radio body (the pack now adds about 46 mm, master M-02) assumed a 13.4 mm standard jack and is now an upper bound. The tallest top-side part is likely the CM5 on its connectors (about 7.4 mm connector stack plus the module, unverified), and the 3D assembly must recompute it. This does not replace the STEP-based 3D collision check.
 
 The floorplan is conceptual only: HaLow module upper left, CM5 center, Wi-Fi module right of center, GNSS lower left, power and DC section lower middle, USB hub lower center, Ethernet connector lower left, battery contacts on the lower left edge. Actual placement must use manufacturer STEP models.
 
@@ -412,7 +412,7 @@ Current V1 parts and their status:
 | Wi-Fi 6E | Advantech AIW-170BQ-001 | Selected |
 | HaLow | Gateworks GW16170 / MM8108-M20 | Selected |
 | GNSS | u-blox MAX-M10S-00B | Selected |
-| Ethernet | Amphenol LTW RCP-6APFFH-SCM7001 sealed connector with discrete magnetics (magnetics TBD) | Candidate |
+| Ethernet | Amphenol LTW RCP-5SPFFH-SCU7001 sealed feed-through, CAP-WACMSPC1 cap (board-side jack and magnetics TBD) | Selected |
 | M.2 socket | TE Connectivity 2199119-6 | Selected (reference) |
 | Battery connector | Eight Mill-Max 7911 spring contacts (B-12) | Selected for V0; geometry CAD-verify |
 | Shunt | Vishay WFK0612R0100FE66 | Selected |
