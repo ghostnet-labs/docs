@@ -20,7 +20,7 @@ The node is a real product architecture, not a disposable development-board prot
 - GNSS positioning and timing: multi-constellation, external active antenna, UART, PPS, reset, software-accessible timing
 - Gigabit Ethernet through an Amphenol LTW RCP-5SPFFH-SCU7001 sealed panel feed-through (B-06, D-022), no PoE, no Ethernet LEDs
 - Removable external battery pack designed by this project (3S2P 18650, about 76 Wh, decided September 30, 2026; 9 to 12.6 V in use, swapped without tools, charged in the radio while installed, through a sealed USB-C DATA / CHARGE port), reverse-polarity and transient protection, eFuse current limiting, regulated 5 V and 3.3 V, independently switchable radios, hardware supervision and watchdog
-- Battery voltage, current, and power telemetry; board, radio, and CPU thermal telemetry; hardware-aware mesh telemetry exposed to software
+- Node-side half-duplex voice/PTT through an external OpenVLM USB audio/PTT module and supported handset; the handset supplies speaker and microphone, with no built-in carrier speaker/microphone. Battery voltage, current, and power telemetry; board, radio, and CPU thermal telemetry; hardware-aware mesh telemetry exposed to software
 - Fanless operation, aluminum enclosure baseline, external RF, external battery, external Ethernet
 - No normal-use physical controls, no user-facing status LEDs, no required external debug connector; normal operation is controlled from an end-user device (EUD)
 
@@ -42,7 +42,7 @@ The 117 x 67 mm PCB target is important but not sacred. Do not compromise RF, th
 ## 3. System architecture
 
 - PCIe: CM5 PCIe Gen2 x1 to the AIW-170BQ Wi-Fi 6E module (two MHF4 antenna connectors)
-- USB: CM5 USB2 to the TUSB4020BI hub; hub port 1 to the GW16170 HaLow module (MMCX antenna), port 2 to the AIW-170BQ Bluetooth
+- USB: CM5 USB2 to the four-port TI TUSB4041I hub; ports 1 and 2 to the GW16170 HaLow module and AIW-170BQ Bluetooth, port 3 to a dedicated sealed USB-C host connector for external OpenVLM VLMKW0100, and port 4 is spare. B-07 remains the separate USB-C charge/service port.
 - Ethernet: CM5 integrated Gigabit PHY to discrete magnetics and the sealed Amphenol LTW Ethernet connector
 - GNSS: CM5 UART, I2C, and PPS to the MAX-M10S, with an external active antenna
 - Power path: battery spring contacts, SMBJ33CA bidirectional TVS, CSD19533Q5A blocking FET, TPS26633 eFuse, then the 10 mOhm Kelvin shunt (INA228 monitoring) and VBAT_PROTECTED
@@ -96,15 +96,15 @@ Control pin drive: the pull-ups return to the card's switched rail, so the CM5 G
 
 ## 8. USB
 
-Selected: two-port USB 2.0 hub, TI TUSB4020BI (480 Mbps, two downstream ports, about -40 to +85 C, about 9 x 9 mm HTQFP, 24 MHz crystal, strap configuration, no special host driver). The CM5 needs exactly two internal USB devices, and a two-port hub gives a simple, deterministic topology.
+Decision (B-04, B-22, B-23, D-023): replace the two-port TI TUSB4020BI with the four-port TI TUSB4041IPAPRG4 USB 2.0 hub. The two-port selection was sized exactly for the HaLow and Bluetooth devices and cannot support node-side OpenVLM voice/PTT. The V1 voice endpoint is the external OpenMANET VLMKW0100 USB audio/PTT module; the carrier does not integrate a CM108B audio codec or analog speaker/microphone path.
 
-Topology: CM5 USB2 to the TUSB4020BI; port 1 to the GW16170 (HaLow); port 2 to the AIW-170BQ Bluetooth.
+Topology: CM5 USB2 upstream to TUSB4041I; downstream port 1 to GW16170 HaLow; port 2 to AIW-170BQ Bluetooth; port 3 to the dedicated sealed GCT USB4720-03-A receptacle for OpenVLM; port 4 reserved. Keep the existing B-07 USB-C DATA / CHARGE service port electrically separate. The OpenVLM port is a USB 2.0 host/DFP: implement USB-C source advertisement (Rp), switched and current-limited +5V VBUS, per-port overcurrent sensing, and USB data-line ESD. Validate signal integrity and hub strap/reset behavior against the TUSB4041I reference design before schematic release.
 
-Configuration: strap configuration, no EEPROM, 24 MHz crystal, USB_HUB_RESET_N.
+The OpenVLM module presents CM108B USB audio and HID PTT controls, and its Kenwood accessory jack connects to the supported handset/PTT. It removes analog audio and physical PTT circuitry from the carrier. Do not route the external VLM into the B-07 charging/service port.
 
-Power: USB VBUS switching is separate from radio 3.3 V switching, and the TPS22975 devices stay dedicated to radio 3.3 V. Dedicated USB VBUS switches are not yet selected. Fault signals: HALOW_USB_FAULT_N and BT_USB_FAULT_N.
+Power/fault: switched VBUS is independent of the two radio 3.3 V switches. Keep HALOW_USB_FAULT_N and BT_USB_FAULT_N; add VLM_USB_FAULT_N on reserved CM5 GPIO 23. Port 4 remains unused until a separately reviewed need exists.
 
-Open: exact USB VBUS load switches, internal USB ESD, and exact hub strap configuration.
+Open BOM details: exact VBUS current-limit switch, USB-C CC implementation, USB ESD array, per-port power fault wiring, VLM supplier ordering/availability, and enclosure connector CAD model are to be verified in GHO-11 and GHO-7.
 
 ## 9. GNSS: u-blox MAX-M10S-00B
 
@@ -274,7 +274,8 @@ Current logical map:
 | 20 | INA228_ALERT_N | Battery monitor alert |
 | 21 | WIFI_WDIS1_N | Wi-Fi RF disable (provisional) |
 | 22 | WIFI_WDIS2_N | Bluetooth disable (provisional) |
-| 23 to 27 | Reserved | Future expansion |
+| 23 | VLM_USB_FAULT_N | OpenVLM port-3 VBUS switch / downstream overcurrent fault |
+| 24 to 27 | Reserved | Future expansion |
 
 Dedicated signals: SYS_PMIC_EN (CM5 PMIC enable), TP_PWR_BUTTON (internal test pad), and TP_NBOOT (internal test pad). GPIO 18 and 19 must be driven open-drain (output low to assert, input to release) because the GW16170 pull-ups return to its switched 3.3 V rail. All CM5 GPIO run at 3.3 V with GPIO_VREF tied to 3.3 V. GPIO 21 and 22 are provisional until the AIW-170BQ pin table is available.
 
@@ -282,11 +283,11 @@ Dedicated signals: SYS_PMIC_EN (CM5 PMIC enable), TP_PWR_BUTTON (internal test p
 
 - 01_CM5: CM5, two Amphenol connectors, +5V_CM5, GPIO_VREF, PCIe, USB2, Ethernet, UART, I2C, PPS, PMIC_Enable, internal test pads
 - 02_PCIE_WIFI: AIW-170BQ, M.2 E-key socket, PCIe Gen2 x1, 100 MHz REFCLK, PERST#, CLKREQ#, 220 nF AIW TX capacitors, Wi-Fi TPS22975, two MHF4
-- 03_USB_HALOW: TUSB4020BI, 24 MHz crystal, CM5 USB2 upstream, GW16170, AIW Bluetooth, hub reset, USB fault signals, USB VBUS switches, USB ESD
+- 03_USB_HALOW_AUDIO: TUSB4041I, 24 MHz crystal, CM5 USB2 upstream, GW16170 on port 1, AIW Bluetooth on port 2, external OpenVLM USB-C DFP on port 3, port 4 reserved, switched/current-limited VBUS, CC pull-up, USB ESD, hub reset, per-port overcurrent signals
 - 04_ETHERNET: CM5 PHY interface, discrete 1000BASE-T magnetics, sealed Ethernet connector, four MDI differential pairs, Ethernet ESD, chassis and shield, ETH_SYNC_OUT
 - 05_GNSS: MAX-M10S-00B, UART, I2C, PPS, reset, VCC_RF, active antenna, optional RF protection and filter footprints, backup provision, test pads
 - 06_POWER: battery contacts, 10 mOhm shunt, INA228, SMBJ33CA, CSD19533Q5A, Q2 pulldown FET, TPS26633, LM76005 5 V, LM76005 3.3 V, TPS22975 x 2, GNSS filtering, protection, fault, and telemetry
-- 07_SYSTEM: GPIO assignment, supervisor, watchdog, PMIC_Enable recovery, radio power and fault, GNSS reset and PPS, USB hub reset and fault, Ethernet timing, reserved GPIO
+- 07_SYSTEM: GPIO assignment including VLM_USB_FAULT_N on GPIO 23, supervisor, watchdog, PMIC_Enable recovery, radio power and fault, GNSS reset and PPS, USB hub reset and fault, Ethernet timing, reserved GPIO
 
 ## 18. Mechanical architecture
 
@@ -310,7 +311,7 @@ Result: no overlaps on either side, with 55 percent of the top side and 16 perce
 
 Limits of this check: sizes are nominal, not manufacturer drawings. The Ethernet connector keepout (20 x 20 mm) and the magnetics module (14 x 9 mm) are placeholders. They are too small for the D-022 feed-through, which with its plug and cable bend needs about 42 mm of depth and 25 mm of height (GHO-7). With the standard jack gone, top-side occupancy is 58 percent and the checks above still pass. The antenna connector position on each M.2 card is assumed to be the end opposite the socket, which is unverified for the GW16170. Estimated stack height: the earlier figure of about 27 mm for the radio body (the pack now adds about 46 mm, master M-02) assumed a 13.4 mm standard jack and is now an upper bound. The tallest top-side part is likely the CM5 on its connectors (about 7.4 mm connector stack plus the module, unverified), and the 3D assembly must recompute it. This does not replace the STEP-based 3D collision check.
 
-The floorplan is conceptual only: HaLow module upper left, CM5 center, Wi-Fi module right of center, GNSS lower left, power and DC section lower middle, USB hub lower center, Ethernet connector lower left, battery contacts on the lower left edge. Actual placement must use manufacturer STEP models.
+The floorplan is conceptual only: HaLow module upper left, CM5 center, Wi-Fi module right of center, GNSS lower left, power and DC section lower middle, USB hub lower center, Ethernet connector lower left, battery contacts on the lower left edge. It must also reserve an enclosure-wall opening and internal cable path for the external OpenVLM USB-C host port, positioned for safe handset/PTT cable access and clear of the Ethernet feed-through and RF connectors. Do not freeze its wall face or coordinates until the actual USB4720-03-A model, shell CAD, cable bend, and access envelope are checked in GHO-7. Actual board/enclosure placement must use manufacturer STEP models.
 
 ### Mechanical CAD blockers
 
@@ -354,7 +355,7 @@ Power layout rules: the battery path runs battery contacts, TVS, blocking FET, a
 
 ## 21. Headless operation and hardware-aware mesh
 
-The node is deliberately headless. There are no power, reset, or mode buttons, and no power, activity, Ethernet, or radio LEDs. Normal operation is EUD and software controlled; hidden test pads and service access are acceptable. The EUD should eventually support radio, mesh, Wi-Fi AP/client, and HaLow configuration; node status; neighbor and client information; GNSS status; battery status; temperature; reboot; shutdown; firmware and software updates; and diagnostics.
+The node is deliberately headless. There are no power, reset, or mode buttons, and no power, activity, Ethernet, or radio LEDs. Node voice/PTT uses the external OpenVLM USB accessory defined by D-023; EUD/browser audio remains a software fallback and does not replace the node-side audio path. Normal operation is EUD and software controlled; hidden test pads and service access are acceptable. The EUD should eventually support radio, mesh, Wi-Fi AP/client, and HaLow configuration; node status; neighbor and client information; GNSS status; battery status; temperature; reboot; shutdown; firmware and software updates; and diagnostics.
 
 Hardware telemetry the carrier must expose: battery voltage, current, and power; energy and charge; power temperature; CM5 and system temperature; radio temperature where available; radio power and fault state; GNSS lock and PPS; Ethernet state and timing; USB fault state; power-good; and eFuse fault.
 
@@ -425,7 +426,7 @@ Current V1 parts and their status:
 | 3.3 V buck | TI LM76005 | Selected |
 | Radio switches | TI TPS22975DSGT x 2 | Selected |
 | Supervisor / watchdog | TI TPS386000RGPR | Selected |
-| USB hub | TI TUSB4020BI | Selected |
+| USB hub | TI TUSB4041IPAPRG4, four-port USB 2.0 hub | Selected (D-023) |
 | USB VBUS switch | TBD | Open |
 | USB ESD | TBD | Open |
 | Ethernet ESD | TBD | Open |
@@ -469,7 +470,7 @@ Do not call the design frozen until all of the following are true:
 
 Resume here: import actual manufacturer STEP models for the CM5, GW16170, AIW-170BQ, TE 2199119-6, pack contact and latch, Ethernet connector, RF connectors, and the intended enclosure and boss geometry. Build the 117 x 67 mm assembly, resolve collisions and enclosure clearances, and produce a final mechanical coordinate table. The next meaningful step is not another architecture brainstorm. A first-pass 2D floorplan with nominal part sizes is recorded in section 18; the STEP-based 3D assembly is still the next step.
 
-1. Mechanical CAD assembly: build a 117 x 67 mm board assembly with the CM5 and its connectors, GW16170, AIW-170BQ, M.2 sockets, battery contacts, Ethernet connector, RF connectors, major power components, TUSB4020BI, enclosure walls, and four M3 bosses, then run collision and clearance analysis. Success means everything fits with enclosure clearance, connector and antenna access, battery insertion and removal, thermal paths, and mounting access, without enlarging the board.
+1. Mechanical CAD assembly: build a 117 x 67 mm board assembly with the CM5 and its connectors, GW16170, AIW-170BQ, M.2 sockets, battery contacts, Ethernet connector, RF connectors, major power components, TUSB4041I hub, the external OpenVLM USB-C host connector and cable approach, enclosure walls, and four M3 bosses, then run collision and clearance analysis. Success means everything fits with enclosure clearance, connector and antenna access, battery insertion and removal, thermal paths, and mounting access, without enlarging the board. Set the host connector wall face and coordinates only after the actual connector model and cable bend/access envelope are checked in GHO-7.
 2. Freeze mechanical reference coordinates: PCB outline, mounting holes, CM5, M.2 sockets, Ethernet connector, battery contacts, RF connectors, and the enclosure interface.
 3. Finish electrical values: check the calculated TPS26633 and LM76005 values, load-switch settings, watchdog timing, USB VBUS switches, USB ESD, Ethernet ESD, GNSS backup, RF protection, and the chassis strategy.
 4. Verify authoritative pinouts: CM5 GPIO, PCIe, and USB; AIW-170BQ M.2 (Advantech pin table still needed); TE socket; the pack contact array. The GW16170 M.2 pinout is verified in section 7. No inferred pinout should reach PCB layout.
@@ -532,8 +533,8 @@ This reference supersedes the September 29 Track B reference. The points below w
 - [TI TPS22975 product page](https://www.ti.com/product/TPS22975)
 - [u-blox MAX-M10S datasheet](https://content.u-blox.com/sites/default/files/MAX-M10S_DataSheet_UBX-20035208.pdf)
 
-Manufacturer documentation for the AIW-170BQ (user manual with pin table), TUSB4020BI, TPS386000, Mill-Max 7911 contacts, Ethernet connector, and SMBJ33CA should be added here as it is downloaded and checked.
+Manufacturer documentation for the AIW-170BQ (user manual with pin table), TUSB4041I, TPS386000, Mill-Max 7911 contacts, Ethernet connector, and SMBJ33CA should be added here as it is downloaded and checked.
 
 ## 33. Summary
 
-OpenMANET V1 is a compact, rugged, fanless, headless node centered on a Raspberry Pi CM5, with an Advantech AIW-170BQ Wi-Fi 6E module, a Gateworks GW16170 HaLow module, a u-blox MAX-M10S GNSS, integrated CM5 Gigabit Ethernet, a removable custom 3S2P 18650 battery pack (eight spring contacts, D-013), INA228 battery telemetry, a protected input (9 to 12.6 V pack, wider tolerance retained), LM76005-based 5 V and 3.3 V rails, independently switched radios, a TUSB4020BI USB hub, and TPS386000 hardware supervision. The 117 x 67 mm PCB remains the working target. The architecture is defined; the next work is manufacturer-model CAD placement and collision checking, exact power and protection calculations, authoritative pinout verification, PCB stackup selection, then layout and prototype validation. Do not re-architect without a concrete requirement or verification result forcing the change.
+OpenMANET V1 is a compact, rugged, fanless, headless node centered on a Raspberry Pi CM5, with an Advantech AIW-170BQ Wi-Fi 6E module, a Gateworks GW16170 HaLow module, a u-blox MAX-M10S GNSS, integrated CM5 Gigabit Ethernet, a removable custom 3S2P 18650 battery pack (eight spring contacts, D-013), INA228 battery telemetry, a protected input (9 to 12.6 V pack, wider tolerance retained), LM76005-based 5 V and 3.3 V rails, independently switched radios, a TI TUSB4041I USB hub, external OpenVLM node-side voice/PTT through a dedicated USB-C host port, and TPS386000 hardware supervision. The carrier has no built-in speaker or microphone; the handset accessory supplies them. The 117 x 67 mm PCB remains the working target. The architecture is defined; the next work is manufacturer-model CAD placement and collision checking, exact power and protection calculations, authoritative pinout verification, PCB stackup selection, then layout and prototype validation. Do not re-architect without a concrete requirement or verification result forcing the change.

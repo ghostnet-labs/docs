@@ -2,7 +2,7 @@
 
 ## Goal
 
-A product-oriented V1 carrier for the CM5 with two M.2 radio modules, GNSS, sealed Gigabit Ethernet, battery telemetry, and a fanless rugged enclosure. It is headless, with no buttons or user-facing LEDs. V1 has one sealed USB-C DATA / CHARGE service port that carries USB-C PD charging and CM5 console and service data, so no separate external debug connector is required. Hidden test pads are acceptable. This file owns the Track B selections. [v1-reference.md](v1-reference.md) is supporting engineering detail and refers to these rows by ID.
+A product-oriented V1 carrier for the CM5 with two M.2 radio modules, GNSS, sealed Gigabit Ethernet, battery telemetry, node-side voice/PTT through an external OpenVLM USB audio module, and a fanless rugged enclosure. It is headless, with no buttons or user-facing LEDs. V1 has one sealed USB-C DATA / CHARGE service port that carries USB-C PD charging and CM5 console and service data, plus a separate sealed USB-C host port for the OpenVLM module. Hidden test pads are acceptable. This file owns the Track B selections. [v1-reference.md](v1-reference.md) is supporting engineering detail and refers to these rows by ID.
 
 ## Power and battery requirements
 
@@ -17,7 +17,7 @@ Status words are defined in [../README.md](../README.md). Open parts are tracked
 | B-01 | Compute | Raspberry Pi CM5008032 (8 GB, 32 GB eMMC, no wireless) on Amphenol 10164227-1004A1RLF connectors | Selected. SKU and availability to verify. |
 | B-02 | HaLow radio | Gateworks GW16170 / MM8108-M20, M.2 2230 E-key, USB 2.0, MMCX antenna | Selected. CM5 and Linux support unproven. M.2 pinout and control-pin behavior Verified 2026-09-30 (Gateworks wiki). |
 | B-03 | Wi-Fi radio | Advantech AIW-170BQ-001, M.2 2230 E-key, Wi-Fi 6E 2x2 (Qualcomm WCN6856), PCIe WLAN, USB Bluetooth, 2 x MHF4 | Selected. 802.11s mesh-point support unconfirmed ([GHO-37](https://linear.app/ghostnet-labs/issue/GHO-37)). Pin table not public ([GHO-9](https://linear.app/ghostnet-labs/issue/GHO-9)). |
-| B-04 | USB hub | TI TUSB4020BI, two downstream ports (HaLow and Bluetooth) | Selected. |
+| B-04 | USB hub | TI TUSB4041IPAPRG4, four-port USB 2.0 hub; ports 1 and 2 serve HaLow and AIW Bluetooth, port 3 serves the external OpenVLM host connector, and port 4 is spare | Selected. Supersedes TUSB4020BI (D-023). |
 | B-05 | GNSS | u-blox MAX-M10S-00B, UART plus PPS, external active antenna | Selected. Antenna connector open ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)). |
 | B-06 | Ethernet | CM5 native Gigabit PHY and an Amphenol LTW RCP-5SPFFH-SCU7001 sealed panel feed-through (IP67 unmated and mated, shielded Cat5e, 13/16"-28 UNS screw thread), with an Amphenol LTW CAP-WACMSPC1 screw cap on a rubber strap (IP67). The feed-through ends in an RJ45 socket inside the wall, so the carrier needs its own board-side RJ45 and a short internal patch cable. No LEDs and no PoE (D-022). | Selected. Board-side jack, magnetics and internal cable to choose. Mechanical fit to redo in [GHO-7](https://linear.app/ghostnet-labs/issue/GHO-7): the feed-through, plug and cable bend need about 42 mm of depth and 25 mm of height, against the 20 x 20 mm placeholder. |
 | B-07 | USB-C service port | GCT USB4720-03-A sealed USB-C DATA / CHARGE port (IP67 mated and unmated, USB 2.0, 5 A / 48 V capability, 20,000 mating cycles) | Selected baseline. Enclosure integration, caps, and mating cable to validate. |
@@ -35,12 +35,14 @@ Status words are defined in [../README.md](../README.md). Open parts are tracked
 | B-19 | Radio load switches | TI TPS22975DSGT x 2 (WIFI_PWR_EN and HALOW_PWR_EN) | Selected. |
 | B-20 | Supervisor | TI TPS386000RGPR (four rails, watchdog, PMIC_Enable recovery) | Selected. Bench-test recovery. |
 | B-21 | RF connectors | MMCX (HaLow), 2 x MHF4 (Wi-Fi), GNSS active antenna connector | GNSS connector open ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)). |
+| B-22 | Voice/PTT module | OpenMANET Voice Link Module VLMKW0100 (Kenwood accessory variant), external USB audio/PTT device using CM108B + 93C46 EEPROM + GPIO1 OpenVLM identity strap | Selected. Supplier ordering code, availability, and the exact Kenwood accessory cable SKU must be verified before procurement. |
+| B-23 | OpenVLM host connector | GCT USB4720-03-A sealed USB-C receptacle, one additional connector beyond B-07; configured as a USB 2.0 downstream-facing host port with switched +5V VBUS | Selected baseline. USB-C host CC implementation, VBUS switch/current limit, USB ESD, and enclosure CAD fit remain to verify ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11), [GHO-7](https://linear.app/ghostnet-labs/issue/GHO-7)). |
 
 ## Power tree
 
 The chain runs from the battery interface through input transient and reverse-polarity protection, the TPS26633 eFuse, and the 10 mOhm shunt (INA228 monitoring) to VBAT_PROTECTED. The shunt sits after the eFuse so the INA228 never sees reverse polarity. The TPS26633 clamps at a fixed 32.8 V and its power limit cannot go below 60 W, so the earlier adjustable overvoltage cutoff and 40 W limit are dropped. The exact protection topology is being revalidated around the removable 3S2P pack and in-radio charging ([GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10)). Calculated component values are in [v1-reference.md](v1-reference.md), sections 12 and 13.
 
-VBAT_PROTECTED feeds an LM76005 5 V buck (+5V_SYS for the CM5 and USB) and an LM76005 3.3 V buck (+3V3_RADIO). +3V3_RADIO feeds two TPS22975 switches (WIFI_3V3 and HALOW_3V3) and a filtered +3V3_GNSS. Independent radio power switching lets software tell apart a radio that is deliberately off, one that failed to start, a radio power fault, a main power fault, low battery, and an input protection trip. A TPS386000 supervises four rails and, together with the CM5 watchdog, can pull PMIC_Enable low. Recovery order: reset the USB device, reset the hub, power-cycle the radio, then supervisor and PMIC recovery.
+VBAT_PROTECTED feeds an LM76005 5 V buck (+5V_SYS for the CM5 and USB, including switched USB VBUS for the OpenVLM accessory) and an LM76005 3.3 V buck (+3V3_RADIO). +3V3_RADIO feeds two TPS22975 switches (WIFI_3V3 and HALOW_3V3) and a filtered +3V3_GNSS. Independent radio power switching lets software tell apart a radio that is deliberately off, one that failed to start, a radio power fault, a main power fault, low battery, and an input protection trip. A TPS386000 supervises four rails and, together with the CM5 watchdog, can pull PMIC_Enable low. Recovery order: reset the USB device, reset the hub, power-cycle the radio, then supervisor and PMIC recovery.
 
 ## PCB and thermal approach
 
