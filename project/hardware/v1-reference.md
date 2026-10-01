@@ -425,7 +425,7 @@ Current V1 parts and their status:
 | 3.3 V buck | TI LM76005 | Selected |
 | Radio switches | TI TPS22975DSGT x 2 | Selected |
 | Supervisor / watchdog | TI TPS386000RGPR | Selected |
-| USB hub | TI TUSB4020BI | Selected |
+| USB hub | TI TUSB4041IPAPRG4, four-port USB 2.0 hub | Selected (D-023) |
 | USB VBUS switch | TBD | Open |
 | USB ESD | TBD | Open |
 | Ethernet ESD | TBD | Open |
@@ -469,7 +469,7 @@ Do not call the design frozen until all of the following are true:
 
 Resume here: import actual manufacturer STEP models for the CM5, GW16170, AIW-170BQ, TE 2199119-6, pack contact and latch, Ethernet connector, RF connectors, and the intended enclosure and boss geometry. Build the 117 x 67 mm assembly, resolve collisions and enclosure clearances, and produce a final mechanical coordinate table. The next meaningful step is not another architecture brainstorm. A first-pass 2D floorplan with nominal part sizes is recorded in section 18; the STEP-based 3D assembly is still the next step.
 
-1. Mechanical CAD assembly: build a 117 x 67 mm board assembly with the CM5 and its connectors, GW16170, AIW-170BQ, M.2 sockets, battery contacts, Ethernet connector, RF connectors, major power components, TUSB4020BI, enclosure walls, and four M3 bosses, then run collision and clearance analysis. Success means everything fits with enclosure clearance, connector and antenna access, battery insertion and removal, thermal paths, and mounting access, without enlarging the board.
+1. Mechanical CAD assembly: build a 117 x 67 mm board assembly with the CM5 and its connectors, GW16170, AIW-170BQ, M.2 sockets, battery contacts, Ethernet connector, RF connectors, major power components, TUSB4041I hub, the external OpenVLM USB-C host connector and cable approach, enclosure walls, and four M3 bosses, then run collision and clearance analysis. Success means everything fits with enclosure clearance, connector and antenna access, battery insertion and removal, thermal paths, and mounting access, without enlarging the board. Set the host connector wall face and coordinates only after the actual connector model and cable bend/access envelope are checked in GHO-7.
 2. Freeze mechanical reference coordinates: PCB outline, mounting holes, CM5, M.2 sockets, Ethernet connector, battery contacts, RF connectors, and the enclosure interface.
 3. Finish electrical values: check the calculated TPS26633 and LM76005 values, load-switch settings, watchdog timing, USB VBUS switches, USB ESD, Ethernet ESD, GNSS backup, RF protection, and the chassis strategy.
 4. Verify authoritative pinouts: CM5 GPIO, PCIe, and USB; AIW-170BQ M.2 (Advantech pin table still needed); TE socket; the pack contact array. The GW16170 M.2 pinout is verified in section 7. No inferred pinout should reach PCB layout.
@@ -532,8 +532,8 @@ This reference supersedes the September 29 Track B reference. The points below w
 - [TI TPS22975 product page](https://www.ti.com/product/TPS22975)
 - [u-blox MAX-M10S datasheet](https://content.u-blox.com/sites/default/files/MAX-M10S_DataSheet_UBX-20035208.pdf)
 
-Manufacturer documentation for the AIW-170BQ (user manual with pin table), TUSB4020BI, TPS386000, Mill-Max 7911 contacts, Ethernet connector, and SMBJ33CA should be added here as it is downloaded and checked.
+Manufacturer documentation for the AIW-170BQ (user manual with pin table), TUSB4041I, TPS386000, Mill-Max 7911 contacts, Ethernet connector, and SMBJ33CA should be added here as it is downloaded and checked.
 
 ## 33. Summary
 
-OpenMANET V1 is a compact, rugged, fanless, headless node centered on a Raspberry Pi CM5, with an Advantech AIW-170BQ Wi-Fi 6E module, a Gateworks GW16170 HaLow module, a u-blox MAX-M10S GNSS, integrated CM5 Gigabit Ethernet, a removable custom 3S2P 18650 battery pack (eight spring contacts, D-013), INA228 battery telemetry, a protected input (9 to 12.6 V pack, wider tolerance retained), LM76005-based 5 V and 3.3 V rails, independently switched radios, a TUSB4020BI USB hub, and TPS386000 hardware supervision. The 117 x 67 mm PCB remains the working target. The architecture is defined; the next work is manufacturer-model CAD placement and collision checking, exact power and protection calculations, authoritative pinout verification, PCB stackup selection, then layout and prototype validation. Do not re-architect without a concrete requirement or verification result forcing the change.
+OpenMANET V1 is a compact, rugged, fanless, headless node centered on a Raspberry Pi CM5, with an Advantech AIW-170BQ Wi-Fi 6E module, a Gateworks GW16170 HaLow module, a u-blox MAX-M10S GNSS, integrated CM5 Gigabit Ethernet, a removable custom 3S2P 18650 battery pack (eight spring contacts, D-013), INA228 battery telemetry, a protected input (9 to 12.6 V pack, wider tolerance retained), LM76005-based 5 V and 3.3 V rails, independently switched radios, a TI TUSB4041I USB hub, external OpenVLM node-side voice/PTT through a dedicated USB-C host port, and TPS386000 hardware supervision. The carrier has no built-in speaker or microphone; the handset accessory supplies them. The 117 x 67 mm PCB remains the working target. The architecture is defined; the next work is manufacturer-model CAD placement and collision checking, exact power and protection calculations, authoritative pinout verification, PCB stackup selection, then layout and prototype validation. Do not re-architect without a concrete requirement or verification result forcing the change.
