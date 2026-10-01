@@ -72,7 +72,7 @@ Documentation correction: older or alternate information suggested Bluetooth ove
 
 Power: +3V3_RADIO through a TPS22975 to WIFI_3V3, controlled by WIFI_PWR_EN. Antennas: two MHF4 external connectors, no PCB antenna.
 
-Pin documentation: the public Advantech datasheet (February 2025) lists the interfaces, supply range, and dimensions but no pin table, so the M.2 pin assignment is not yet verified. Request the AIW-170BQ user manual or pin definition from Advantech. The standard M.2 Key E map, as given by two secondary sources, puts PERST0# on pin 52, CLKREQ0# on 53, PEWAKE0# on 55, W_DISABLE2# on 54, W_DISABLE1# on 56, the card PETp0 and PETn0 pair on 35 and 37, the PERp0 and PERn0 pair on 41 and 43, and REFCLK on 47 and 49. Use that map to prepare the schematic sheet, not to release layout.
+Pin documentation: the official [Advantech AIW-170BQ V1.4 User Manual](https://advdownload.advantech.com/productfile/Downloadfile4/1-2F5N99M/AIW-170BQ_%20V1.4%20User%20Manual.pdf) provides the module pin assignment. The canonical project table and CM5/Gateworks cross-check are in [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md). Use that manufacturer table; do not substitute generic M.2 assumptions or release layout until GHO-9 review is complete.
 
 Supply is 3.0 to 3.3 V, and the datasheet gives 632 mA average in TX mode with no peak figure. Verify before freeze: the exact M.2 pin assignment against the Advantech manual, PCIe reset and CLKREQ behavior, power sequencing, the Linux ath11k path, Bluetooth over USB on the CM5, and 802.11s mesh-point support, which OpenMANET requires (see section 31).
 
@@ -245,14 +245,14 @@ The enclosure is part of the thermal design. At the 35 W capability target, conv
 
 ## 16. GPIO and control assignment
 
-This is a logical assignment, not a frozen physical CM5 pin assignment. Before schematic freeze, verify every GPIO against the current CM5 datasheet and IO documentation, muxing, boot behavior, and Linux device-tree requirements.
+This is a logical assignment, not a frozen physical CM5 pin assignment. The verified physical pins, alternate-function facts, and known GNSS UART allocation resolution are recorded in [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md). Before schematic freeze, verify every GPIO against the current CM5 datasheet and IO documentation, muxing, boot behavior, and Linux device-tree requirements.
 
 Current logical map:
 
 | GPIO | Signal | Function |
 |---|---|---|
-| 0 | GNSS_UART_TX | GNSS UART |
-| 1 | GNSS_UART_RX | GNSS UART |
+| 0 | Reserved / unassigned | I2C0 alternate-function available; not used by V1 GNSS |
+| 1 | Reserved / unassigned | I2C0 alternate-function available; not used by V1 GNSS |
 | 2 | SYS_I2C_SDA | System I2C |
 | 3 | SYS_I2C_SCL | System I2C |
 | 4 | HALOW_PWR_EN | HaLow power enable |
@@ -265,8 +265,8 @@ Current logical map:
 | 11 | SUPERVISOR_WDO | Watchdog status |
 | 12 | POWER_GOOD | Power-good |
 | 13 | EFUSE_FAULT | eFuse fault |
-| 14 | USB_HUB_RESET_N | USB hub reset |
-| 15 | HALOW_USB_FAULT_N | HaLow USB fault |
+| 14 | GNSS_UART_TX | GNSS UART0 TX |
+| 15 | GNSS_UART_RX | GNSS UART0 RX |
 | 16 | BT_USB_FAULT_N | Bluetooth USB fault |
 | 17 | ETH_SYNC_OUT | Ethernet timing |
 | 18 | HALOW_RESET_N | HaLow reset (M.2 pin 56), open-drain |
