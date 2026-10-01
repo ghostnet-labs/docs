@@ -32,7 +32,7 @@ CM5 PCIe is Gen2 x1. The CM5 TX path already has AC coupling; the peripheral TX 
 
 The official alternate-function table verifies GPIO0/1 = I2C0 SDA/SCL, GPIO2/3 = I2C1 SDA/SCL, GPIO8/9 = UART3 TX/RX, and GPIO14/15 = UART0 TX/RX. The old V1 cross-reference that labels GPIO0/1 as GNSS UART is stale.
 
-Working proposal: GNSS on UART0 (GPIO14/15) and system I2C1 on GPIO2/3, consistent with the board-configuration direction. GPIO14/15 also occupy old logical slots for hub reset and HaLow USB fault, so this is an allocation conflict that must be resolved before schematic/layout release. Do not silently reassign it.
+Resolution proposal: GNSS uses UART0 on GPIO14/15 and system I2C1 uses GPIO2/3, consistent with the board-configuration direction. Relocate USB_HUB_RESET_N to GPIO23 and HALOW_USB_FAULT_N to GPIO24; GPIO25–27 remain reserved. This removes the logical conflict without adding hardware. Verify the physical CM5 pins, boot defaults, and device-tree mux for GPIO23/24 before schematic/layout release.
 
 | Logical signal | Current role | Status |
 |---|---|---|
@@ -41,11 +41,13 @@ Working proposal: GNSS on UART0 (GPIO14/15) and system I2C1 on GPIO2/3, consiste
 | GPIO8/9 | GNSS_RESET_N / GNSS_PPS | Logical; mux conflict to resolve |
 | GPIO10/11 | SUPERVISOR_WDI / SUPERVISOR_WDO | Logical; physical pin open |
 | GPIO12/13 | POWER_GOOD / EFUSE_FAULT | Logical; physical pin open |
-| GPIO14/15 | Proposed GNSS UART0 TX/RX | Conflicts with old hub/fault slots |
+| GPIO14/15 | Proposed GNSS UART0 TX/RX | Resolved proposal; verify physical pins/mux |
 | GPIO18/19 | HALOW_RESET_N / HALOW_WAKE | Open-drain behavior required |
 | GPIO20 | INA228_ALERT | Logical; physical pin open |
 | GPIO21/22 | Wi-Fi W_DISABLE controls | Provisional |
-| GPIO23–27 | Reserved | Unassigned |
+| GPIO23 | USB_HUB_RESET_N | Proposed relocation; verify physical pin/mux |
+| GPIO24 | HALOW_USB_FAULT_N | Proposed relocation; verify physical pin/mux |
+| GPIO25–27 | Reserved | Unassigned |
 
 ## AIW-170BQ-001 verified M.2 signals
 
@@ -82,10 +84,10 @@ Gateworks documents pins 2/4/72/74 as 3.3 V, pin 3/5 as USB D+/D-, pin 56 W_DISA
 
 ## Open gates
 
-- Resolve the GPIO14/15 GNSS-UART versus hub/fault allocation conflict.
+- Verify the proposed GPIO23/GPIO24 relocation in the CM5 physical pin table, schematic, and device tree.
 - Verify physical CM5 pin and device-tree mux/boot defaults for every retained logical GPIO.
 - Confirm AIW PEWAKE host handling and leave W_DISABLE1 reserved.
 - Confirm TE 2199119-6 footprint, hub VBUS/ESD/straps, and eight-contact battery allocation.
 - Bench-validate PCIe/USB enumeration, sequencing, and PMIC_Enable recovery.
 
-**Acceptance status:** CM5 PCIe/USB/power pins, CM5 mux facts, AIW pin table, and Gateworks control behavior are verified from manufacturer documentation. Logical GPIO reallocation, complete physical mapping, schematic implementation, and bench evidence remain open.
+**Acceptance status:** CM5 PCIe/USB/power pins, CM5 mux facts, AIW pin table, Gateworks control behavior, and a conflict-free logical allocation proposal (GNSS on GPIO14/15; hub/fault on GPIO23/24) are recorded. Physical GPIO mapping, device-tree defaults, schematic implementation, and bench evidence remain open.
