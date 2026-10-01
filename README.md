@@ -18,3 +18,6 @@
 - 📦 Releases (images): **[github.com/OpenMANET/firmware/releases](https://github.com/OpenMANET/firmware/releases)**
 
 Contributions and issues are welcome!
+
+## ghostnet-labs project records
+- The ghostnet-labs field node project records (decisions, hardware selections, POC bench) live in [`project/`](project/README.md). They are not part of the published site.
