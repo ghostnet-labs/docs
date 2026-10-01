@@ -44,19 +44,21 @@ and [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36).
 
 ## 3. Missing hardware
 
-Not in the cart, but needed for the POC acceptance criteria. Items marked
-**needed** block a specific POC issue; the rest are recommended.
+Bench hardware that is not in the cart (serial console adapter, switch and
+extra Ethernet cables, bench supply, USB-C power meter, CM5 coolers, 900 MHz
+attenuators, multimeter) is listed with quantities, the POC issue each one
+unblocks, and its sourcing status under "Still to source" in the Linear doc
+[OpenMANET POC — Purchase BOM](https://linear.app/ghostnet-labs/document/openmanet-poc-purchase-bom-ff58aa264535).
+Why each is needed:
 
-| Item | Why | Blocks | Status |
-| -- | -- | -- | -- |
-| 3.3 V USB-to-TTL serial adapter (e.g. FTDI TTL-232R-3V3 or CP2102), plus jumper leads | [GHO-28](https://linear.app/ghostnet-labs/issue/GHO-28) requires serial boot logs. The image keeps the kernel console on the CM5 debug UART (`ttyAMA10`); which carrier pins expose it must be checked on arrival. | GHO-28 | **Needed** |
-| Second Ethernet cable and a small unmanaged gigabit switch | Host + two nodes on one wired LAN for SSH, iperf3 between nodes and Ethernet throughput. | GHO-29 | **Needed** (one cable on hand) |
-| Bench DC supply, 12 V, current-limited with readout (or a 12 V / 2 A+ barrel supply) | Runs a node without the battery, isolates power faults, and answers former Q-06 (UPS 5 V USB-C vs. carrier 7–36 V input). | GHO-29, GHO-30 | Recommended |
-| Inline USB-C power meter | Measures the Pier42/HaLow USB draw and the UPS-to-carrier draw during TX. | GHO-30 | Recommended |
-| CM5 heatsink or active cooler | The thermal check compares with and without a cooler; none is in the cart. | GHO-30, GHO-31 | Recommended |
-| SMA in-line attenuators (e.g. 20–30 dB, 900 MHz rated) | Two nodes on one bench saturate each other's receivers; attenuators make throughput and range numbers meaningful. | GHO-31 | Recommended |
-| Multimeter | Rail and wiring checks before first power. | All | Assumed on hand; confirm |
-| CM108B OpenVLM USB audio device + handset | Voice/PTT is not in the POC scope today; tracked in [GHO-35](https://linear.app/ghostnet-labs/issue/GHO-35). | — | Out of POC scope |
+- **Serial adapter (3.3 V USB-TTL):** GHO-28 needs serial boot logs; the image keeps the kernel console on the CM5 debug UART (`ttyAMA10`), whose carrier pins must be confirmed on arrival.
+- **Switch and Ethernet cables:** host plus two nodes on one wired LAN for SSH and iperf3 (GHO-29).
+- **12 V bench supply:** runs a node without the battery, isolates power faults, and answers former Q-06 (UPS 5 V USB-C vs. the carrier's 7–36 V input).
+- **USB-C power meter:** Pier42/HaLow USB draw and UPS-to-carrier draw during TX (GHO-30).
+- **CM5 cooler:** the thermal check compares with and without one (GHO-30, GHO-31).
+- **Attenuators:** two nodes on one bench saturate each other's receivers (GHO-31).
+
+Voice/PTT hardware (CM108B OpenVLM device) is out of POC scope; see GHO-35.
 
 ## 4. Topology
 
