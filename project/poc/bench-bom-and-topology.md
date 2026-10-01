@@ -27,7 +27,7 @@ evidence for the architecture, not validation of the V1 parts.
 | Wi-Fi | Gateworks GW17032 / Compex WLE900VX, QCA9880 3x3 Wi-Fi 5, ath10k, Mini-PCIe | Advantech AIW-170BQ Wi-Fi 6E 2T2R, PCIe + USB Bluetooth | 802.11s mesh on 2.4/5 GHz and dual-radio behavior. Not 6 GHz, not the AIW-170BQ driver, not its Bluetooth. |
 | Bluetooth | CM5 onboard (only) | AIW-170BQ over USB | Only that the OS Bluetooth stack works. |
 | GNSS | SparkFun SAM-M10Q breakout (u-blox M10, chip antenna), UART | u-blox MAX-M10S with external active antenna, UART + PPS | Same M10 protocol and gpsd path; RF coexistence trend. Not the active-antenna design. PPS only if wired (see §6). |
-| Ethernet | Carrier RJ45 | B-06 (connector choice open in [GHO-41](https://linear.app/ghostnet-labs/issue/GHO-41)) | Link and throughput through the CM5 MAC. |
+| Ethernet | Carrier RJ45 | B-06 (sealed feed-through, D-022) | Link and throughput through the CM5 MAC. |
 | Power | Waveshare UPS Module 3S (3 × Molicel M35A), 5 V / 5 A out, INA219 on I2C | Custom 3S2P pack (B-11), TPS26633 eFuse, LM76005 rails, INA228 | Node power draw by state and the hwmon telemetry path. Not the V1 power path or INA228. |
 | Enclosure | Bud PN-1324-C IP65 box (dry fit / thermal only) | TBD | Closed-box thermal trend only. |
 
