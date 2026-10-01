@@ -25,8 +25,14 @@ These are CM5 connector pin numbers, not BCM GPIO numbers.
 | CM5 3.3 V | 84 / 86 |
 | PMIC_Enable / nRPIBOOT | 99 / 93 |
 | SCL0 GPIO39 / SDA0 GPIO38 | 80 / 82 |
+| GNSS UART0 GPIO14 / GPIO15 | 55 / 51 |
+| System I2C1 GPIO2 / GPIO3 | 58 / 56 |
+| USB_HUB_RESET_N GPIO23 | 47 |
+| HALOW_USB_FAULT_N GPIO24 | 45 |
 
-CM5 PCIe is Gen2 x1. The CM5 TX path already has AC coupling; the peripheral TX path needs the documented 220 nF series capacitors. CM5 nWAKE is not supported in software.
+These GPIO-to-connector mappings are from the CM5 datasheet. GPIO25 (CM5 pin 41) remains reserved.
+
+CM5 is Gen2 x1. The CM5 TX path already has AC coupling; the peripheral TX path needs the documented 220 nF series capacitors. CM5 nWAKE is not supported in software.
 
 ## CM5 GPIO mux facts
 
