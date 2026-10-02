@@ -1,7 +1,7 @@
 # V1 pinout and radio sequencing evidence
 
 **Owner:** GHO-9 — Verify carrier pinouts, GPIO muxes and radio sequencing  
-**Status:** In progress. This is the canonical evidence record; proposed mappings are not a layout release.
+**Status:** In progress. This is the canonical CM5 physical-pin, GPIO-allocation, and sequencing record; proposed mappings are not a layout release. Other project records link here instead of maintaining a second GPIO map.
 
 ## Authorities
 
@@ -25,12 +25,8 @@ These are CM5 connector pin numbers, not BCM GPIO numbers.
 | CM5 3.3 V | 84 / 86 |
 | PMIC_Enable / nRPIBOOT | 99 / 93 |
 | SCL0 GPIO39 / SDA0 GPIO38 | 80 / 82 |
-| GNSS UART0 GPIO14 / GPIO15 | 55 / 51 |
-| System I2C1 GPIO2 / GPIO3 | 58 / 56 |
-| USB_HUB_RESET_N GPIO23 | 47 |
-| HALOW_USB_FAULT_N GPIO24 | 45 |
 
-These GPIO-to-connector mappings are from the CM5 datasheet. GPIO25 (CM5 pin 41) remains reserved.
+GPIO signal ownership and physical CM5 connector pin numbers are maintained together in the allocation table below (D-024).
 
 CM5 is Gen2 x1. The CM5 TX path already has AC coupling; the peripheral TX path needs the documented 220 nF series capacitors. CM5 nWAKE is not supported in software.
 
@@ -38,22 +34,37 @@ CM5 is Gen2 x1. The CM5 TX path already has AC coupling; the peripheral TX path 
 
 The official alternate-function table verifies GPIO0/1 = I2C0 SDA/SCL, GPIO2/3 = I2C1 SDA/SCL, GPIO8/9 = UART3 TX/RX, and GPIO14/15 = UART0 TX/RX. The old V1 cross-reference that labels GPIO0/1 as GNSS UART is stale.
 
-Resolution proposal: GNSS uses UART0 on GPIO14/15 and system I2C1 uses GPIO2/3, consistent with the board-configuration direction. Relocate USB_HUB_RESET_N to GPIO23 and HALOW_USB_FAULT_N to GPIO24; GPIO25–27 remain reserved. This removes the logical conflict without adding hardware. Verify the physical CM5 pins, boot defaults, and device-tree mux for GPIO23/24 before schematic/layout release.
+Allocation decision D-024: GNSS uses UART0 on GPIO14/15; system I2C1 uses GPIO2/3; USB_HUB_RESET_N uses GPIO23; HALOW_USB_FAULT_N uses GPIO24; VLM_USB_FAULT_N uses GPIO25; GPIO26–27 remain reserved. The physical CM5 connector pin mapping for GPIO23–25 is documented in the allocation table below. These are logical allocations, not a schematic/layout release; verify boot defaults, device-tree behavior, electrical polarity, and schematic connectivity before release.
 
-| Logical signal | Current role | Status |
-|---|---|---|
-| GPIO4/5 | HALOW_PWR_EN / WIFI_PWR_EN | Logical; physical pin open |
-| GPIO6/7 | HALOW_FAULT_N / WIFI_FAULT_N | Logical; physical pin open |
-| GPIO8/9 | GNSS_RESET_N / GNSS_PPS | Logical; mux conflict to resolve |
-| GPIO10/11 | SUPERVISOR_WDI / SUPERVISOR_WDO | Logical; physical pin open |
-| GPIO12/13 | POWER_GOOD / EFUSE_FAULT | Logical; physical pin open |
-| GPIO14/15 | Proposed GNSS UART0 TX/RX | Resolved proposal; verify physical pins/mux |
-| GPIO18/19 | HALOW_RESET_N / HALOW_WAKE | Open-drain behavior required |
-| GPIO20 | INA228_ALERT | Logical; physical pin open |
-| GPIO21/22 | Wi-Fi W_DISABLE controls | Provisional |
-| GPIO23 | USB_HUB_RESET_N | Proposed relocation; verify physical pin/mux |
-| GPIO24 | HALOW_USB_FAULT_N | Proposed relocation; verify physical pin/mux |
-| GPIO25–27 | Reserved | Unassigned |
+| GPIO | CM5 connector pin | Signal | Function / verification status |
+|---:|---:|---|---|
+| 0 | — | Reserved | I2C0 alternate function; unassigned |
+| 1 | — | Reserved | I2C0 alternate function; unassigned |
+| 2 | 58 | SYS_I2C_SDA | System I2C1; physical pin verified |
+| 3 | 56 | SYS_I2C_SCL | System I2C1; physical pin verified |
+| 4 | — | HALOW_PWR_EN | HaLow power enable; physical pin/boot verification open |
+| 5 | — | WIFI_PWR_EN | Wi-Fi power enable; physical pin/boot verification open |
+| 6 | — | HALOW_FAULT_N | HaLow fault; physical pin/boot verification open |
+| 7 | — | WIFI_FAULT_N | Wi-Fi fault; physical pin/boot verification open |
+| 8 | — | GNSS_RESET_N | GNSS reset; physical pin/boot verification open |
+| 9 | — | GNSS_PPS | GNSS timing; physical pin/boot verification open |
+| 10 | — | SUPERVISOR_WDI | Watchdog heartbeat; physical pin/boot verification open |
+| 11 | — | SUPERVISOR_WDO | Watchdog status; physical pin/boot verification open |
+| 12 | — | POWER_GOOD | Power-good; physical pin/boot verification open |
+| 13 | — | EFUSE_FAULT | eFuse fault; physical pin/boot verification open |
+| 14 | 55 | GNSS_UART_TX | GNSS UART0 TX; physical pin verified |
+| 15 | 51 | GNSS_UART_RX | GNSS UART0 RX; physical pin verified |
+| 16 | — | BT_USB_FAULT_N | Bluetooth USB fault; physical pin/boot verification open |
+| 17 | — | ETH_SYNC_OUT | Ethernet timing; physical pin/boot verification open |
+| 18 | — | HALOW_RESET_N | HaLow reset; active-low open-drain, physical pin/boot verification open |
+| 19 | — | HALOW_WAKE_N | HaLow wake; active-low open-drain, optional; physical pin/boot verification open |
+| 20 | — | INA228_ALERT_N | Battery monitor alert; physical pin/boot verification open |
+| 21 | — | WIFI_WDIS1_N | Wi-Fi RF disable; provisional, physical pin/boot verification open |
+| 22 | — | WIFI_WDIS2_N | Bluetooth disable; provisional, physical pin/boot verification open |
+| 23 | 47 | USB_HUB_RESET_N | USB hub reset; physical pin verified |
+| 24 | 45 | HALOW_USB_FAULT_N | HaLow USB fault; physical pin verified |
+| 25 | 41 | VLM_USB_FAULT_N | OpenVLM port-3 VBUS switch / downstream overcurrent fault; physical pin verified |
+| 26–27 | — | Reserved | Unassigned |
 
 ## AIW-170BQ-001 verified M.2 signals
 
@@ -90,10 +101,10 @@ Gateworks documents pins 2/4/72/74 as 3.3 V, pin 3/5 as USB D+/D-, pin 56 W_DISA
 
 ## Open gates
 
-- Verify the proposed GPIO23/GPIO24 relocation in the CM5 physical pin table, schematic, and device tree.
+- Verify GPIO23/24/25 boot defaults, device-tree behavior, electrical polarity, and schematic connectivity.
 - Verify physical CM5 pin and device-tree mux/boot defaults for every retained logical GPIO.
 - Confirm AIW PEWAKE host handling and leave W_DISABLE1 reserved.
 - Confirm TE 2199119-6 footprint, hub VBUS/ESD/straps, and eight-contact battery allocation.
 - Bench-validate PCIe/USB enumeration, sequencing, and PMIC_Enable recovery.
 
-**Acceptance status:** CM5 PCIe/USB/power pins, CM5 mux facts, AIW pin table, Gateworks control behavior, and a conflict-free logical allocation proposal (GNSS on GPIO14/15; hub/fault on GPIO23/24) are recorded. Physical GPIO mapping, device-tree defaults, schematic implementation, and bench evidence remain open.
+**Acceptance status:** CM5 PCIe/USB/power pins, CM5 mux facts, AIW pin table, Gateworks control behavior, and a D-024 logical allocation (GNSS on GPIO14/15; hub reset on GPIO23; HaLow/VLM USB faults on GPIO24/25) are recorded. Remaining GPIO physical mappings, device-tree defaults, schematic implementation, and bench evidence remain open.
