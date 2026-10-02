@@ -25,13 +25,8 @@ These are CM5 connector pin numbers, not BCM GPIO numbers.
 | CM5 3.3 V | 84 / 86 |
 | PMIC_Enable / nRPIBOOT | 99 / 93 |
 | SCL0 GPIO39 / SDA0 GPIO38 | 80 / 82 |
-| GNSS UART0 GPIO14 / GPIO15 | 55 / 51 |
-| System I2C1 GPIO2 / GPIO3 | 58 / 56 |
-| USB_HUB_RESET_N GPIO23 | 47 |
-| HALOW_USB_FAULT_N GPIO24 | 45 |
-| VLM_USB_FAULT_N GPIO25 | 41 |
 
-These GPIO-to-connector mappings are from the CM5 datasheet. GPIO23–25 are assigned by D-024; GPIO26–27 remain reserved.
+GPIO signal ownership and physical CM5 connector pin numbers are maintained together in the allocation table below (D-024).
 
 CM5 is Gen2 x1. The CM5 TX path already has AC coupling; the peripheral TX path needs the documented 220 nF series capacitors. CM5 nWAKE is not supported in software.
 
@@ -39,37 +34,37 @@ CM5 is Gen2 x1. The CM5 TX path already has AC coupling; the peripheral TX path 
 
 The official alternate-function table verifies GPIO0/1 = I2C0 SDA/SCL, GPIO2/3 = I2C1 SDA/SCL, GPIO8/9 = UART3 TX/RX, and GPIO14/15 = UART0 TX/RX. The old V1 cross-reference that labels GPIO0/1 as GNSS UART is stale.
 
-Allocation decision D-024: GNSS uses UART0 on GPIO14/15; system I2C1 uses GPIO2/3; USB_HUB_RESET_N uses GPIO23; HALOW_USB_FAULT_N uses GPIO24; VLM_USB_FAULT_N uses GPIO25; GPIO26–27 remain reserved. The physical CM5 connector pin mapping for GPIO23–25 is documented above. These are logical allocations, not a schematic/layout release; verify boot defaults, device-tree behavior, electrical polarity, and schematic connectivity before release.
+Allocation decision D-024: GNSS uses UART0 on GPIO14/15; system I2C1 uses GPIO2/3; USB_HUB_RESET_N uses GPIO23; HALOW_USB_FAULT_N uses GPIO24; VLM_USB_FAULT_N uses GPIO25; GPIO26–27 remain reserved. The physical CM5 connector pin mapping for GPIO23–25 is documented in the allocation table below. These are logical allocations, not a schematic/layout release; verify boot defaults, device-tree behavior, electrical polarity, and schematic connectivity before release.
 
-| GPIO | Signal | Function / verification status |
-|---:|---|---|
-| 0 | Reserved | I2C0 alternate function; unassigned |
-| 1 | Reserved | I2C0 alternate function; unassigned |
-| 2 | SYS_I2C_SDA | System I2C1; physical pin 58 verified |
-| 3 | SYS_I2C_SCL | System I2C1; physical pin 56 verified |
-| 4 | HALOW_PWR_EN | HaLow power enable; physical pin/boot verification open |
-| 5 | WIFI_PWR_EN | Wi-Fi power enable; physical pin/boot verification open |
-| 6 | HALOW_FAULT_N | HaLow fault; physical pin/boot verification open |
-| 7 | WIFI_FAULT_N | Wi-Fi fault; physical pin/boot verification open |
-| 8 | GNSS_RESET_N | GNSS reset; physical pin/boot verification open |
-| 9 | GNSS_PPS | GNSS timing; physical pin/boot verification open |
-| 10 | SUPERVISOR_WDI | Watchdog heartbeat; physical pin/boot verification open |
-| 11 | SUPERVISOR_WDO | Watchdog status; physical pin/boot verification open |
-| 12 | POWER_GOOD | Power-good; physical pin/boot verification open |
-| 13 | EFUSE_FAULT | eFuse fault; physical pin/boot verification open |
-| 14 | GNSS_UART_TX | GNSS UART0 TX; physical pin 55 verified |
-| 15 | GNSS_UART_RX | GNSS UART0 RX; physical pin 51 verified |
-| 16 | BT_USB_FAULT_N | Bluetooth USB fault; physical pin/boot verification open |
-| 17 | ETH_SYNC_OUT | Ethernet timing; physical pin/boot verification open |
-| 18 | HALOW_RESET_N | HaLow reset; active-low open-drain, physical pin/boot verification open |
-| 19 | HALOW_WAKE_N | HaLow wake; active-low open-drain, optional; physical pin/boot verification open |
-| 20 | INA228_ALERT_N | Battery monitor alert; physical pin/boot verification open |
-| 21 | WIFI_WDIS1_N | Wi-Fi RF disable; provisional, physical pin/boot verification open |
-| 22 | WIFI_WDIS2_N | Bluetooth disable; provisional, physical pin/boot verification open |
-| 23 | USB_HUB_RESET_N | USB hub reset; physical pin 47 verified |
-| 24 | HALOW_USB_FAULT_N | HaLow USB fault; physical pin 45 verified |
-| 25 | VLM_USB_FAULT_N | OpenVLM port-3 VBUS switch / downstream overcurrent fault; physical pin 41 verified |
-| 26–27 | Reserved | Unassigned |
+| GPIO | CM5 connector pin | Signal | Function / verification status |
+|---:|---:|---|---|
+| 0 | — | Reserved | I2C0 alternate function; unassigned |
+| 1 | — | Reserved | I2C0 alternate function; unassigned |
+| 2 | 58 | SYS_I2C_SDA | System I2C1; physical pin verified |
+| 3 | 56 | SYS_I2C_SCL | System I2C1; physical pin verified |
+| 4 | — | HALOW_PWR_EN | HaLow power enable; physical pin/boot verification open |
+| 5 | — | WIFI_PWR_EN | Wi-Fi power enable; physical pin/boot verification open |
+| 6 | — | HALOW_FAULT_N | HaLow fault; physical pin/boot verification open |
+| 7 | — | WIFI_FAULT_N | Wi-Fi fault; physical pin/boot verification open |
+| 8 | — | GNSS_RESET_N | GNSS reset; physical pin/boot verification open |
+| 9 | — | GNSS_PPS | GNSS timing; physical pin/boot verification open |
+| 10 | — | SUPERVISOR_WDI | Watchdog heartbeat; physical pin/boot verification open |
+| 11 | — | SUPERVISOR_WDO | Watchdog status; physical pin/boot verification open |
+| 12 | — | POWER_GOOD | Power-good; physical pin/boot verification open |
+| 13 | — | EFUSE_FAULT | eFuse fault; physical pin/boot verification open |
+| 14 | 55 | GNSS_UART_TX | GNSS UART0 TX; physical pin verified |
+| 15 | 51 | GNSS_UART_RX | GNSS UART0 RX; physical pin verified |
+| 16 | — | BT_USB_FAULT_N | Bluetooth USB fault; physical pin/boot verification open |
+| 17 | — | ETH_SYNC_OUT | Ethernet timing; physical pin/boot verification open |
+| 18 | — | HALOW_RESET_N | HaLow reset; active-low open-drain, physical pin/boot verification open |
+| 19 | — | HALOW_WAKE_N | HaLow wake; active-low open-drain, optional; physical pin/boot verification open |
+| 20 | — | INA228_ALERT_N | Battery monitor alert; physical pin/boot verification open |
+| 21 | — | WIFI_WDIS1_N | Wi-Fi RF disable; provisional, physical pin/boot verification open |
+| 22 | — | WIFI_WDIS2_N | Bluetooth disable; provisional, physical pin/boot verification open |
+| 23 | 47 | USB_HUB_RESET_N | USB hub reset; physical pin verified |
+| 24 | 45 | HALOW_USB_FAULT_N | HaLow USB fault; physical pin verified |
+| 25 | 41 | VLM_USB_FAULT_N | OpenVLM port-3 VBUS switch / downstream overcurrent fault; physical pin verified |
+| 26–27 | — | Reserved | Unassigned |
 
 ## AIW-170BQ-001 verified M.2 signals
 
@@ -112,4 +107,4 @@ Gateworks documents pins 2/4/72/74 as 3.3 V, pin 3/5 as USB D+/D-, pin 56 W_DISA
 - Confirm TE 2199119-6 footprint, hub VBUS/ESD/straps, and eight-contact battery allocation.
 - Bench-validate PCIe/USB enumeration, sequencing, and PMIC_Enable recovery.
 
-**Acceptance status:** CM5 PCIe/USB/power pins, CM5 mux facts, AIW pin table, Gateworks control behavior, and a D-024 logical allocation (GNSS on GPIO14/15; hub reset on GPIO23; HaLow/VLM USB faults on GPIO24/25) are recorded. Physical GPIO mapping, device-tree defaults, schematic implementation, and bench evidence remain open.
+**Acceptance status:** CM5 PCIe/USB/power pins, CM5 mux facts, AIW pin table, Gateworks control behavior, and a D-024 logical allocation (GNSS on GPIO14/15; hub reset on GPIO23; HaLow/VLM USB faults on GPIO24/25) are recorded. Remaining GPIO physical mappings, device-tree defaults, schematic implementation, and bench evidence remain open.
