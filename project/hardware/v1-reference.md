@@ -102,7 +102,7 @@ Topology: CM5 USB2 upstream to TUSB4041I; downstream port 1 to GW16170 HaLow; po
 
 The OpenVLM module presents CM108B USB audio and HID PTT controls, and its Kenwood accessory jack connects to the supported handset/PTT. It removes analog audio and physical PTT circuitry from the carrier. Do not route the external VLM into the B-07 charging/service port.
 
-Power/fault: switched VBUS is independent of the two radio 3.3 V switches. Keep HALOW_USB_FAULT_N and BT_USB_FAULT_N; add VLM_USB_FAULT_N on reserved CM5 GPIO 23. Port 4 remains unused until a separately reviewed need exists.
+Power/fault: switched VBUS is independent of the two radio 3.3 V switches. Keep HALOW_USB_FAULT_N and BT_USB_FAULT_N; route VLM_USB_FAULT_N on GPIO25 per D-024 and the canonical [GPIO/pin allocation record](v1-pinout-and-sequencing.md). Port 4 remains unused until a separately reviewed need exists.
 
 Open BOM details: exact VBUS current-limit switch, USB-C CC implementation, USB ESD array, per-port power fault wiring, VLM supplier ordering/availability, and enclosure connector CAD model are to be verified in GHO-11 and GHO-7.
 
@@ -245,39 +245,8 @@ The enclosure is part of the thermal design. At the 35 W capability target, conv
 
 ## 16. GPIO and control assignment
 
-This is a logical assignment, not a frozen physical CM5 pin assignment. The verified physical pins, alternate-function facts, and known GNSS UART allocation resolution are recorded in [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md). Before schematic freeze, verify every GPIO against the current CM5 datasheet and IO documentation, muxing, boot behavior, and Linux device-tree requirements.
+This file does not own or duplicate the GPIO allocation. The canonical CM5 physical-pin and GPIO-signal table, including boot/device-tree and schematic verification gates, is [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md) (D-024). Before schematic freeze, verify every assignment against the CM5 datasheet, muxing, boot behavior, and Linux device-tree requirements. GPIO18 and GPIO19 must be driven open-drain (output low to assert, input to release) because the GW16170 pull-ups return to its switched 3.3 V rail. All CM5 GPIO run at 3.3 V with GPIO_VREF tied to 3.3 V.
 
-Current logical map:
-
-| GPIO | Signal | Function |
-|---|---|---|
-| 0 | Reserved / unassigned | I2C0 alternate-function available; not used by V1 GNSS |
-| 1 | Reserved / unassigned | I2C0 alternate-function available; not used by V1 GNSS |
-| 2 | SYS_I2C_SDA | System I2C |
-| 3 | SYS_I2C_SCL | System I2C |
-| 4 | HALOW_PWR_EN | HaLow power enable |
-| 5 | WIFI_PWR_EN | Wi-Fi power enable |
-| 6 | HALOW_FAULT_N | HaLow fault |
-| 7 | WIFI_FAULT_N | Wi-Fi fault |
-| 8 | GNSS_RESET_N | GNSS reset |
-| 9 | GNSS_PPS | GNSS timing |
-| 10 | SUPERVISOR_WDI | Watchdog heartbeat |
-| 11 | SUPERVISOR_WDO | Watchdog status |
-| 12 | POWER_GOOD | Power-good |
-| 13 | EFUSE_FAULT | eFuse fault |
-| 14 | GNSS_UART_TX | GNSS UART0 TX |
-| 15 | GNSS_UART_RX | GNSS UART0 RX |
-| 16 | BT_USB_FAULT_N | Bluetooth USB fault |
-| 17 | ETH_SYNC_OUT | Ethernet timing |
-| 18 | HALOW_RESET_N | HaLow reset (M.2 pin 56), open-drain |
-| 19 | HALOW_WAKE_N | HaLow wake (M.2 pin 54), open-drain, optional |
-| 20 | INA228_ALERT_N | Battery monitor alert |
-| 21 | WIFI_WDIS1_N | Wi-Fi RF disable (provisional) |
-| 22 | WIFI_WDIS2_N | Bluetooth disable (provisional) |
-| 23 | VLM_USB_FAULT_N | OpenVLM port-3 VBUS switch / downstream overcurrent fault |
-| 24 to 27 | Reserved | Future expansion |
-
-Dedicated signals: SYS_PMIC_EN (CM5 PMIC enable), TP_PWR_BUTTON (internal test pad), and TP_NBOOT (internal test pad). GPIO 18 and 19 must be driven open-drain (output low to assert, input to release) because the GW16170 pull-ups return to its switched 3.3 V rail. All CM5 GPIO run at 3.3 V with GPIO_VREF tied to 3.3 V. GPIO 21 and 22 are provisional until the AIW-170BQ pin table is available.
 
 ## 17. Schematic sheets
 
@@ -287,7 +256,7 @@ Dedicated signals: SYS_PMIC_EN (CM5 PMIC enable), TP_PWR_BUTTON (internal test p
 - 04_ETHERNET: CM5 PHY interface, discrete 1000BASE-T magnetics, sealed Ethernet connector, four MDI differential pairs, Ethernet ESD, chassis and shield, ETH_SYNC_OUT
 - 05_GNSS: MAX-M10S-00B, UART, I2C, PPS, reset, VCC_RF, active antenna, optional RF protection and filter footprints, backup provision, test pads
 - 06_POWER: battery contacts, 10 mOhm shunt, INA228, SMBJ33CA, CSD19533Q5A, Q2 pulldown FET, TPS26633, LM76005 5 V, LM76005 3.3 V, TPS22975 x 2, GNSS filtering, protection, fault, and telemetry
-- 07_SYSTEM: GPIO assignment including VLM_USB_FAULT_N on GPIO 23, supervisor, watchdog, PMIC_Enable recovery, radio power and fault, GNSS reset and PPS, USB hub reset and fault, Ethernet timing, reserved GPIO
+- 07_SYSTEM: apply the canonical GPIO allocation in [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md), plus supervisor, watchdog, PMIC_Enable recovery, radio power and fault, GNSS reset and PPS, USB hub reset and fault, and Ethernet timing
 
 ## 18. Mechanical architecture
 
