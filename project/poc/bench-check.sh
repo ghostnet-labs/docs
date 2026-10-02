@@ -52,9 +52,10 @@ else
 fi
 has morse_cli && { morse_cli -i "${halow%% *}" version >/dev/null 2>&1 && ok "morse_cli version" || note "morse_cli version failed"; }
 
-# --- Wi-Fi (GW17032 / QCA9880, ath10k) ---
-wifi=$(ifaces_by_driver ath10k)
-[ -n "$wifi" ] && ok "ath10k interface(s): $wifi" || bad "no ath10k netdev (lspci, dmesg | grep ath10k)"
+# --- Wi-Fi (PCIe on the M.2 M-key slot: AW7916-AED mt7915e, or GW17032 ath10k) ---
+wifi=$(ifaces_by_driver mt7915e)
+[ -n "$wifi" ] || wifi=$(ifaces_by_driver ath10k)
+[ -n "$wifi" ] && ok "Wi-Fi interface(s): $wifi" || bad "no mt7915e/ath10k netdev (lspci, dmesg | grep -E 'mt7915|ath10k|pcie')"
 iw list 2>/dev/null | grep -q 'mesh point' && ok "mesh point supported" || note "no 'mesh point' in iw list"
 
 # --- CM5 onboard Bluetooth ---
@@ -113,10 +114,11 @@ cat /etc/openwrt_release 2>/dev/null
 uname -a
 echo "-- cmdline"; cat /proc/cmdline
 echo "-- lsusb"; has lsusb && lsusb
+echo "-- lspci"; has lspci && lspci
 echo "-- iw dev"; iw dev 2>/dev/null
 echo "-- i2c buses"; for b in /sys/bus/i2c/devices/i2c-*; do echo "${b##*/} $(cat "$b/name")"; done
 echo "-- gpsd"; uci -q show gpsd
 echo "-- dmesg (radios, gnss, i2c, power)"
-dmesg | grep -i -E 'morse|ath10k|pps|ttyUSB|ch341|i2c|ina2|under-?voltage|throttl' | tail -n 60
+dmesg | grep -i -E 'morse|ath10k|mt7915|pcie|hci|pps|ttyUSB|ch341|i2c|ina2|under-?voltage|throttl' | tail -n 60
 
 [ "$fail" -eq 0 ]

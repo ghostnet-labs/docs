@@ -74,13 +74,14 @@ connector.
 - **GPIO14/15 (UART0)** only reach pin 1 of the RS485 CH1 source jumpers `H4` (GPIO14, TX) and `H3` (GPIO15, RX). Pin 2 is the RS485 transceiver; pin 3 is UART4 (GPIO12/13). They also feed the modem level shifter through 0 Ω `R86`/`R87`. With a jumper on 1–2, the RS485 receiver drives GPIO15.
 - **GPIO2/3 (`i2c-1`)** are not brought out.
 - **GPIO25** is the MCP2515 CAN interrupt (`R15`), so nothing else may drive it.
+- **PCIe x1 reaches only the M.2 M-key slot.** The schematic has one PCIe lane, wired to the M-key connector (`KEY_M_1`). The M.2 B-key slot (`SIMCOM1`) carries USB 2.0/3.0, SIM and I2S, with no PCIe pins. Waveshare describes it as being for "4G/5G or other USB communication module", and the included Mini-PCIe adapter fits LoRa or 4G cards there. So a PCIe Wi-Fi card in that adapter is never seen by the CM5. The Wi-Fi card has to go in the M-key slot through an M-key adapter, which also takes the place of an NVMe SSD (GHO-40). Which card and adapter is the open decision on [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36).
 - **USB-C `J4`** feeds 5 V to the CM5 rail through a P-FET switch (`M2`, AO4407A). The 7–36 V DC input goes through its own buck regulator.
 
 So the bench wiring is:
 - GNSS NMEA comes in over a USB-UART (`/dev/ttyUSB0`).
 - GNSS PPS goes to terminal "18" (`/dev/pps0`).
 - The UPS INA219 uses bit-banged I2C on terminals "22" (SDA) and "27" (SCL).
-- The image handles all three since firmware [#17](https://github.com/ghostnet-labs/firmware/pull/17) and [#19](https://github.com/ghostnet-labs/firmware/pull/19), and packages [#3](https://github.com/ghostnet-labs/packages/pull/3).
+- The image handles all three since firmware [#17](https://github.com/ghostnet-labs/firmware/pull/17) and [#22](https://github.com/ghostnet-labs/firmware/pull/22) (which replaced #19), and packages [#3](https://github.com/ghostnet-labs/packages/pull/3).
 
 ### Per node
 
@@ -89,7 +90,7 @@ flowchart LR
   subgraph ENC[Bud PN-1324-C enclosure]
     subgraph CAR[Waveshare CM5-IO-WIRELESS-BASE]
       CM5[CM5104016<br/>CM5 Wireless 4 GB / 16 GB]
-      MPCIE[Mini-PCIe adapter<br/>on PCIe x1]
+      MPCIE[M.2 M-key slot, PCIe x1<br/>via adapter, see 4.1]
       USBA[USB-A]
       GPIO[GPIO terminal]
       RTC[RTC holder<br/>CR1220]

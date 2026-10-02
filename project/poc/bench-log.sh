@@ -12,7 +12,7 @@
 #   load1          1-minute load average
 #   throttled      vcgencmd get_throttled bits, or "na"
 #   halow_tx_b     HaLow netdev TX bytes (first morse interface)
-#   wifi_tx_b      Wi-Fi netdev TX bytes (first ath10k interface)
+#   wifi_tx_b      Wi-Fi netdev TX bytes (first mt7915e or ath10k interface)
 # Read-only: it changes no settings.
 
 interval=${1:-5}
@@ -29,7 +29,8 @@ for h in /sys/class/hwmon/hwmon*; do
 	[ "$(cat "$h/name" 2>/dev/null)" = "ina219" ] && ups=$h
 done
 halow=$(first_iface morse)
-wifi=$(first_iface ath10k)
+wifi=$(first_iface mt7915e)
+[ -n "$wifi" ] || wifi=$(first_iface ath10k)
 
 rd() { cat "$1" 2>/dev/null || echo ""; }
 
