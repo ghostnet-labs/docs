@@ -24,8 +24,8 @@ evidence for the architecture, not validation of the V1 parts.
 | -- | -- | -- | -- |
 | Compute | CM5 Wireless 4 GB / 16 GB eMMC (CM5104016) | CM5 8 GB / 32 GB, no wireless (CM5008032) | Same SoC, kernel and firmware target. Not RAM/eMMC headroom. |
 | HaLow | Gateworks GW16167 (MM8108, M.2 2230 E-key) on a Pier42 USB carrier | Gateworks GW16170 (MM8108-M20, high power) | Same MM8108 USB driver/firmware path. Not GW16170 TX power, current draw or thermals. |
-| Wi-Fi | Gateworks GW17032 / Compex WLE900VX, QCA9880 3x3 Wi-Fi 5, ath10k, Mini-PCIe | Advantech AIW-170BQ Wi-Fi 6E 2T2R, PCIe + USB Bluetooth | 802.11s mesh on 2.4/5 GHz and dual-radio behavior. Not 6 GHz, not the AIW-170BQ driver, not its Bluetooth. |
-| Bluetooth | CM5 onboard (only) | AIW-170BQ over USB | Only that the OS Bluetooth stack works. |
+| Wi-Fi | Gateworks GW17032 / Compex WLE900VX, QCA9880 3x3 Wi-Fi 5, ath10k, Mini-PCIe | AsiaRF AW7916-AED Wi-Fi 6E (MT7916), PCIe, no Bluetooth (D-026) | 802.11s mesh on 2.4/5 GHz and dual-radio behavior. Not 6 GHz, not the mt7915e driver on the V1 card. |
+| Bluetooth | CM5 onboard (only) | None (V1 drops Bluetooth, D-026) | Only that the OS Bluetooth stack works. |
 | GNSS | SparkFun SAM-M10Q breakout (u-blox M10, chip antenna), UART | u-blox MAX-M10S with external active antenna, UART + PPS | Same M10 protocol and gpsd path; RF coexistence trend. Not the active-antenna design. PPS only if wired (see §6). |
 | Ethernet | Carrier RJ45 | B-06 (sealed feed-through, D-022) | Link and throughput through the CM5 MAC. |
 | Power | Waveshare UPS Module 3S (3 × Molicel M35A), 5 V / 5 A out, INA219 on I2C | Custom 3S2P pack (B-11), TPS26633 eFuse, LM76005 rails, INA228 | Node power draw by state and the hwmon telemetry path. Not the V1 power path or INA228. |
