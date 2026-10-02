@@ -44,14 +44,14 @@ and [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36).
 
 ## 3. Missing hardware
 
-Bench hardware that is not in the cart (serial console adapter, switch and
+Bench hardware that is not in the cart (USB-UART adapters, switch and
 extra Ethernet cables, bench supply, USB-C power meter, CM5 coolers, 900 MHz
 attenuators, multimeter) is listed with quantities, the POC issue each one
 unblocks, and its sourcing status under "Still to source" in the Linear doc
 [OpenMANET POC — Purchase BOM](https://linear.app/ghostnet-labs/document/openmanet-poc-purchase-bom-ff58aa264535).
 Why each is needed:
 
-- **Serial adapter (3.3 V USB-TTL):** GHO-28 needs serial boot logs; the image keeps the kernel console on the CM5 debug UART (`ttyAMA10`), whose carrier pins must be confirmed on arrival.
+- **USB-UART adapters (3.3 V, CH340):** the carrier has no 40-pin header (§4.1), so each node's SAM-M10Q reaches the CM5 through one over USB. One more on the host is the serial console for GHO-28 boot logs.
 - **Switch and Ethernet cables:** host plus two nodes on one wired LAN for SSH and iperf3 (GHO-29).
 - **12 V bench supply:** runs a node without the battery, isolates power faults, and answers former Q-06 (UPS 5 V USB-C vs. the carrier's 7–36 V input).
 - **USB-C power meter:** Pier42/HaLow USB draw and UPS-to-carrier draw during TX (GHO-30).
@@ -61,6 +61,26 @@ Why each is needed:
 Voice/PTT hardware (CM108B OpenVLM device) is out of POC scope; see GHO-35.
 
 ## 4. Topology
+
+### 4.1 What the carrier exposes
+
+Checked against the Waveshare
+[CM5-IO-WIRELESS-BASE schematic](https://github.com/waveshareteam/CM5-IO-WIRELESS-BASE/tree/master/hardware/schematics)
+on 2026-10-02. The "Raspberry 40 PIN" block on that sheet is a pin map, not a
+connector.
+
+- **No 40-pin header.** The only user GPIO is the green screw terminal `J9`: VIN (7–36 V, never a logic supply), GND, GPIO27, 26, 22, 18, 17, 7. There is no 3.3 V pin.
+- **No CM5 debug UART** (`ttyAMA10`) anywhere on the carrier.
+- **GPIO14/15 (UART0)** only reach pin 1 of the RS485 CH1 source jumpers `H4` (GPIO14, TX) and `H3` (GPIO15, RX). Pin 2 is the RS485 transceiver; pin 3 is UART4 (GPIO12/13). They also feed the modem level shifter through 0 Ω `R86`/`R87`. With a jumper on 1–2, the RS485 receiver drives GPIO15.
+- **GPIO2/3 (`i2c-1`)** are not brought out.
+- **GPIO25** is the MCP2515 CAN interrupt (`R15`), so nothing else may drive it.
+- **USB-C `J4`** feeds 5 V to the CM5 rail through a P-FET switch (`M2`, AO4407A). The 7–36 V DC input goes through its own buck regulator.
+
+So the bench wiring is:
+- GNSS NMEA comes in over a USB-UART (`/dev/ttyUSB0`).
+- GNSS PPS goes to terminal "18" (`/dev/pps0`).
+- The UPS INA219 uses bit-banged I2C on terminals "22" (SDA) and "27" (SCL).
+- The image handles all three since firmware [#17](https://github.com/ghostnet-labs/firmware/pull/17) and [#19](https://github.com/ghostnet-labs/firmware/pull/19), and packages [#3](https://github.com/ghostnet-labs/packages/pull/3).
 
 ### Per node
 
@@ -80,6 +100,7 @@ flowchart LR
     PIER[Pier42 carrier<br/>USB-C]
     HALOW[GW16167<br/>MM8108]
     GNSS[SAM-M10Q breakout]
+    SB[USB-UART<br/>CH340, 3.3 V]
     UPS[Waveshare UPS 3S<br/>3x M35A, INA219]
   end
   MPCIE --- WIFI
@@ -87,8 +108,10 @@ flowchart LR
   USBA -- Adafruit 4472 --> PIER
   PIER --- HALOW
   HALOW -- MMCX pigtail --> HANT[W1063M<br/>900 MHz]
-  GPIO -- 3V3, GND, TX, RX on GPIO14/15 --> GNSS
-  GPIO -- SDA, SCL, GND on GPIO2/3 --> UPS
+  USBA -- USB --> SB
+  SB -- 3V3, GND, TX, RX --> GNSS
+  GNSS -- PPS to terminal 18, GND --> GPIO
+  GPIO -- SDA 22, SCL 27, GND --> UPS
   UPS -- 5 V, XH2.54 to USB-C --> USBC
   RJ45 --- LAN[Bench LAN]
   CHG[12.6 V charger] --> UPS
@@ -104,7 +127,7 @@ flowchart LR
   N1 <-. HaLow 902–928 MHz 802.11s .-> N2
   N1 <-. Wi-Fi 2.4/5 GHz 802.11s .-> N2
   HOST -. USB-C flash, UPS unplugged .-> N1
-  HOST -. 3.3 V serial console .-> N1
+  HOST -. USB-UART console on H3/H4 pin 1 .-> N1
 ```
 
 Wired Ethernet is the management and reference path; mesh tests run over the
@@ -121,11 +144,12 @@ radios with the wired path either kept for control or unplugged per test.
 | 5 | GW16167 MMCX | SMA bulkhead → W1063M | CAB724RF pigtail | Strain-relieve the pigtail. |
 | 6 | Carrier Mini-PCIe adapter | GW17032 | Socket | Use all retention hardware. |
 | 7 | GW17032 U.FL ×3 | ADD5RA ×3 | JF1R6 pigtails | All three fitted before any TX. |
-| 8 | Carrier GPIO14/15 (UART0, `/dev/ttyAMA0`) | SAM-M10Q RX/TX | 22 AWG | 3.3 V and GND too. Cross TX/RX. Check pinout before power. |
-| 9 | Carrier GPIO2/3 (I2C1, `/dev/i2c-1`) | UPS INA219 | 22 AWG | SDA, SCL, GND. Image expects address 0x41; confirm with `i2cdetect -y 1`. |
+| 8 | Carrier USB-A → USB-UART | SAM-M10Q UART header | USB-C cable + jumper wires | Adapter at 3.3 V; it powers the breakout (3V3, GND) and crosses TX/RX. gpsd reads `/dev/ttyUSB0`. |
+| 8a | Terminal "18" (GPIO18) and GND | SAM-M10Q PPS and GND | 22 AWG | `/dev/pps0`; check with `ppstest /dev/pps0`. |
+| 9 | Terminals "22" (SDA, GPIO22) and "27" (SCL, GPIO27), GND | UPS INA219 | 22 AWG | Bit-banged I2C (`i2c-gpio`); the image binds 0x41 on it. Find the bus with `ls /sys/bus/i2c/devices/`, then `i2cdetect -y <n>`. Needs pull-ups on the UPS side (check). |
 | 10 | RTC holder | CR1220 | — | RTC charging stays off. |
 | 11 | RJ45 | Bench switch | Cat5e/6 | SSH and iperf3. |
-| 12 | CM5 debug UART | Host | USB-TTL adapter | Serial console; pins to confirm on the carrier. |
+| 12 | `H4` pin 1 (GPIO14, TX), `H3` pin 1 (GPIO15, RX), GND | Host USB-UART | Female jumper wires | Bring-up console only. Pull both RS485 CH1 jumpers first, then add `dtparam=uart0_console` to `config.txt` on the boot partition so `serial0` is UART0 (`ttyAMA0`, 115200). Find pin 1 on the silkscreen. Without this, use HDMI and a USB keyboard (`console=tty1`). |
 
 ## 5. Firmware and build revision
 
@@ -134,9 +158,9 @@ radios with the wired path either kept for control or unplugged per test.
 | Firmware repo | [ghostnet-labs/firmware](https://github.com/ghostnet-labs/firmware), OpenWrt 24.10, kernel 6.6 |
 | Board / device | `ekh-bcm2712` / `bcm2712_mm8108-usb` (`board_name` `bcm2712,mm8108-usb`) |
 | Source | PR [#1](https://github.com/ghostnet-labs/firmware/pull/1), merged to `24.10` as `1a00cf7` on 2026-10-01 (D-021) |
-| openmanet feed | `ghostnet-labs/packages` 24.10 @ `c9ea22b` (CM5 Wi-Fi defaults, INA219 UPS init, openmanetd from `ghostnet-labs/openmanetd`) |
+| openmanet feed | `ghostnet-labs/packages` 24.10 (CM5 Wi-Fi defaults, INA219 UPS init on `i2c-gpio`, gpsd on `/dev/ttyUSB0` from `475eca0`, openmanetd from `ghostnet-labs/openmanetd`) |
 | Image build | "Build ekh-bcm2712" on `01324a2`, Actions run [36805820451](https://github.com/ghostnet-labs/firmware/actions/runs/36805820451), green 2026-10-01. Artifact `firmware-ekh-bcm2712`, 5-day retention. |
-| Image config | `distroconfig.txt`: UART0 on (GNSS), `i2c_arm` on (UPS), `pciex1` on (Wi-Fi), no `rtc_bbat_vchg`, `ant2` off; `bcm2712-morse-fix` stops morsechipreset from unbinding the boot eMMC. |
+| Image config | `distroconfig.txt`: UART0 on, `pps-gpio` on GPIO18, `i2c-gpio` on GPIO22/27 (UPS), `pciex1` on (Wi-Fi), no `rtc_bbat_vchg`, `ant2` off; `bcm2712-morse-fix` stops morsechipreset from unbinding the boot eMMC. |
 
 The image actually flashed for [GHO-28](https://linear.app/ghostnet-labs/issue/GHO-28)
 is built from `24.10`; that issue records its commit, run, artifact name
@@ -146,8 +170,9 @@ and SHA-256 when it is flashed. Rebuild if the artifact has expired.
 
 | Gap | Effect | Proposed fix |
 | -- | -- | -- |
-| No PPS input configured | The SAM-M10Q breakout has a PPS pad but the image has no `pps-gpio` overlay, so GNSS PPS (in [GHO-29](https://linear.app/ghostnet-labs/issue/GHO-29) acceptance) can't be measured. | Wire PPS to a free GPIO (e.g. GPIO18) and add `dtoverlay=pps-gpio,gpiopin=18` plus `kmod-pps-gpio` to the board. Needs its own issue. |
-| Serial console pins unknown | Kernel console is on `ttyAMA10`; the carrier may not break it out. | Check the Waveshare schematic on arrival; fall back to moving the console to UART0 temporarily if needed. |
+| ~~No PPS input configured~~ | Fixed by firmware [#17](https://github.com/ghostnet-labs/firmware/pull/17) ([GHO-46](https://linear.app/ghostnet-labs/issue/GHO-46)). | — |
+| ~~GNSS UART and UPS I2C assume a 40-pin header~~ | Fixed by firmware [#19](https://github.com/ghostnet-labs/firmware/pull/19) and packages [#3](https://github.com/ghostnet-labs/packages/pull/3); see §4.1. | — |
+| Debug UART not on the carrier | Kernel console `ttyAMA10` is unreachable. | Bring-up console on UART0 with `dtparam=uart0_console` (connection 12), or HDMI. |
 | INA219 address assumed | `/etc/config/ups` defaults to 0x41. | Confirm and edit on first boot. |
 
 ## 7. Power and RF safety assumptions
@@ -181,10 +206,10 @@ not in this file.
 | 3 | Pier42/GW16167 power stays stable | The internal USB link and carrier current budget are unproven under transmit. | Run sustained HaLow traffic while logging `dmesg` for resets or brownouts. Measure the 5 V input and the Pier42 3.3 V output if accessible. |
 | 4 | GW17032 enumerates and meshes | The POC Wi-Fi link depends on ath10k and 802.11s. | Install in the Mini-PCIe adapter. Confirm ath10k loads, all three antennas are attached, `iw` lists mesh point, and AP plus mesh works on the same channel if needed. |
 | 5 | Wi-Fi pigtails and antennas are correct | The WLE900VX is 3x3 and needs every RF path populated. | Fit three U.FL pigtails to RP-SMA bulkheads and three ADD5RA antennas. Verify no open ports during transmit. |
-| 6 | GPS UART and RF coexistence | GPS can degrade near 900 MHz and 2.4/5 GHz transmitters. | Wire 3.3 V, GND, TX, RX. Confirm a gpsd fix, log C/N0 idle, then repeat during HaLow TX and Wi-Fi TX. Adjust placement or TX power if average C/N0 drops more than about 3 dB. Record the HaLow power where C/N0 starts to fall (D-020). |
+| 6 | GPS UART and RF coexistence | GPS can degrade near 900 MHz and 2.4/5 GHz transmitters. | Wire the breakout to its USB-UART and PPS to terminal 18 (connections 8, 8a). Confirm `ppstest /dev/pps0` pulses, then confirm a gpsd fix, log C/N0 idle, then repeat during HaLow TX and Wi-Fi TX. Adjust placement or TX power if average C/N0 drops more than about 3 dB. Record the HaLow power where C/N0 starts to fall (D-020). |
 | 7 | UPS powers the node and reports telemetry | The UPS power cable and INA219 telemetry must work in the actual stack. | Boot from the UPS, unplug the charger, run the radios, check for undervoltage warnings, and read voltage, current and power over I2C. |
 | 8 | RTC keeps time with the CR1220 | The CR1220 is non-rechargeable, so charging must stay off. | Confirm `config.txt` has no `rtc_bbat_vchg`. Set `hwclock`, power off, and verify the time after restart. |
 | 9 | Enclosure dry fit | Bulkhead, Pier42, GPS and UPS clearances are unknown until parts arrive. | Place the boards in the Bud box before drilling. Mark antenna holes, standoff heights, wire routes and strain relief. Do not seal until the RF/GPS tests pass. |
 | 10 | Thermal check | Track B power and enclosure sizing depend on real heat data. | Run closed-box HaLow and Wi-Fi traffic while logging CM5 and radio temperatures. Repeat with and without a CM5 cooler if needed. |
 | 11 | Adapter and USB link retention | The Mini-PCIe adapter and the Pier42 USB link could loosen in a closed box. | Check that the GW17032 and adapter, the Pier42 and the USB cable stay seated. Add standoffs, clips or strain relief if anything can move. |
-| 12 | Confirm how the UPS feeds the carrier (former Q-06) | The carrier lists a 7 to 36 V DC input while the UPS supplies 5 V over USB-C. | Check the carrier documentation and the UPS cable on arrival. Record which input is used and whether the USB-C signaling works, on [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36). |
+| 12 | Confirm how the UPS feeds the carrier (former Q-06) | The carrier lists a 7 to 36 V DC input while the UPS supplies 5 V over USB-C. | The schematic shows USB-C 5 V reaching the CM5 rail through a P-FET switch (§4.1), so the 5 V USB-C feed should work. Check the UPS cable and its current under radio TX on arrival. Record which input is used and whether the USB-C signaling works, on [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36). |
