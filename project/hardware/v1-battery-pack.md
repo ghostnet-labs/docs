@@ -7,8 +7,8 @@ The parameter table tags each value as Locked, Target, or CAD-verify. Do not tre
 ## Design rules
 
 - **Sourcing.** Prefer active, catalog-orderable parts that can be bought in small quantities from major authorized distributors such as DigiKey, Mouser, Newark, or Arrow. Avoid RFQ-only parts, custom connector builds, manufacturer-specific tooling, and large minimum order quantities unless no reasonable catalog alternative meets the requirement.
-- **Priority order.** Preserve the 124 x 74 mm footprint first, keep safe cell clearances and sealing second, keep pack replacement easy third, and let pack height grow if needed. Do not reduce cell insulation or gasket and hard-stop robustness only to hold the 46 mm height target.
-- **Modularity.** Standard and future higher-capacity packs share the same 124 x 74 mm footprint and radio-side mating interface, and extra capacity mainly adds height. The pack enclosure is sealed and not meant for routine field disassembly.
+- **Priority order.** Preserve the radio's footprint first (124 x 74 mm today; it must grow for the 138 mm board, D-026), keep safe cell clearances and sealing second, keep pack replacement easy third, and let pack height grow if needed. Do not reduce cell insulation or gasket and hard-stop robustness only to hold the 46 mm height target.
+- **Modularity.** Standard and future higher-capacity packs share the same radio footprint and radio-side mating interface, and extra capacity mainly adds height. The pack enclosure is sealed and not meant for routine field disassembly.
 - **Sealing.** The radio and the pack are each independently sealed, so removing the pack does not open either enclosure to water. A replaceable silicone face seal around the mating and contact cavity adds secondary protection against water, mud, and debris. The contacts sit inside that cavity and do not need an IP rating.
 - **Attachment and install sequence.** Bottom-mount hook and latch. The fixed hooks engage first, then the latch end pivots or presses upward and a positive recessed latch locks the pack. Asymmetric keying (an offset boss) prevents installing the pack reversed by 180 degrees. The release is glove-operable, recessed against accidental activation, and needs no tools.
 - **Load path.** Hooks, locating bosses, hard stops, and the latch carry shock, shear, and gasket preload. The pogo contacts carry no structural load and are never used as hard stops. The pack-side target PCB and the radio-side pogo daughterboard carry electrical load only.
@@ -24,7 +24,7 @@ Each row is the single owner of its value. Status is Locked, Target, or CAD-veri
 
 | ID | Parameter | Value | Status |
 |---|---|---|---|
-| M-01 | Plan-view envelope | About 124 x 74 mm, matching the radio enclosure footprint (117 x 67 mm board plus walls and clearance). Shrink toward MPU5 size if CAD allows (D-016). The coordinates in this table use the 124 x 74 mm frame (D-017). | Target. Shrinks if CAD allows (D-016). |
+| M-01 | Plan-view envelope | Matches the radio enclosure footprint. It was about 124 x 74 mm for the 117 x 67 mm board; the board is now 138 x 67 mm (D-026), so the footprint grows to about 145 x 74 mm (inferred: same walls and clearance). The coordinates in this table still use the old 124 x 74 mm frame (D-017) and must be remapped, including the pogo-contact position on the board ([GHO-8](https://linear.app/ghostnet-labs/issue/GHO-8)). | Must be redone for D-026. |
 | M-02 | Height | About 46.0 mm standard, and it may increase if safe packaging, latch, or sealing requires. Cell-zone structural height about 42 to 44 mm (two 18.6 mm cells, about 1 mm layer gap, 1.5 to 2 mm insulation and support above and below, plus wall and clearance). | Target |
 | M-03 | Perimeter structure | 4.0 mm nominal wall and edge margin around the plan-view perimeter, with a continuous structural load path along both 124 mm sidewalls from hook end to latch end. Corner radii and draft depend on the enclosure process. | Target. Radii and draft CAD-verify. |
 | M-04 | Cells | Six Molicel INR-18650-M35A, modeled at 65.2 mm max length x 18.6 mm max diameter, along X. Three across Y and two layers, with the lower layer directly under the upper. | Locked |
@@ -52,7 +52,7 @@ Create these bodies first: radio-bottom interface plate, pack outer shell, pack 
 
 ## CAD review gates
 
-1. Fit check. All bodies sit inside the 124 x 74 mm footprint.
+1. Fit check. All bodies sit inside the pack footprint (M-01).
 2. Motion check. Hook-first installation, pivot path, locating engagement, pogo compression, gasket compression, and latch travel work without interference.
 3. Tolerance study. Hard-stop stack, gasket squeeze, pogo stroke, and PCB positional tolerance.
 4. Structural review. Identify the hook and latch load paths and the weak enclosure sections.

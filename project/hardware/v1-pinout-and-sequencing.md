@@ -7,7 +7,7 @@
 
 - [Raspberry Pi CM5 datasheet](https://pip.raspberrypi.com/documents/RP-008180-DS-cm5-datasheet.pdf)
 - [Raspberry Pi CM5 IO datasheet](https://pip.raspberrypi.com/documents/RP-008182-DS-cm5io-datasheet.pdf)
-- [Advantech AIW-170BQ V1.4 User Manual](https://advdownload.advantech.com/productfile/Downloadfile4/1-2F5N99M/AIW-170BQ_%20V1.4%20User%20Manual.pdf)
+- [AsiaRF AW7916-AED datasheet](https://asiarf.com/wp-content/uploads/2026/07/260709_Datasheet_AW7916-AED_V1-1P.pdf)
 - [Gateworks GW16167/GW16170 M.2 pinout](https://trac.gateworks.com/wiki/expansion/gw16167)
 
 ## CM5 physical carrier pins
@@ -54,36 +54,21 @@ Allocation decision D-024: GNSS uses UART0 on GPIO14/15; system I2C1 uses GPIO2/
 | 13 | — | EFUSE_FAULT | eFuse fault; physical pin/boot verification open |
 | 14 | 55 | GNSS_UART_TX | GNSS UART0 TX; physical pin verified |
 | 15 | 51 | GNSS_UART_RX | GNSS UART0 RX; physical pin verified |
-| 16 | — | BT_USB_FAULT_N | Bluetooth USB fault; physical pin/boot verification open |
+| 16 | — | BT_USB_FAULT_N | Bluetooth USB fault. No device since V1 dropped Bluetooth (D-026); free or reassign under GHO-9 |
 | 17 | — | ETH_SYNC_OUT | Ethernet timing; physical pin/boot verification open |
 | 18 | — | HALOW_RESET_N | HaLow reset; active-low open-drain, physical pin/boot verification open |
 | 19 | — | HALOW_WAKE_N | HaLow wake; active-low open-drain, optional; physical pin/boot verification open |
 | 20 | — | INA228_ALERT_N | Battery monitor alert; physical pin/boot verification open |
 | 21 | — | WIFI_WDIS1_N | Wi-Fi RF disable; provisional, physical pin/boot verification open |
-| 22 | — | WIFI_WDIS2_N | Bluetooth disable; provisional, physical pin/boot verification open |
+| 22 | — | WIFI_WDIS2_N | Bluetooth disable on the old card. The AW7916-AED has no Bluetooth (D-026); keep, free or reassign once its pin table is checked (GHO-9) |
 | 23 | 47 | USB_HUB_RESET_N | USB hub reset; physical pin verified |
 | 24 | 45 | HALOW_USB_FAULT_N | HaLow USB fault; physical pin verified |
 | 25 | 41 | VLM_USB_FAULT_N | OpenVLM port-3 VBUS switch / downstream overcurrent fault; physical pin verified |
 | 26–27 | — | Reserved | Unassigned |
 
-## AIW-170BQ-001 verified M.2 signals
+## AW7916-AED M.2 signals (not yet verified)
 
-Advantech's V1.4 manual identifies PCIe WLAN and USB Bluetooth:
-
-| M.2 pin | Signal |
-|---:|---|
-| 2,4,72,74 | 3.3 V |
-| 3 / 5 | USB D+ / D- |
-| 35 / 37 | PERp0 / PERn0 |
-| 41 / 43 | PETp0 / PETn0 |
-| 47 / 49 | REFCLKp0 / REFCLKn0 |
-| 52 | PERST0# (active-low input) |
-| 53 | CLKREQ0# (open drain) |
-| 54 | W_DISABLE2# (Bluetooth enable) |
-| 55 | PEWAKE0# (open drain) |
-| 56 | W_DISABLE1# (reserved) |
-
-Do not substitute a generic M.2 map. AIW pin 54 is not the HaLow pin-54 function.
+The V1 Wi-Fi card is the AsiaRF AW7916-AED (MT7916, M.2 3052 A+E key, PCIe WLAN, no Bluetooth, D-026). Its pin table has not been checked against AsiaRF documentation yet. Until it is, the card's PCIe, PERST#, CLKREQ#, PEWAKE#, W_DISABLE1# and W_DISABLE2# pins are unverified, and nothing here may reach layout. Do not substitute a generic M.2 map. The card has no USB function, so the old USB D+/D- connection to hub port 2 is gone. The card needs a 3.3 V supply of at least 3 A.
 
 ## GW16170 / MM8108-M20 verified signals
 
@@ -91,11 +76,11 @@ Gateworks documents pins 2/4/72/74 as 3.3 V, pin 3/5 as USB D+/D-, pin 56 W_DISA
 
 ## Working sequence and recovery
 
-1. Power-off defaults: radio rails and USB VBUS off, hub reset inactive, HaLow controls high-Z, AIW PERST0# asserted.
+1. Power-off defaults: radio rails and USB VBUS off, hub reset inactive, HaLow controls high-Z, Wi-Fi PERST# asserted.
 2. Bring up CM5 3.3 V and supervisor; keep USB VBUS switching separate from radio 3.3 V switches.
 3. Enable the selected radio 3.3 V rail after supervisor-good.
 4. Release HaLow reset/WAKE by high-Z GPIO18/19, then enable its USB VBUS and enumerate.
-5. Enable WIFI_3V3; hold AIW pin 52 PERST0# until clock/reset timing is valid, then release. Connect CLKREQ0#; keep reserved W_DISABLE1# unassigned.
+5. Enable WIFI_3V3; hold the Wi-Fi card's PERST# until clock/reset timing is valid, then release. Connect CLKREQ#. Pin numbers wait on the AW7916-AED pin table.
 6. Deassert TUSB4041I reset only after 3.3 V and 24 MHz are stable.
 7. Recovery: reset USB device → reset hub → power-cycle radio → supervisor/watchdog → CM5 PMIC_Enable (pin 99).
 
@@ -103,8 +88,8 @@ Gateworks documents pins 2/4/72/74 as 3.3 V, pin 3/5 as USB D+/D-, pin 56 W_DISA
 
 - Verify GPIO23/24/25 boot defaults, device-tree behavior, electrical polarity, and schematic connectivity.
 - Verify physical CM5 pin and device-tree mux/boot defaults for every retained logical GPIO.
-- Confirm AIW PEWAKE host handling and leave W_DISABLE1 reserved.
+- Check the AW7916-AED pin table, its PEWAKE# and W_DISABLE handling, and decide GPIO16 (BT_USB_FAULT_N) and GPIO22 (WIFI_WDIS2_N), which lost their Bluetooth role (D-026).
 - Confirm TE 2199119-6 footprint, hub VBUS/ESD/straps, and eight-contact battery allocation.
 - Bench-validate PCIe/USB enumeration, sequencing, and PMIC_Enable recovery.
 
-**Acceptance status:** CM5 PCIe/USB/power pins, CM5 mux facts, AIW pin table, Gateworks control behavior, and a D-024 logical allocation (GNSS on GPIO14/15; hub reset on GPIO23; HaLow/VLM USB faults on GPIO24/25) are recorded. Remaining GPIO physical mappings, device-tree defaults, schematic implementation, and bench evidence remain open.
+**Acceptance status:** CM5 PCIe/USB/power pins, CM5 mux facts, Gateworks control behavior, and a D-024 logical allocation (GNSS on GPIO14/15; hub reset on GPIO23; HaLow/VLM USB faults on GPIO24/25) are recorded. Remaining GPIO physical mappings, device-tree defaults, schematic implementation, and bench evidence remain open.
