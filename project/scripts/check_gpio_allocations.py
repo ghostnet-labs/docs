@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PROJECT = ROOT / "project"
 LEDGER = PROJECT / "hardware" / "v1-pinout-and-sequencing.md"
 HEADER = "| GPIO | CM5 connector pin | Signal | Function / verification status |"
-ROW = re.compile(r"^\|\s*(\d+|\d+[–-]\d+)\s*\|\s*(?:\d+|—)\s*\|\s*([A-Z][A-Z0-9_]+)\s*\|")
+ROW = re.compile(r"^\|\s*(\d+|\d+[–-]\d+)\s*\|\s*(?:\d+|—)\s*\|\s*([A-Z][A-Z0-9_]*|Reserved)\s*\|")
 PAIR = re.compile(
     r"\b([A-Z][A-Z0-9_]+)\b[^;,.|]{0,80}?"
     r"\b(?:on|to|uses?|mapped to|assigned to)\s+"
