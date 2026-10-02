@@ -23,7 +23,8 @@ Every fact has exactly one owner. Everywhere else refers to it by ID or link and
 | POC bench wiring, firmware revision, safety rules, arrival checks | [poc/bench-bom-and-topology.md](poc/bench-bom-and-topology.md) |
 | Track B selections (B-nn) and their status, power tree, PCB approach, Track A vs. B comparison (the Linear "BOM Baseline" doc only points here; BOM completion is [GHO-26](https://linear.app/ghostnet-labs/issue/GHO-26)) | [hardware/v1-selections.md](hardware/v1-selections.md) |
 | Battery pack geometry (M-nn), design rules, CAD review gates | [hardware/v1-battery-pack.md](hardware/v1-battery-pack.md) |
-| Track B engineering detail: calculations, interfaces, GPIO map, placement, validation plan | [hardware/v1-reference.md](hardware/v1-reference.md) (supporting; the registers above win) |
+| Track B CM5 physical pins, GPIO signal ownership, mux facts, and sequencing | [hardware/v1-pinout-and-sequencing.md](hardware/v1-pinout-and-sequencing.md) (canonical; GHO-9) |
+| Track B engineering detail: calculations, interfaces, placement, and validation plan | [hardware/v1-reference.md](hardware/v1-reference.md) (supporting; the registers above win; it links to the canonical pin/GPIO record) |
 | CAD floorplan model and clearance check | firmware [`docs/hardware/v1-mechanical/`](https://github.com/ghostnet-labs/firmware/tree/24.10/docs/hardware/v1-mechanical) (a script, so it lives with code) |
 | Firmware source, board target, CI and build evidence | [ghostnet-labs/firmware](https://github.com/ghostnet-labs/firmware) and its PRs |
 | History of the 2026-09-29 Track A options | [poc/history-2026-09-29.md](poc/history-2026-09-29.md) (historical, never authoritative) |
@@ -44,7 +45,7 @@ These rules apply to people and agents alike.
 6. **Do not resolve conflicts silently.** If two records disagree, open a Linear issue that names both, and ask the project owner. Do not pick a winner.
 7. **Dates and IDs.** Use absolute dates (YYYY-MM-DD). IDs are permanent: never renumber or reuse one. A new item takes the next number in its prefix. A retired item moves to the Retired and rejected table and keeps its ID.
 8. **Open questions are Linear issues.** Do not keep open-question lists in these files. A file may name the issue that tracks a gap.
-9. **Finish with a consistency check.** Before merging, confirm that `poc/track-a.md`, `hardware/v1-selections.md`, `hardware/v1-battery-pack.md` and `decisions.md` still agree with one another and with the Linear issues they reference.
+9. **Finish with a consistency check.** Before merging, confirm that `poc/track-a.md`, `hardware/v1-selections.md`, `hardware/v1-battery-pack.md`, `hardware/v1-pinout-and-sequencing.md` and `decisions.md` still agree with one another and with the Linear issues they reference. Search for every changed signal name and GPIO number; maps outside the owning pinout record must link to it rather than restate allocations. Review against the current base branch before merge.
 
 ## Status words
 
