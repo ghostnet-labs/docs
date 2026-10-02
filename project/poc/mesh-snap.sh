@@ -23,8 +23,10 @@ if has batctl; then
 	echo "-- batctl gwl"; batctl gwl
 	echo "-- batctl multicast forceflood"; batctl mff 2>/dev/null || batctl mm
 fi
-echo "-- uci wireless"; uci -q show wireless | grep -v -E '\.key='
+# Secrets are replaced, not dropped, so the log still shows which options are set.
+redact() { sed -E "s/\.([a-z0-9_]*(key|psk|secret|pass)[a-z0-9_]*)=.*/.\1='REDACTED'/"; }
+echo "-- uci wireless"; uci -q show wireless | redact
 echo "-- uci network (bat)"; uci -q show network | grep -E 'bat|ahwlan'
-echo "-- uci mesh11sd"; uci -q show mesh11sd
+echo "-- uci mesh11sd"; uci -q show mesh11sd | redact
 echo "-- dmesg (radios, batman)"
 dmesg | grep -i -E 'morse|mt7915|ath10k|batman|mesh' | tail -n 40
