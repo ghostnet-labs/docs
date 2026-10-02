@@ -13,7 +13,7 @@ Two scripts run on the node; copy them over with `scp` once SSH works:
 
 ## 0. Before power
 
-1. Build or download the current `ekh-bcm2712` image from `24.10`. It must include firmware #17 (PPS) and #19 (`i2c-gpio`), and packages #3 (gpsd on USB, INA219 on `i2c-gpio`). Record the commit, Actions run, artifact name and `sha256sum` on [GHO-28](https://linear.app/ghostnet-labs/issue/GHO-28).
+1. Build or download the current `ekh-bcm2712` image from `24.10`. It must include firmware #17 (PPS), #22 (`i2c-gpio`) and #25 (Bluetooth), and packages #3 (gpsd on USB, INA219 on `i2c-gpio`). CI artifacts expire after 5 days, so download the one from the latest `24.10` build when the hardware ships. Record the commit, Actions run, artifact name and `sha256sum` on [GHO-28](https://linear.app/ghostnet-labs/issue/GHO-28).
 2. Set the Serial Basic VCC selector to **3.3 V** (all three adapters).
 3. Do arrival checks 1–5 and 9 in [bench-bom-and-topology.md §8](bench-bom-and-topology.md) as parts are fitted. Never transmit with an open antenna port.
 
@@ -22,7 +22,7 @@ Two scripts run on the node; copy them over with `scp` once SSH works:
 1. Disconnect the UPS. Fit the CM5 to the carrier with no radios attached.
 2. Hold the carrier BOOT button and connect the host to the carrier USB-C with the Adafruit 4474 cable.
 3. On the host, run `sudo rpiboot` ([usbboot](https://github.com/raspberrypi/usbboot)). The eMMC appears as a mass-storage disk.
-4. Write the image: `gunzip -c openwrt-*-bcm2712_mm8108-usb-squashfs-factory.img.gz | sudo dd of=/dev/sdX bs=4M conv=fsync`.
+4. Write the image. The CI artifact holds one full-disk image, `openmanet-<version>-rpi5-cm5-mm8108-usb-squashfs-sysupgrade.img.gz`; check it against the artifact's `sha256sums`, then run `gunzip -c openmanet-*-sysupgrade.img.gz | sudo dd of=/dev/sdX bs=4M conv=fsync`.
 5. Optional, for the serial console: mount the boot (FAT) partition and add `dtparam=uart0_console` under `[all]` in `config.txt`. Then wire connection 12: pull both RS485 CH1 jumpers first, and use the host's Serial Basic at 115200 8N1.
 
 ## 2. First boot (GHO-28)
@@ -41,7 +41,7 @@ Two scripts run on the node; copy them over with `scp` once SSH works:
 
 Power off between each addition, fit antennas first, then:
 
-1. GW17032 Mini-PCIe Wi-Fi with all three antennas.
+1. The Wi-Fi card in the M.2 M-key slot through its adapter, with all three antennas (the B-key Mini-PCIe adapter has no PCIe; see bench-bom-and-topology.md §4.1). Check `lspci` lists it.
 2. Pier42 + GW16167 on a carrier USB-A port, W1063M on the HaLow port.
 3. SAM-M10Q on its Serial Basic in another USB-A port. PPS goes to terminal "18" and GND to the GND terminal (connections 8 and 8a). Put the GNSS where it sees the sky.
 
@@ -67,7 +67,7 @@ Then the per-radio checks GHO-29 asks for:
 - **HaLow:** `morse_cli -i <iface> version` (firmware and chip), then join the mesh from the LuCI wizard on both nodes. `iw dev <iface> station dump` shows the peer.
 - **Wi-Fi:** an 802.11s mesh point on both nodes (`iw dev`, `iw dev <iface> station dump`).
 - **GNSS:** `gpspipe -w | grep TPV` shows `"mode":3`, and `ppstest /dev/pps0` shows one assert per second.
-- **Bluetooth:** the image has no Bluetooth stack yet, so record this as a gap ([GHO-47](https://linear.app/ghostnet-labs/issue/GHO-47)).
+- **Bluetooth** ([GHO-47](https://linear.app/ghostnet-labs/issue/GHO-47), firmware #25): `hciconfig -a` shows `hci0` UP, then `bluetoothctl` → `power on`, `scan on` sees a nearby phone. If `hci0` is missing, check `dmesg | grep -i -E 'hci_uart|bluetooth|brcm'`; a missing `BCM4345C0*.hcd` warning is expected and harmless.
 - **Ethernet throughput:** the image has `iperf` (v2). Run `iperf -s` on the node and `iperf -c <node> -t 30` on the host; use iperf 2 on the host too.
 
 ## 4. Power and thermal (GHO-30)
@@ -98,4 +98,4 @@ Run it once closed-box without a CM5 cooler and once with one (arrival check 10)
 
 ## 5. Two nodes (GHO-31)
 
-Repeat steps 1–3 on node 2. Then follow [GHO-31](https://linear.app/ghostnet-labs/issue/GHO-31) with the nodes at least 1 m apart or behind attenuators. Run `bench-log.sh` on both nodes during each test.
+Repeat steps 1–3 on node 2. Then run [mesh-test-plan.md](mesh-test-plan.md) for [GHO-31](https://linear.app/ghostnet-labs/issue/GHO-31), with the nodes at least 1 m apart or behind attenuators.
