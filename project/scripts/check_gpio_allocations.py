@@ -5,7 +5,8 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-LEDGER = ROOT / "hardware" / "v1-pinout-and-sequencing.md"
+PROJECT = ROOT / "project"
+LEDGER = PROJECT / "hardware" / "v1-pinout-and-sequencing.md"
 HEADER = "| GPIO | CM5 connector pin | Signal | Function / verification status |"
 ROW = re.compile(r"^\|\s*(\d+|\d+[–-]\d+)\s*\|\s*(?:\d+|—)\s*\|\s*([A-Z][A-Z0-9_]+)\s*\|")
 PAIR = re.compile(
@@ -62,7 +63,7 @@ def main() -> None:
         fail(f"ledger must allocate/reserve GPIO0–27 exactly once (missing={missing}, extra={extra})")
 
     errors = []
-    project_root = ROOT
+    project_root = PROJECT
     for path in project_root.rglob("*.md"):
         if path == LEDGER:
             continue
