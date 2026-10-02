@@ -96,7 +96,7 @@ Gateworks documents pins 2/4/72/74 as 3.3 V, pin 3/5 as USB D+/D-, pin 56 W_DISA
 3. Enable the selected radio 3.3 V rail after supervisor-good.
 4. Release HaLow reset/WAKE by high-Z GPIO18/19, then enable its USB VBUS and enumerate.
 5. Enable WIFI_3V3; hold AIW pin 52 PERST0# until clock/reset timing is valid, then release. Connect CLKREQ0#; keep reserved W_DISABLE1# unassigned.
-6. Deassert TUSB4020BI reset only after 3.3 V and 24 MHz are stable.
+6. Deassert TUSB4041I reset only after 3.3 V and 24 MHz are stable.
 7. Recovery: reset USB device → reset hub → power-cycle radio → supervisor/watchdog → CM5 PMIC_Enable (pin 99).
 
 ## Open gates
