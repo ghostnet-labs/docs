@@ -54,21 +54,39 @@ Allocation decision D-024: GNSS uses UART0 on GPIO14/15; system I2C1 uses GPIO2/
 | 13 | — | EFUSE_FAULT | eFuse fault; physical pin/boot verification open |
 | 14 | 55 | GNSS_UART_TX | GNSS UART0 TX; physical pin verified |
 | 15 | 51 | GNSS_UART_RX | GNSS UART0 RX; physical pin verified |
-| 16 | — | BT_USB_FAULT_N | Bluetooth USB fault. No device since V1 dropped Bluetooth (D-026); free or reassign under GHO-9 |
+| 16 | — | Reserved | Freed: was BT_USB_FAULT_N, and V1 has no Bluetooth (D-026). Unassigned spare |
 | 17 | — | ETH_SYNC_OUT | Ethernet timing; physical pin/boot verification open |
 | 18 | — | HALOW_RESET_N | HaLow reset; active-low open-drain, physical pin/boot verification open |
 | 19 | — | HALOW_WAKE_N | HaLow wake; active-low open-drain, optional; physical pin/boot verification open |
 | 20 | — | INA228_ALERT_N | Battery monitor alert; physical pin/boot verification open |
-| 21 | — | WIFI_WDIS1_N | Wi-Fi RF disable; provisional, physical pin/boot verification open |
-| 22 | — | WIFI_WDIS2_N | Bluetooth disable on the old card. The AW7916-AED has no Bluetooth (D-026); keep, free or reassign once its pin table is checked (GHO-9) |
+| 21 | — | WIFI_WDIS1_N | Wi-Fi RF disable to AW7916-AED pin 56. Open-drain use: drive low to assert, input/high-Z to release, 10 kOhm pull-up to WIFI_3V3 on the carrier. Physical pin/boot verification open |
+| 22 | — | Reserved | Freed: was WIFI_WDIS2_N, and AW7916-AED pin 54 (W_DISABLE2#) is not connected on the card. Unassigned spare; firmware leaves it unconfigured |
 | 23 | 47 | USB_HUB_RESET_N | USB hub reset; physical pin verified |
 | 24 | 45 | HALOW_USB_FAULT_N | HaLow USB fault; physical pin verified |
 | 25 | 41 | VLM_USB_FAULT_N | OpenVLM port-3 VBUS switch / downstream overcurrent fault; physical pin verified |
 | 26–27 | — | Reserved | Unassigned |
 
-## AW7916-AED M.2 signals (not yet verified)
+## AW7916-AED M.2 signals
 
-The V1 Wi-Fi card is the AsiaRF AW7916-AED (MT7916, M.2 3052 A+E key, PCIe WLAN, no Bluetooth, D-026). Its pin table has not been checked against AsiaRF documentation yet. Until it is, the card's PCIe, PERST#, CLKREQ#, PEWAKE#, W_DISABLE1# and W_DISABLE2# pins are unverified, and nothing here may reach layout. Do not substitute a generic M.2 map. The card has no USB function, so the old USB D+/D- connection to hub port 2 is gone. The card needs a 3.3 V supply of at least 3 A.
+Source: AsiaRF's [AW7916-AED pin-out drawing](https://asiarf.com/wp-content/uploads/2023/09/AW7916-AED_pins-out.jpg) from the [product page](https://asiarf.com/product/wi-fi-6e-m-2-ae-key-module-mt7916-aw7916-aed/). The drawing labels each gold finger but prints no pin numbers; the numbers below come from finger order and the A and E key positions (odd pins on the top side, even on the bottom). Check them against the card itself when the bench cards arrive.
+
+| M.2 pin | Card signal | Carrier connection |
+|---:|---|---|
+| 2, 4, 72, 74 | 3.3 V | WIFI_3V3 (see [v1-3v3-rail.md](v1-3v3-rail.md) for the 0.5 A per contact risk) |
+| 1, 7, 18, 33, 39, 45, 51, 57 and others marked GND | GND | GND |
+| 3, 5 | not connected (no USB) | leave open; hub port 2 is spare |
+| 35 / 37 | PCIe lane 0 receive pair (labelled PERp0 / PERn0 from the card's side) | CM5 PCIe TX P/N, pins 122 / 124 (CM5 already AC-couples this direction) |
+| 41 / 43 | PCIe lane 0 transmit pair (labelled PETp0 / PETn0) | CM5 PCIe RX P/N, pins 116 / 118, through 220 nF series capacitors |
+| 47 / 49 | REFCLKp0 / REFCLKn0 | CM5 REFCLK P/N, pins 110 / 112 |
+| 52 | PERST0# | CM5 PCIe nRST, pin 109 |
+| 53 | CLKREQ0# | CM5 PCIe CLK_nREQ, pin 102 |
+| 55 | PEWAKE0# | not used by the CM5 (nWAKE unsupported): 10 kOhm pull-up to WIFI_3V3 and a test pad |
+| 56 | W_DISABLE1# | GPIO21 WIFI_WDIS1_N, open-drain, 10 kOhm pull-up to WIFI_3V3 |
+| 54 | not connected (W_DISABLE2#) | leave open; GPIO22 freed |
+| 6 / 16 | LED1 / LED2 | test pads only (sealed enclosure) |
+| all other pins | not connected | leave open |
+
+The drawing names the PCIe pairs from the card's point of view, which matches the M.2 rule that pins 35/37 carry host transmit and 41/43 carry host receive. The pull-ups return to WIFI_3V3 so nothing back-feeds the card while its rail is off; for the same reason GPIO21 must never drive high, like GPIO18/19 on the HaLow card. Whether the card already has internal pull-ups is not documented; the carrier pull-ups are harmless either way.
 
 ## GW16170 / MM8108-M20 verified signals
 
@@ -80,7 +98,7 @@ Gateworks documents pins 2/4/72/74 as 3.3 V, pin 3/5 as USB D+/D-, pin 56 W_DISA
 2. Bring up CM5 3.3 V and supervisor; keep USB VBUS switching separate from radio 3.3 V switches.
 3. Enable the selected radio 3.3 V rail after supervisor-good.
 4. Release HaLow reset/WAKE by high-Z GPIO18/19, then enable its USB VBUS and enumerate.
-5. Enable WIFI_3V3; hold the Wi-Fi card's PERST# until clock/reset timing is valid, then release. Connect CLKREQ#. Pin numbers wait on the AW7916-AED pin table.
+5. Enable WIFI_3V3 with GPIO21 released; the CM5 holds PERST# (pin 109 to card pin 52) until clock/reset timing is valid, then releases it. CLKREQ# runs from card pin 53 to CM5 pin 102.
 6. Deassert TUSB4041I reset only after 3.3 V and 24 MHz are stable.
 7. Recovery: reset USB device → reset hub → power-cycle radio → supervisor/watchdog → CM5 PMIC_Enable (pin 99).
 
@@ -88,7 +106,7 @@ Gateworks documents pins 2/4/72/74 as 3.3 V, pin 3/5 as USB D+/D-, pin 56 W_DISA
 
 - Verify GPIO23/24/25 boot defaults, device-tree behavior, electrical polarity, and schematic connectivity.
 - Verify physical CM5 pin and device-tree mux/boot defaults for every retained logical GPIO.
-- Check the AW7916-AED pin table, its PEWAKE# and W_DISABLE handling, and decide GPIO16 (BT_USB_FAULT_N) and GPIO22 (WIFI_WDIS2_N), which lost their Bluetooth role (D-026).
+- Confirm the AW7916-AED pin numbers above against a bench card (the AsiaRF drawing has no numbers), and whether the card holds W_DISABLE1# or PEWAKE# internally. GPIO16 and GPIO22 are freed (D-026).
 - Confirm TE 2199119-6 footprint, hub VBUS/ESD/straps, and eight-contact battery allocation.
 - Bench-validate PCIe/USB enumeration, sequencing, and PMIC_Enable recovery.
 
