@@ -70,7 +70,7 @@ Decision (B-03, D-026): the Wi-Fi card is the [AsiaRF AW7916-AED](https://asiarf
 
 Characteristics: MediaTek MT7916, Linux mt7915e driver (mt76, mesh point and AP plus mesh supported in the driver), Wi-Fi 6E (2.4 GHz plus 5 or 6 GHz), M.2 3052 A+E key, 30 x 52 mm, three IPEX antenna connectors (type to confirm on arrival), PCIe WLAN, no Bluetooth.
 
-Power: the vendor gives 10 W maximum and 8 W average at 3.3 V and asks for a 3.3 V supply of at least 3 A. That is about four times the AIW-170BQ, so the 3.3 V buck allocation, the WIFI_3V3 load switch and the thermal path must be resized (section 13, [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10)). Power path: +3V3_RADIO through a TPS22975 to WIFI_3V3, controlled by WIFI_PWR_EN. Antennas: three IPEX external connectors, no PCB antenna.
+Power: the vendor gives 10 W maximum and 8 W average at 3.3 V and asks for a 3.3 V supply of at least 3 A. That is about four times the AIW-170BQ. The +3V3_RADIO allocation is now 4.5 A with a 3.39 V setpoint (section 13 and [v1-3v3-rail.md](v1-3v3-rail.md), [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10)); the socket contact rating and the card's heat are open (GHO-12). Power path: +3V3_RADIO through a TPS22975 to WIFI_3V3, controlled by WIFI_PWR_EN. Antennas: three IPEX external connectors, no PCB antenna.
 
 Pin documentation: the AsiaRF pin table has not been checked yet. The canonical project table is in [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md); do not substitute generic M.2 assumptions or release layout until GHO-9 review is complete.
 
@@ -213,9 +213,9 @@ Other pins: BIAS to +5V_SYS, 470 nF boot capacitor, 2.2 µF VCC capacitor, SS/TR
 
 ### 3.3 V buck: TI LM76005
 
-3.3 V, about 4 A initial allocation (about 13.2 W), 400 kHz. Output setting: R_FBT = 100 kOhm and R_FBB = 44.2 kOhm give 3.28 V (3.22 to 3.32 V across the reference tolerance). The datasheet table value of 43.5 kOhm is not a standard 1 percent value, and 43.2 kOhm would give 3.34 V (up to 3.37 V), which is above 3.3 V. Confirm the AW7916-AED and GW16170 supply limits, and use 0.1 percent resistors if the margin is tight.
+3.3 V, 4.5 A allocation (about 15.3 W, 5 A hard ceiling), 400 kHz, sized for the AW7916-AED in [v1-3v3-rail.md](v1-3v3-rail.md) ([GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10)). Output setting: R_FBT = 100 kOhm and R_FBB = 42.2 kOhm, both 0.1 percent, give 3.39 V (3.32 to 3.43 V). The higher setpoint covers about 0.14 V of drop through the WIFI_3V3 switch, copper and socket at 3 A, so the card still sees at least 3.18 V; the old 44.2 kOhm (3.28 V) would leave it at 3.07 V, below the M.2 3.135 V minimum.
 
-Inductor: 4.7 µH, with ripple of 1.3 A peak to peak at 12.6 V and 1.6 A at 33 V, and a saturation current of 8 A or higher. Output capacitors: start with 3 x 47 µF (the datasheet table lists 220 µF at 400 kHz), with input capacitors, feedforward capacitor, boot, VCC, and soft-start as for the 5 V buck. BIAS goes to the 3.3 V output and EN to the eFuse PGOOD. If the two regulators ever beat against each other, the SYNC pin can lock them to one clock.
+Inductor: 4.7 µH, with ripple of 1.3 A peak to peak at 12.6 V and 1.6 A at 33 V (peak 5.3 A at 4.5 A load, under the 6.0 A minimum current limit), a saturation current of 8 A or higher, at least 6 A RMS and 15 mOhm DCR or less. Output capacitors: 4 x 47 µF 10 V X7R at the buck plus 2 x 22 µF and a 100 µF low-ESR polymer on WIFI_3V3 at the M.2 socket (the datasheet table lists 220 µF at 400 kHz), with input capacitors, feedforward capacitor, boot, VCC, and soft-start as for the 5 V buck. BIAS goes to the 3.3 V output and EN to the eFuse PGOOD. If the two regulators ever beat against each other, the SYNC pin can lock them to one clock.
 
 Critical layout rule: do not place the switching regulator or its inductor directly under or adjacent to RF modules.
 
@@ -232,14 +232,14 @@ Multi-rail supervision plus watchdog. Rails: SVS1 = CM5_3V3, SVS2 = +5V_SYS, SVS
 Initial design allocation:
 
 - \+5V_SYS: 2 A, about 10 W
-- \+3V3_RADIO: 4 A, about 13.2 W
-- Combined: about 23.2 W output, about 25.8 W input at 90 percent efficiency
+- \+3V3_RADIO: 4.5 A, about 15.3 W at 3.39 V ([v1-3v3-rail.md](v1-3v3-rail.md))
+- Combined: about 25.3 W output, about 28 W input at 90 percent efficiency (3.5 A at 8 V)
 - System capability target: about 35 W, which is about 4.4 A at 8 V
 - The input path should support at least about 5 A continuous at low battery voltage; the initial eFuse current limit is about 5.5 A
 
 The 35 W value is a design capability target, not expected consumption. Actual power consumption must be measured on hardware. Track A estimates about 10 W typical and under 15 to 18 W peak, so converter sizing and the thermal path should be revisited after Track A measurements.
 
-The per-load estimate for the 3.3 V rail (HaLow 1.0 A, Wi-Fi 3.0 A, GNSS 0.1 A, misc 0.25 A, total 4.35 A) is above the 4 A allocation. With the AW7916-AED (D-026) the 3.0 A Wi-Fi figure is now the vendor's own requirement (at least 3 A at 3.3 V, 10 W maximum), not a margin. The LM76005 is a 5 A part, so the allocation must be raised and the buck resized ([GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10)).
+The per-load peak estimate for the 3.3 V rail is HaLow 1.0 A, Wi-Fi 3.03 A (the AW7916-AED's 10 W maximum, D-026), GNSS 0.1 A and misc 0.25 A, 4.38 A in total. The allocation was raised from 4 A to 4.5 A on the same LM76005 ([GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10), [v1-3v3-rail.md](v1-3v3-rail.md)); typical draw is about 3 A.
 
 ## 15. Fanless thermal strategy
 
