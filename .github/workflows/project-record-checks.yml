@@ -1,0 +1,30 @@
+name: Project record checks
+
+on:
+  pull_request:
+    paths:
+      - "project/**"
+      - ".github/workflows/project-record-checks.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "project/**"
+      - ".github/workflows/project-record-checks.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  gpio-allocation:
+    name: GPIO allocation consistency
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Validate GPIO allocation
+        run: python project/scripts/check_gpio_allocations.py
