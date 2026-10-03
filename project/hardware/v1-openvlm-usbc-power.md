@@ -8,7 +8,7 @@ The external OpenVLM connector is a source/DFP, not the charge/service connector
 
 Treat `PORT_ENABLE = HUB_ALLOW AND ATTACHED_SRC AND SUPPLY_GOOD AND NOT FAULT_LATCH` as a schematic-review invariant, not a firmware-only promise. An integrated controller may implement the attach predicate internally. Reset, detach, loss of supply or a latched fault must override a software enable. Avoid analog Type-C audio-adapter confusion: OpenVLM is a USB audio/HID device.
 
-| Hub allows port | Sink attached | Fault inhibited | VBUS permission |
+| Hub allows port | Sink attached | Fault latched | VBUS permission |
 |---|---|---|---|
 | No | Either | Either | Off |
 | Yes | No | No | Off |
@@ -36,7 +36,7 @@ Capture OpenVLM USB descriptor power request, idle/record/playback/PTT load and 
 
 Use guaranteed minimum current limit above the supported device load and guaranteed maximum below the safe upstream fault budget. Example: TPS2553 with 49.9 kOhm has 475/520/565 mA minimum/typical/maximum across its specified temperature range (§7.5); it does **not** guarantee a 500 mA load. Evaluate resistor tolerance and the full min/max curves, not a nominal-only “500 mA” label.
 
-Check worst-case switch drop and cable/trace loss, `Vconnector_min = Vrail_min - Iload × (Rswitch_max + Rtrace + Rcable)`; verify both normal delivery and regulator response to a short. Include bulk capacitance, inrush, discharge time and switch dissipation in the review.
+Check worst-case switch drop and cable/trace loss, `Vdevice_min = Vrail_min - Iload × (Rswitch_max + Rtrace + Rcable)`; verify both normal delivery and regulator response to a short. Include bulk capacitance, inrush, discharge time and switch dissipation in the review.
 
 ## Release evidence
 
