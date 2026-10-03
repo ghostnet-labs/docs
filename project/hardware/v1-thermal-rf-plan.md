@@ -1,7 +1,7 @@
 # V1 thermal budget and RF coexistence plan
 
 **Owner:** [GHO-12](https://linear.app/ghostnet-labs/issue/GHO-12), model the fanless enclosure thermal paths and RF coexistence.  
-**Status:** first-pass estimate, 2026-10-02. No hardware measured yet. Validation runs under [GHO-23](https://linear.app/ghostnet-labs/issue/GHO-23); rail sizing is [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10).
+**Status:** first-pass estimate revised against D-028 on 2026-10-03. No hardware measured yet; no qualification claimed. Validation runs under [GHO-23](https://linear.app/ghostnet-labs/issue/GHO-23); rail sizing is [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10).
 
 This file models heat and GNSS interference for the V1 carrier and sets the first-board tests. It records no decisions. Part values come from [v1-selections.md](v1-selections.md), [v1-reference.md](v1-reference.md), [v1-3v3-rail.md](v1-3v3-rail.md) and [v1-battery-pack.md](v1-battery-pack.md); if they change, those files win. Every number here is tagged as a datasheet fact, an estimate, or "to measure".
 
@@ -9,8 +9,8 @@ This file models heat and GNSS interference for the V1 carrier and sets the firs
 
 - Internal heat is about **16 W typical and 25 W peak** (estimate). Track A's 10 W typical figure predates the AW7916-AED, whose vendor average alone is 8 W.
 - A sealed 145 x 74 x 27 mm aluminum body sheds about **0.27 to 0.38 W/K** to still air (estimate). At 16 W the case runs **42 to 59 K over ambient**.
-- **Top risk: the Wi-Fi card.** AsiaRF rates the AW7916-AED for -10 to +70 °C operating. At the 8 W vendor average it exceeds 70 °C even at 25 °C ambient, with or without a thermal pad. A pad to the lid is required, and the card needs a transmit power cap.
-- Plan for about **10 to 12 W sustained** at 25 °C ambient. A 45 °C ambient soak is not met by a sealed box of this size at any useful load without more surface area. This needs a requirement decision in the records thread.
+- **Thermal requirement: D-028.** Normal operation must not depend on performance throttling. Passive thermal pads, heat spreaders/heatsinks and enclosure area must close the heat budget; the current flat-shell model is not proof of compliance.
+- **Top component risk: B-03.** AsiaRF's [product specification](https://asiarf.com/product/wi-fi-6e-m-2-ae-key-module-mt7916-aw7916-aed/) states operating −10 to +70 °C (checked 2026-10-03). D-028's cold endpoint is below that published range. Supplier clarification/qualification is required; storage temperature is not an operating rating. The published upper bound is not identified as a shield-surface or junction limit, so the model cannot establish a component pass/fail by comparing a thermocouple with 70 °C.
 - RF: the largest GNSS risks are the GW16170 at up to +28.5 dBm (blocking) and the Wi-Fi card 2.5 mm from the GNSS receiver (near-field noise). Two intermod products and two clock harmonics land on GNSS bands and need targeted tests.
 
 ## 1. Heat sources
@@ -68,24 +68,26 @@ The 25 W peak is a transient. The body's heat capacity is roughly 250 J/K (estim
 
 **What this means.**
 
-1. **The Wi-Fi card needs a thermal pad to the lid.** Without one it cannot stay under 70 °C at any useful load. AsiaRF sells the card with a 30 x 30 x 10 mm heatsink; it is a useful bench reference, but 10 mm likely does not fit under the lid, so plan a pad to the lid instead. Whether the 70 °C rating is ambient or card surface is not stated; ask AsiaRF.
-2. **The card's sustained power budget is about 2.5 to 4.7 W at 25 °C ambient** (keeping it under 70 °C with the other loads at about 8 W). That is well under the 8 W vendor average.
-3. **45 °C ambient does not close.** With the Wi-Fi card on, it exceeds 70 °C at 45 °C ambient in every case above. With Wi-Fi off, the whole body can carry only about 6.8 W before the case reaches 70 °C. The project has no recorded ambient requirement; 45 °C is this plan's test value. Options for the records thread: fins or a larger lid, deliberate heat flow into the pack frame, Wi-Fi off above a set ambient, or a lower ambient rating.
+1. **The Wi-Fi card needs an engineered heat path to the lid.** The no-pad model predicts a large temperature rise, but a surface-temperature pass/fail needs a supplier-defined limit. AsiaRF sells the card with a 30 x 30 x 10 mm heatsink; it is a useful bench reference, but 10 mm likely does not fit under the lid, so plan a pad to the lid instead. Whether the 70 °C rating is ambient or card surface is not stated; ask AsiaRF.
+2. **The old 70 °C surface-target calculation gives about 2.5 to 4.7 W at 25 °C ambient**, with other loads about 8 W. This is sensitivity only: the vendor operating rating is not a verified surface target. Do not turn this calculation into a nominal power cap.
+3. **The flat-shell estimate does not demonstrate D-028 compliance.** The table's 25 and 45 °C ambients are sensitivity cases, not requirement endpoints. Compare a fitted spreader/pad stack, a finned lid and a larger passive cooling surface within the mechanical constraints; do not use Wi-Fi-off operation or a lower ambient rating to silently change the requirement. Heat flow into the pack requires explicit cell-temperature analysis, not treating the battery as a free heatsink.
 4. **Touch temperature.** A handheld case at 60 to 85 °C is too hot to hold. Check against IEC 62368-1 touch limits once the case temperature is measured.
 5. **GNSS sits 2.5 mm from the Wi-Fi card** (§18). The MAX-M10S is rated to +85 °C ambient, and its TCXO drifts with temperature. Measure its local temperature.
 6. **Battery cells sit under the radio.** Li-ion charge temperature limits are low. Check the Molicel M35A charge and discharge limits against the measured pack top temperature, and keep a gap or insulation layer if needed.
 
-**Throttling plan (proposed thresholds, to tune after tests 4 and 5).** Software reads the MT7916 temperature (the mt76 driver exposes a hwmon sensor for mt7915-family chips; confirm on this card), the CM5 SoC temperature, and the INA228 power. Steps, in order:
+**Telemetry and emergency protection, not nominal throttling.** Read available radio/CM5 temperature sensors and INA228 power; verify sensor locations and meanings on the selected hardware. D-028 rejects the former throttle ladder. Do not disable built-in component or battery protections. An emergency reduction/shutdown outside the qualified envelope must be reported as a fault and does not count as meeting the normal operating requirement.
 
-| Step | Trigger (proposed) | Action |
-|---|---|---|
-| 1 | Wi-Fi card 60 °C, or rail power above budget | Cap Wi-Fi `txpower` in UCI and narrow channel width. Also keeps socket current under 2 A (v1-3v3-rail.md). |
-| 2 | Wi-Fi card 65 °C | Cap HaLow TX power. Also helps GNSS. |
-| 3 | CM5 SoC 75 °C | Cap the CPU frequency (cpufreq `scaling_max_freq`). The SoC firmware also throttles itself to stay under 85 °C (CM5 datasheet §4.4). |
-| 4 | Wi-Fi card 68 °C | Turn off the 5/6 GHz band, then the card (WIFI_PWR_EN). HaLow stays up as the mesh backbone. |
-| 5 | Any part at its rating | Orderly shutdown, then PMIC_EN low. |
+Passive-design evidence required before qualification:
 
-Each step needs hysteresis and must show in the EUD telemetry.
+| Evidence | Required result |
+|---|---|
+| Supplier limits | Operating ambient, measured sensor/surface limits and cold-start behavior distinguished for each limiting part |
+| Thermal-interface stack | Actual gap, pad conductivity/compression, heatsink/spreader geometry and contact pressure checked in GHO-7 |
+| Continuous load | Measured simultaneous CPU/radio/accessory demand and charging losses used, not a throttled profile |
+| Touch comfort | Contact surfaces and usage duration defined in GHO-12; measured case temperatures meet the agreed criterion |
+| Qualification | Endpoint operation with no automatic CPU throttling or policy-driven TX/channel reduction; faults and protection events recorded |
+
+The M.2 contact-current concern in v1-3v3-rail.md is a separate electrical gate: cooling does not increase connector current ratings, and TX limiting is not a substitute for a compliant power delivery design.
 
 ## 3. RF coexistence with GNSS
 
@@ -119,7 +121,7 @@ Common equipment: K-type thermocouples (at least 12 channels) with a logger; IR 
 - Setup: Track A node (CM5, GW16167, SAM-M10Q) per [GHO-30](https://linear.app/ghostnet-labs/issue/GHO-30) and [GHO-31](https://linear.app/ghostnet-labs/issue/GHO-31); then one AW7916-AED on the CM5 PCIe x1 once the bench cards arrive.
 - Equipment: inline DC current meter on the card's 3.3 V feed, USB-C meter, thermocouples on the card and socket, IR camera, u-center.
 - Procedure: log power and temperature idle, then 30 minutes of full-rate 802.11s on both bands, open air and inside the Bud box. Record HaLow power where C/N0 starts to fall (D-020). Repeat C/N0 with the AW7916-AED transmitting on each band.
-- Pass: the card's sustained and peak power are known, so §1 can be replaced with numbers. Sustained card current under 2 A, or the txpower cap that achieves it is recorded (v1-3v3-rail.md).
+- Pass: sustained and peak card power are measured and replace the estimates in §1. Compare card/socket current with manufacturer ratings; any cap needed to keep the bench safe is recorded as a limitation, not a compliant V1 solution.
 
 **T1. Power map.**
 - Setup: V1 board on a bench supply, open.
@@ -131,20 +133,20 @@ Common equipment: K-type thermocouples (at least 12 channels) with a logger; IR 
 - Equipment: IR camera, emissivity tape.
 - Pass: hot spots identified and thermocouple sites confirmed. Nothing above its rating.
 
-**T3. Closed enclosure, 25 °C ambient.**
+**T3. Closed enclosure, nominal ambient from D-028.**
 - Setup: sealed V1 enclosure with pads fitted, pack attached, still air.
 - Thermocouples: Wi-Fi card shield, M.2 socket contacts, GW16170, MAX-M10S, CM5 lid above the SoC, LM76005 (3.3 V) and its inductor, TPS22975, eFuse, internal air, lid centre, each side wall, pack top. Also log the SoC sensor and the MT7916 hwmon.
 - Procedure: run idle, 10 W and typical load profiles to steady state (rate of rise under 1 K per 10 minutes).
-- Pass: no part above its rating with 10 K margin (AW7916-AED 70 °C, MAX-M10S and GW16170 85 °C, TPS22975 105 °C, LM76005 junction 125 °C estimated from case). No CM5 throttling at the typical profile. Measured R case to ambient compared with §2.
+- Pass: no part exceeds its applicable supplier-defined limit, with the design margins recorded; distinguish ambient, case and junction limits rather than treating them as interchangeable. No CPU/radio throttling at the full continuous-load profile. Touch-comfort criterion passes. Compare measured case-to-ambient resistance with §2.
 
-**T4. 45 °C ambient soak.**
-- Setup: as T3 inside a thermal chamber at 45 °C, still air.
-- Procedure: 2 hours at the capped profile, then 30 minutes at typical. Log all channels. Cold start at 45 °C after a 1 hour unpowered soak.
-- Pass: no component above its rating. If the Wi-Fi card cannot stay under 70 °C, record the highest load that does; this feeds the ambient requirement decision.
+**T4. Hot and cold endpoint qualification.**
+- Setup: as T3 at the D-028 hot endpoint in still air; repeat unpowered-soak startup and operation at its cold endpoint only after component operating limits and safe battery conditions are verified.
+- Procedure: soak to thermal equilibrium, then run simultaneous full continuous-load profiles for at least 2 hours and until temperatures stabilize. Include charging while operating only inside the cell/charger permitted temperature range. Log all channels, clocks, throttle/protection flags, TX settings, traffic, mesh continuity and audio/PTT.
+- Pass: required functions operate without nominal throttling, link loss or reset; supplier limits, design margins and touch comfort pass. A rating conflict or unqualified cold startup is a failed/open gate, not waived by self-heating.
 
-**T5. Throttle ladder.**
-- Procedure: heat the unit (chamber or blocked convection) and confirm each step of the §2 ladder fires in order, cuts power, recovers with hysteresis, and reports to the EUD.
-- Pass: every step observed; no oscillation; mesh stays up on HaLow at step 4.
+**T5. Emergency protection.**
+- Procedure: with an approved controlled fault-injection plan, verify existing component/pack protections and EUD fault reporting without exceeding absolute maxima or disabling protection. Final setpoints belong to GHO-12/GHO-10.
+- Pass: protections remain effective, fault events are visible, recovery is bounded, and no emergency behavior is used to claim a T3/T4 normal-operation pass.
 
 **T6. Wi-Fi thermal interface A/B.**
 - Procedure: repeat T3 typical load with no pad, two pad thicknesses, and the AsiaRF heatsink on the open bench as a reference.
@@ -182,7 +184,7 @@ Common equipment: K-type thermocouples (at least 12 channels) with a logger; IR 
 - AW7916-AED: real sustained power, whether 70 °C is ambient or surface, and where the hot side is (T0, AsiaRF).
 - GW16170 typical power and CM5 peak power (T0, T1).
 - Enclosure size, finish, wall thickness and lid gap ([GHO-7](https://linear.app/ghostnet-labs/issue/GHO-7)).
-- The ambient temperature requirement for V1 (records thread).
+- Thermal requirement is D-028; GHO-12 owns component-rating reconciliation, touch-comfort acceptance and passive-design closure.
 - Molicel M35A temperature limits against the measured pack top.
 - CM5 clock frequencies near GNSS bands (T8).
 
