@@ -34,37 +34,38 @@ CM5 is Gen2 x1. The CM5 TX path already has AC coupling; the peripheral TX path 
 
 The official alternate-function table verifies GPIO0/1 = I2C0 SDA/SCL, GPIO2/3 = I2C1 SDA/SCL, GPIO8/9 = UART3 TX/RX, and GPIO14/15 = UART0 TX/RX. The old V1 cross-reference that labels GPIO0/1 as GNSS UART is stale.
 
-Allocation decision D-024: GNSS uses UART0 on GPIO14/15; system I2C1 uses GPIO2/3; USB_HUB_RESET_N uses GPIO23; HALOW_USB_FAULT_N uses GPIO24; VLM_USB_FAULT_N uses GPIO25; GPIO26–27 remain reserved. The physical CM5 connector pin mapping for GPIO23–25 is documented in the allocation table below. These are logical allocations, not a schematic/layout release; verify boot defaults, device-tree behavior, electrical polarity, and schematic connectivity before release.
+Allocation decision D-024: GNSS uses UART0 on GPIO14/15; system I2C1 uses GPIO2/3; USB_HUB_RESET_N uses GPIO23; HALOW_USB_FAULT_N uses GPIO24; VLM_USB_FAULT_N uses GPIO25; GPIO26–27 remain reserved. All GPIO0–27 physical connector mappings below were checked on 2026-10-02 against CM5 datasheet Release 3 (build 08/06/2026), §4.2 Table 4, printed page 18. GPIO0/1 appear there as ID_SD/ID_SC. Verification covers connector identity only, not software defaults or the attached circuit. These are logical allocations, not a schematic/layout release; verify boot defaults, device-tree behavior, electrical polarity, and schematic connectivity before release.
 
 | GPIO | CM5 connector pin | Signal | Function / verification status |
 |---:|---:|---|---|
-| 0 | — | Reserved | I2C0 alternate function; unassigned |
-| 1 | — | Reserved | I2C0 alternate function; unassigned |
+| 0 | 36 | Reserved | I2C0 alternate function; unassigned |
+| 1 | 35 | Reserved | I2C0 alternate function; unassigned |
 | 2 | 58 | SYS_I2C_SDA | System I2C1; physical pin verified |
 | 3 | 56 | SYS_I2C_SCL | System I2C1; physical pin verified |
-| 4 | — | HALOW_PWR_EN | HaLow power enable; physical pin/boot verification open |
-| 5 | — | WIFI_PWR_EN | Wi-Fi power enable; physical pin/boot verification open |
-| 6 | — | HALOW_FAULT_N | HaLow fault; physical pin/boot verification open |
-| 7 | — | WIFI_FAULT_N | Wi-Fi fault; physical pin/boot verification open |
-| 8 | — | GNSS_RESET_N | GNSS reset; physical pin/boot verification open |
-| 9 | — | GNSS_PPS | GNSS timing; physical pin/boot verification open |
-| 10 | — | SUPERVISOR_WDI | Watchdog heartbeat; physical pin/boot verification open |
-| 11 | — | SUPERVISOR_WDO | Watchdog status; physical pin/boot verification open |
-| 12 | — | POWER_GOOD | Power-good; physical pin/boot verification open |
-| 13 | — | EFUSE_FAULT | eFuse fault; physical pin/boot verification open |
+| 4 | 54 | HALOW_PWR_EN | HaLow power enable; physical pin verified; boot/electrical verification open |
+| 5 | 34 | WIFI_PWR_EN | Wi-Fi power enable; physical pin verified; boot/electrical verification open |
+| 6 | 30 | HALOW_FAULT_N | HaLow fault; physical pin verified; boot/electrical verification open |
+| 7 | 37 | WIFI_FAULT_N | Wi-Fi fault; physical pin verified; boot/electrical verification open |
+| 8 | 39 | GNSS_RESET_N | GNSS reset; physical pin verified; boot/electrical verification open |
+| 9 | 40 | GNSS_PPS | GNSS timing; physical pin verified; boot/electrical verification open |
+| 10 | 44 | SUPERVISOR_WDI | Watchdog heartbeat; physical pin verified; boot/electrical verification open |
+| 11 | 38 | SUPERVISOR_WDO | Watchdog status; physical pin verified; boot/electrical verification open |
+| 12 | 31 | POWER_GOOD | Power-good; physical pin verified; boot/electrical verification open |
+| 13 | 28 | EFUSE_FAULT | eFuse fault; physical pin verified; boot/electrical verification open |
 | 14 | 55 | GNSS_UART_TX | GNSS UART0 TX; physical pin verified |
 | 15 | 51 | GNSS_UART_RX | GNSS UART0 RX; physical pin verified |
-| 16 | — | Reserved | Freed: was BT_USB_FAULT_N, and V1 has no Bluetooth (D-026). Unassigned spare |
-| 17 | — | ETH_SYNC_OUT | Ethernet timing; physical pin/boot verification open |
-| 18 | — | HALOW_RESET_N | HaLow reset; active-low open-drain, physical pin/boot verification open |
-| 19 | — | HALOW_WAKE_N | HaLow wake; active-low open-drain, optional; physical pin/boot verification open |
-| 20 | — | INA228_ALERT_N | Battery monitor alert; physical pin/boot verification open |
-| 21 | — | WIFI_WDIS1_N | Wi-Fi RF disable to AW7916-AED pin 56. Open-drain use: drive low to assert, input/high-Z to release, 10 kOhm pull-up to WIFI_3V3 on the carrier. Physical pin/boot verification open |
-| 22 | — | Reserved | Freed: was WIFI_WDIS2_N, and AW7916-AED pin 54 (W_DISABLE2#) is not connected on the card. Unassigned spare; firmware leaves it unconfigured |
+| 16 | 29 | Reserved | Freed: was BT_USB_FAULT_N, and V1 has no Bluetooth (D-026). Unassigned spare |
+| 17 | 50 | ETH_SYNC_OUT | Ethernet timing; physical pin verified; boot/electrical verification open |
+| 18 | 49 | HALOW_RESET_N | HaLow reset; active-low open-drain, physical pin verified; boot/electrical verification open |
+| 19 | 26 | HALOW_WAKE_N | HaLow wake; active-low open-drain, optional; physical pin verified; boot/electrical verification open |
+| 20 | 27 | INA228_ALERT_N | Battery monitor alert; physical pin verified; boot/electrical verification open |
+| 21 | 25 | WIFI_WDIS1_N | Wi-Fi RF disable to AW7916-AED pin 56. Open-drain use: drive low to assert, input/high-Z to release, 10 kOhm pull-up to WIFI_3V3 on the carrier. Physical pin verified; boot/electrical verification open |
+| 22 | 46 | Reserved | Freed: was WIFI_WDIS2_N, and AW7916-AED pin 54 (W_DISABLE2#) is not connected on the card. Unassigned spare; firmware leaves it unconfigured |
 | 23 | 47 | USB_HUB_RESET_N | USB hub reset; physical pin verified |
 | 24 | 45 | HALOW_USB_FAULT_N | HaLow USB fault; physical pin verified |
 | 25 | 41 | VLM_USB_FAULT_N | OpenVLM port-3 VBUS switch / downstream overcurrent fault; physical pin verified |
-| 26–27 | — | Reserved | Unassigned |
+| 26 | 24 | Reserved | Unassigned; physical pin verified |
+| 27 | 48 | Reserved | Unassigned; physical pin verified |
 
 ## AW7916-AED M.2 signals
 
@@ -105,9 +106,9 @@ Gateworks documents pins 2/4/72/74 as 3.3 V, pin 3/5 as USB D+/D-, pin 56 W_DISA
 ## Open gates
 
 - Verify GPIO23/24/25 boot defaults, device-tree behavior, electrical polarity, and schematic connectivity.
-- Verify physical CM5 pin and device-tree mux/boot defaults for every retained logical GPIO.
+- Verify device-tree mux/boot defaults and circuit direction for every retained logical GPIO; physical connector identity is verified in the table.
 - Confirm the AW7916-AED pin numbers above against a bench card (the AsiaRF drawing has no numbers), and whether the card holds W_DISABLE1# or PEWAKE# internally. GPIO16 and GPIO22 are freed (D-026).
 - Confirm TE 2199119-6 footprint, hub VBUS/ESD/straps, and eight-contact battery allocation.
 - Bench-validate PCIe/USB enumeration, sequencing, and PMIC_Enable recovery.
 
-**Acceptance status:** CM5 PCIe/USB/power pins, CM5 mux facts, Gateworks control behavior, and a D-024 logical allocation (GNSS on GPIO14/15; hub reset on GPIO23; HaLow/VLM USB faults on GPIO24/25) are recorded. Remaining GPIO physical mappings, device-tree defaults, schematic implementation, and bench evidence remain open.
+**Acceptance status:** CM5 PCIe/USB/power pins, CM5 mux facts, Gateworks control behavior, and a D-024 logical allocation (GNSS on GPIO14/15; hub reset on GPIO23; HaLow/VLM USB faults on GPIO24/25) are recorded. GPIO0–27 physical connector mappings are verified from the manufacturer table. Device-tree defaults, schematic implementation, and bench evidence remain open.
