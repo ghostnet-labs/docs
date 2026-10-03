@@ -37,7 +37,6 @@ Status words are defined in [../README.md](../README.md). Open parts are tracked
 | B-21 | RF connectors | MMCX (HaLow), 3 x IPEX on the Wi-Fi card (type to confirm on arrival), GNSS active antenna connector | GNSS connector open ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)). |
 | B-22 | Voice/PTT module | OpenMANET Voice Link Module VLMKW0100 (Kenwood accessory variant), external USB audio/PTT device using CM108B + 93C46 EEPROM + GPIO1 OpenVLM identity strap | Selected. Supplier ordering code, availability, and the exact Kenwood accessory cable SKU must be verified before procurement. |
 | B-23 | OpenVLM host connector | GCT USB4720-03-A sealed USB-C receptacle, one additional connector beyond B-07; configured as a USB 2.0 downstream-facing host port with switched +5V VBUS | Selected baseline. USB-C host CC implementation, VBUS switch/current limit, USB ESD, and enclosure CAD fit remain to verify ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11), [GHO-7](https://linear.app/ghostnet-labs/issue/GHO-7)). |
-
 | B-24 | Pack-swap bridge | LTC3350 backup-controller architecture and series supercapacitor bank evaluated in [v1-hot-swap-bridge.md](v1-hot-swap-bridge.md), against D-027 | Candidate, not frozen. Controller current capability, stored energy at end of life/temperature, exact cell MPNs and enclosure fit remain under GHO-38/GHO-10/GHO-7. The earlier four-50-F recommendation is not a full-load guarantee. |
 
 ## Power tree
