@@ -6,7 +6,7 @@ A product-oriented V1 carrier for the CM5 with two M.2 radio modules, GNSS, seal
 
 ## Power and battery requirements
 
-The battery is a custom removable, sealed 3S2P 18650 pack (about 76 Wh target) that is waterproof as an assembly and swapped without tools. The radio must support charging while operating. USB-C PD feeds an in-radio charger and power-path stage, and USB 2.0 data on the same port provides CM5 console and service access. The main pack must be hot-swappable without rebooting the radio, so V1 needs an internal bridge-energy source or an equivalent hold-up subsystem ([GHO-38](https://linear.app/ghostnet-labs/issue/GHO-38)). The pack voltage range is 9 to 12.6 V, with current limited by the pack protection (at least 6 A continuous). The battery-to-radio contact system and the pack sealing are designed together ([v1-battery-pack.md](v1-battery-pack.md)).
+The battery is a custom removable, sealed 3S2P 18650 pack (about 76 Wh target) that is waterproof as an assembly and swapped without tools. The radio must support charging while operating. USB-C PD feeds an in-radio charger and power-path stage, and USB 2.0 data on the same port provides CM5 console and service access. The pack-swap operating requirement is D-027; V1 needs an internal bridge-energy source or an equivalent hold-up subsystem ([GHO-38](https://linear.app/ghostnet-labs/issue/GHO-38)). The pack voltage range is 9 to 12.6 V, with current limited by the pack protection (at least 6 A continuous). The battery-to-radio contact system and the pack sealing are designed together ([v1-battery-pack.md](v1-battery-pack.md)).
 
 ## Selections register
 
@@ -37,6 +37,7 @@ Status words are defined in [../README.md](../README.md). Open parts are tracked
 | B-21 | RF connectors | MMCX (HaLow), 3 x IPEX on the Wi-Fi card (type to confirm on arrival), GNSS active antenna connector | GNSS connector open ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)). |
 | B-22 | Voice/PTT module | OpenMANET Voice Link Module VLMKW0100 (Kenwood accessory variant), external USB audio/PTT device using CM108B + 93C46 EEPROM + GPIO1 OpenVLM identity strap | Selected. Supplier ordering code, availability, and the exact Kenwood accessory cable SKU must be verified before procurement. |
 | B-23 | OpenVLM host connector | GCT USB4720-03-A sealed USB-C receptacle, one additional connector beyond B-07; configured as a USB 2.0 downstream-facing host port with switched +5V VBUS | Selected baseline. USB-C host CC implementation, VBUS switch/current limit, USB ESD, and enclosure CAD fit remain to verify ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11), [GHO-7](https://linear.app/ghostnet-labs/issue/GHO-7)). |
+| B-24 | Pack-swap bridge | LTC3350 backup-controller architecture and series supercapacitor bank evaluated in [v1-hot-swap-bridge.md](v1-hot-swap-bridge.md), against D-027 | Candidate, not frozen. Controller current capability, stored energy at end of life/temperature, exact cell MPNs and enclosure fit remain under GHO-38/GHO-10/GHO-7. The earlier four-50-F recommendation is not a full-load guarantee. |
 
 ## Power tree
 
@@ -47,7 +48,7 @@ VBAT_PROTECTED feeds an LM76005 5 V buck (+5V_SYS for the CM5 and USB, including
 ## PCB and thermal approach
 
 - Eight-layer stackup. The final stackup and impedance rules come from the chosen fabricator. Controlled impedance is required for PCIe, USB, Ethernet, and RF lines.
-- Fanless, with the enclosure acting as the heat spreader: the CM5 couples to the shell through a thermal interface, and the power converters couple to the chassis through copper pours and thermal vias.
+- Thermal operating requirement and permitted cooling strategy are D-028; qualification remains under GHO-12. Fanless, with the enclosure acting as the heat spreader: the CM5 couples to the shell through a thermal interface, and the power converters couple to the chassis through copper pours and thermal vias.
 - Top side: CM5, both M.2 slots, GNSS, Ethernet, and RF connectors. Bottom side: converters, INA228, protection, load switches, supervisor, and test pads.
 - Power sits in a concentrated island of about 45 x 25 mm in the lower middle. No inductors, regulators, or tall parts go under the CM5, which has about 2.5 mm of underside clearance. Switching power should not sit under RF modules.
 - The module footprints (CM5, the 30 x 22 mm HaLow card and the 30 x 52 mm Wi-Fi card) total about 4,420 mm2, roughly 48 percent of 138 x 67 mm. The real constraints are RF connector placement, antenna separation, keepouts, M.2 clearances, the Ethernet and battery connectors, inductors, thermal copper, mounting holes, and enclosure walls.
