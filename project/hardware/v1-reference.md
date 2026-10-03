@@ -106,6 +106,8 @@ Power/fault: switched VBUS is independent of the two radio 3.3 V switches. Keep 
 
 Open BOM details: exact VBUS current-limit switch, USB-C CC implementation, USB ESD array, per-port power fault wiring, VLM supplier ordering/availability, and enclosure connector CAD model are to be verified in GHO-11 and GHO-7.
 
+The [OpenVLM host power design review](v1-openvlm-usbc-power.md) compares attach-gated CC/VBUS implementations and defines sizing and reset/fault evidence for GHO-11. It is analysis, not a frozen part selection.
+
 ## 9. GNSS: u-blox MAX-M10S-00B
 
 About 9.7 x 10.1 x 2.5 mm, multi-constellation, UART, I2C, PPS/time pulse, reset, integrated LNA and SAW filter, -40 to +85 C. Primary interfaces are UART, PPS, and reset; I2C is secondary.
