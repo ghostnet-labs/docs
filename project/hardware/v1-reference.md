@@ -329,6 +329,8 @@ Top and bottom: the top side carries the CM5, M.2 modules, GNSS, Ethernet, and R
 
 Power layout rules: the battery path runs battery contacts, TVS, blocking FET, and eFuse, then the shunt, then VBAT_PROTECTED (the shunt sits after the eFuse so the INA228 never sees reverse polarity). Keep high-current paths short, wide, low resistance, and thermally capable. Keep Kelvin sense traces isolated from switching current. Follow TI reference layouts for buck loops and keep switching nodes small.
 
+The pack-swap operating requirement is D-027; B-24 and [v1-hot-swap-bridge.md](v1-hot-swap-bridge.md) own the bridge candidate and sizing study. The thermal operating requirement is D-028; [v1-thermal-rf-plan.md](v1-thermal-rf-plan.md) evaluates passive closure. Neither requirement is qualified yet.
+
 ## 21. Headless operation and hardware-aware mesh
 
 The node is deliberately headless. There are no power, reset, or mode buttons, and no power, activity, Ethernet, or radio LEDs. Node voice/PTT uses the external OpenVLM USB accessory defined by D-023; EUD/browser audio remains a software fallback and does not replace the node-side audio path. Normal operation is EUD and software controlled; hidden test pads and service access are acceptable. The EUD should eventually support radio, mesh, Wi-Fi AP/client, and HaLow configuration; node status; neighbor and client information; GNSS status; battery status; temperature; reboot; shutdown; firmware and software updates; and diagnostics.
@@ -373,7 +375,7 @@ Still to define: radio power-management software, the hardware telemetry API, ha
 - GNSS PPS hard-wired to Ethernet timing: the two timing interfaces stay independent
 - Generic GNSS RF TVS: protection must be selected for the GNSS path
 - USB hub EEPROM: strap configuration is sufficient for V1
-- Hub with more than two downstream ports: the architecture needs exactly two internal USB devices
+- Extra active downstream hub devices beyond B-04: spare ports do not add a requirement
 - Extra HaLow SDIO or SPI routing: USB is the primary interface and those buses are not required
 - Advantech AIW-170BQ Wi-Fi module: retired, no 802.11s mesh point in its firmware (R-19, D-026)
 
