@@ -1,7 +1,7 @@
 # V1 hot-swap bridge sizing
 
 **Owner:** [GHO-38](https://linear.app/ghostnet-labs/issue/GHO-38) (was Q-10): size the bridge energy that carries the radio across a pack change (D-008)  
-**Status:** Recommendation pending Justin's review. Nothing here is a decision and no D-number is assigned. Track A load measurements ([GHO-30](https://linear.app/ghostnet-labs/issue/GHO-30)) and a chosen swap time close it. The ticket's acceptance asks for the result to be recorded in [v1-selections.md](v1-selections.md); that edit waits for the review.
+**Status:** Engineering candidate study. The operating-mode/time requirement is settled by D-027; the thermal requirement is D-028. B-24 in [v1-selections.md](v1-selections.md) owns the candidate selection. GHO-38 remains open for measured full-node load, current-capability analysis, end-of-life/temperature derating and mechanical fit. No component population is frozen.
 
 D-008 says the main pack must swap without rebooting the radio. This file sizes the energy for that, compares the ways to store it, and lists what changes in the power path ([v1-reference.md](v1-reference.md) sections 11 to 14 and 22).
 
@@ -12,9 +12,9 @@ Every number marked **(est.)** is an estimate. Track A figures are also estimate
 | Item | Recommendation |
 |---|---|
 | Architecture | Analog Devices LTC3350 supercapacitor backup controller between the eFuse output and the regulators, creating a held-up bus (+VBUS_HOLD) |
-| Default population | 4 x 50 F 2.7 V supercapacitors in series, run at 2.0 V per cell (8.0 V stack) |
-| What it covers | Full node (radios on) for a 10 s swap at 12 W average, plus a safe-shutdown reserve if the pack is not refitted (est.) |
-| Smaller population | 4 x 25 F on the same circuit if Justin accepts radios off during the swap (option b below) |
+| Evaluated population (not frozen) | 4 x 50 F 2.7 V supercapacitors in series, run at 2.0 V per cell (8.0 V stack) |
+| What it must cover | D-027 at the measured full-node load, with no swap-mode performance reduction; a shutdown reserve is additional (estimate below) |
+| Smaller population | Not a compliant fallback if it requires radios off; alternatives must still satisfy D-027 |
 | Detection | LTC3350 PFO plus the pack's PACK_PRESENT contact to CM5 GPIOs; INA228 bus undervoltage alert as a backup |
 | Required changes | Bucks' EN and supervisor SVS4 move from the eFuse output to +VBUS_HOLD (otherwise the node resets mid-swap) |
 
@@ -30,11 +30,11 @@ Track A estimates about 10 W typical and under 15 to 18 W peak for the whole nod
 
 Option (a) keeps the mesh links. Option (b) keeps the CM5 running (no reboot, so D-008 is met literally) but the radios drop and must reassociate after the swap, which takes seconds. Option (c) does not meet D-008; it only avoids file system damage.
 
-Sizing for 12 W rather than 18 W assumes software caps Wi-Fi transmit power when the bridge engages (est.). An 18 W peak held for the whole swap is covered by the default population but eats the shutdown reserve.
+The table above is a historical low-load sensitivity case, not the V1 sizing basis. The AW7916-AED thermal budget now estimates about 16 W typical and 25 W peak (v1-thermal-rf-plan.md §1). D-027 does not permit a swap-mode TX-power cap. Recalculate against actual node plus external accessory load, regulator losses and transient demand.
 
 ## 2. Swap time and energy
 
-The pack is hook-first, latch-end-second, glove-operable and tool-free ([v1-battery-pack.md](v1-battery-pack.md)). A practiced swap is probably 3 to 6 s; a gloved swap in the field 10 s or more (est.). This file uses **10 s** as the design swap time and shows 5 s and 20 s for comparison. Bench timing with gloves sets the real figure.
+The pack is hook-first, latch-end-second, glove-operable and tool-free ([v1-battery-pack.md](v1-battery-pack.md)). A practiced swap is probably 3 to 6 s; a gloved swap in the field 10 s or more (est.). The minimum is owned by D-027. The 5 s column is sensitivity only, not an acceptable requirement; gloved swap trials may justify a larger design interval, never reduce the minimum.
 
 Energy drawn from storage: E = P x t / efficiency, with 0.9 for a boost holdup controller (est.).
 
@@ -53,6 +53,18 @@ Design energy, adding a shutdown reserve (56 J) so the node can still stop clean
 | (a) | 133 + 56 = 189 J | 236 J |
 | (b) | 56 + 56 = 112 J | 140 J |
 | (c) | 56 J | 70 J |
+
+### Revised full-load energy check
+
+These are estimates, not measured acceptance. Using the same 90% conversion efficiency, 56 J shutdown-reserve estimate and 20% capacitance-loss allowance:
+
+| Load scenario | Swap energy | Swap plus reserve | Required new usable energy |
+|---|---:|---:|---:|
+| 16 W typical estimate | 178 J | 234 J | 293 J |
+| 25 W peak held throughout gap | 278 J | 334 J | 417 J |
+| 35 W capability stress case, not expected consumption | 389 J | 445 J | 556 J |
+
+The energy comparison is necessary but insufficient: controller/inductor/FET current, ESR voltage drop and discharge floor must also pass at the same load. The reserve must be replaced with measured shutdown energy; the existing 5 W assumption is unverified. Include temperature, initial charge and repeated-swap conditions in the calculation.
 
 ## 3. Storage options
 
@@ -74,15 +86,17 @@ The LTC3350 (VIN 4.5 to 35 V, 1 to 4 series cells, step-down CC/CV charging, ste
 
 Charge voltage: the charger is step-down only, and its output ideal diode turns on whenever +VBUS_HOLD falls 65 mV below the stack. If the stack sat above the lowest pack voltage (8.4 V), it would discharge into the load whenever the pack ran low. So the stack is held at **8.0 V, 2.0 V per cell** with the VCAP DAC. That is well under the 2.7 V cell rating, which helps life in a warm sealed enclosure, and the datasheet suggests raising the DAC as cells age to keep stored energy constant (up to about 2.1 V per cell here).
 
-Discharge floor: 3.5 V on the stack (est.), set by current. At 18 W out the stack supplies 18 / 0.9 / 3.5 = 5.7 A, which matches a 3.2 A charge setting (peak inductor limit is 180 % of charge current, so 5.8 A). Below that the boost cannot hold full load.
+Low-load discharge-floor estimate: 3.5 V on the stack (est.), set by current. At 18 W out the stack supplies 18 / 0.9 / 3.5 = 5.7 A, which matches a 3.2 A charge setting (peak inductor limit is 180 % of charge current, so 5.8 A). Below that the boost cannot hold full load.
 
 Usable energy = ½C(8.0² − 3.5²) = 25.9 J per farad of stack.
 
 | Population | Stack C | New | End of life (-20 %) | Covers at 10 s |
 |---|---:|---:|---:|---|
 | 4 x 25 F | 6.25 F | 162 J | 129 J | (b) with reserve, or (a) typical without reserve |
-| **4 x 50 F** | **12.5 F** | **323 J** | **259 J** | **(a) with reserve; 18 W for 10 s at end of life** |
-| 4 x 100 F | 25 F | 647 J | 517 J | (a) at 20 s with reserve |
+| 4 x 50 F | 12.5 F | 323 J | 259 J | Low-load sensitivity only; does not cover the revised 25 W gap plus reserve even before a higher current-limited floor |
+| 4 x 100 F | 25 F | 647 J | 517 J | Larger energy candidate; actual discharge floor and current capability must be recalculated |
+
+At 25 W out, an assumed 5.8 A stack-current limit would require a floor of at least 25 / (0.9 × 5.8) = 4.79 V, before ESR and margin. The four-50-F bank would then provide only about 256 J new / 205 J at end of life, below the 334 J gap-plus-reserve estimate. At 35 W the same calculation raises the floor to 6.70 V. These conditional calculations use the earlier current estimate, not a verified LTC3350 operating limit; verify the complete boost design from the manufacturer procedure before choosing cells. Do not size solely from the 3.5 V energy table.
 
 Size: a 50 F 2.7 V radial cell is about 18 mm diameter x 40 mm (est., typical of Eaton HV, Kyocera AVX SCC and similar); four are about 41 cm³ of cylinder, about 3,000 mm² of board if laid flat. 25 F cells are about 16 x 25 mm (est.), about 1,700 mm² laid flat. Cost class: LTC3350 about $15 to $20 at low quantity, cells $3 to $6 each, FETs, inductor and sense resistors about $5 (all est., check Mouser and DigiKey). Leakage: LTC3350 input quiescent current 4 mA (datasheet), about 50 mW at 12 V, 0.5 % of a 10 W load; supercap leakage is tens of µA per cell after conditioning (est.). The eFuse being off when the radio is off must also cut the LTC3350, so it does not drain a stored pack. Aging: end of life is usually defined as -20 % C or 2x ESR; life roughly halves per 10 C hotter and falls steeply above 2.5 V per cell (est., rule of thumb). The LTC3350 measures C and ESR in circuit, so software can report bridge health.
 
@@ -125,7 +139,7 @@ Power path with S2: pack pogo contacts → BQ25798 (BAT to SYS) → TVS, Q1 and 
 
 | Signal | Source | Timing | Use |
 |---|---|---|---|
-| BRIDGE_ACTIVE_N | LTC3350 PFO; PFI divider 562 k over 100 k trips at 7.75 V falling (1.17 V threshold, 30 mV hysteresis, so about 0.2 V at the bus) | 85 ns comparator delay | Primary. Start the swap timer, cap Wi-Fi transmit power, flush logs. |
+| BRIDGE_ACTIVE_N | LTC3350 PFO; PFI divider 562 k over 100 k trips at 7.75 V falling (1.17 V threshold, 30 mV hysteresis, so about 0.2 V at the bus) | 85 ns comparator delay | Primary. Start the swap timer and flush logs; maintain D-027 operation without a swap-mode TX-power cap. |
 | PACK_PRESENT | Pack contact (M-11), pulled up on the radio side | Breaks with the power contacts | Tells a pulled pack apart from a pack at cutoff. |
 | INA228_ALERT_N | Bus undervoltage limit, GPIO 20 | About 1 ms at fast conversion (est.) | Backup if PFO wiring fails. |
 | Stack voltage | LTC3350 ADC over I2C | Polled | Remaining bridge time; triggers `poweroff` when the stack reaches the shutdown reserve. |
@@ -134,7 +148,7 @@ Software policy (proposal): on PFO low with PACK_PRESENT gone, enter swap mode; 
 
 ## 5. Recommendation
 
-**Default: S2, LTC3350 with 4 x 50 F at 2.0 V per cell, sized for option (a) at 10 s plus a shutdown reserve.** It is the only option that keeps the mesh links up across a swap, which is the plain reading of D-008. Its energy does not depend on how flat the outgoing pack is, unlike S1, it isolates the eFuse from the stack, it reports its own health, and the same footprint takes 25 F or 100 F cells if Track A or the swap-time choice moves the target. Fall back to 4 x 25 F (option b) if board or enclosure volume is too tight.
+**Candidate: S2 input-bus backup architecture (B-24), not a frozen LTC3350/cell design.** It can keep both regulated rails supplied across a swap and isolates the eFuse from direct supercapacitor charging. The earlier four-50-F population needs re-sizing under the revised energy/current check above. If volume or current capability does not close, compare a larger bank, a higher-current controller or a separately protected bridge-cell architecture against the same requirement; do not fall back to radios-off operation. Final cell MPN, current capability, thermal/ESR margins and CAD placement remain GHO-38/GHO-10/GHO-7 work.
 
 ### BOM additions (all candidates)
 
@@ -151,21 +165,21 @@ Board area (est.): about 20 x 25 mm (500 mm²) for the controller and power part
 
 ### Bench tests
 
-1. Time 20 gloved pack swaps by two people; set the swap-time requirement from the 95th percentile.
+1. Time 20 gloved pack swaps by two people; check the 95th percentile against D-027 and increase the design interval if needed.
 2. Measure node power in options (a), (b) and the shutdown (GHO-30 on Track A, then the V1 board).
-3. Pull the pack at full load and at cutoff voltage: no CM5 reset, mesh link stays up, +VBUS_HOLD minimum and bridge duration logged.
+3. Pull the pack at full measured node/accessory load and at cutoff voltage: prove D-027 with no reset, mesh-link interruption or deliberate performance reduction; log +VBUS_HOLD minimum, stack current, temperatures and bridge duration. Repeat with end-of-life capacitance/ESR emulation.
 4. Refit during backup: eFuse ramp, no inrush trip, clean handover, stack recharge time and peak input current against 5.56 A.
 5. Leave the pack out: clean shutdown fires at the reserve level and the file system checks clean.
 6. Contact bounce on insertion and removal with a scope on the BQ25798 BAT pin and the eFuse input.
 7. Repeat 3 to 5 at -20 C and +60 C enclosure temperature; read C and ESR from the LTC3350.
 8. Two swaps 10 s apart.
 
-## Design fork for Justin
+## Requirement compliance
 
 | Option | What it means | Cost |
 |---|---|---|
-| A. Full-node ride-through (default) | LTC3350 + 4 x 50 F; links stay up | Largest volume, about $40 to $50 (est.) |
+| A. Full-node ride-through (required) | Input-bus bridge sized for full load; cell/controller candidates still under evaluation | Volume/cost not finalized |
 | B. CM5-only ride-through | LTC3350 + 4 x 25 F with radios off, or LTC4041 on +5V_SYS; links drop and reassociate | About half the volume |
 | C. Shutdown on removal | Smallest bank for a clean `poweroff` only | Revises D-008 |
 
-Justin also chooses the swap-time requirement (5, 10 or 20 s), which scales the cells within the same circuit.
+D-027 settles the operating-mode/time choice: only A is compliant. B and C are comparisons, not choices awaiting Justin. The cell population and controller implementation are still engineering candidates.
