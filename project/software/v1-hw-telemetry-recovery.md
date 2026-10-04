@@ -46,7 +46,7 @@ No GPIO power, fault, watchdog or recovery code exists in openmanetd today.
 | 12 | POWER_GOOD | libgpiod, both-edge events | in | high | hwmgr | Source and level shift Unverified (eFuse PGOOD sits at battery voltage) |
 | 13 | EFUSE_FAULT | libgpiod, both-edge events | in | low (TPS26633 FLT is open-drain low) | hwmgr | Name has no `_N`; polarity to confirm |
 | 14/15 | GNSS_UART_TX/RX | `/dev/ttyAMA0` | n/a | n/a | gpsd | Unchanged |
-| 17 | ETH_SYNC_OUT | not requested | n/a | n/a | none yet | Ethernet timing; out of scope here, must not be claimed |
+| 17 | Reserved | not requested | n/a | n/a | none | Unassigned; dedicated PHY sync test point is separate (D-033, canonical pinout record) |
 | 18 | HALOW_RESET_N | libgpiod, open-drain flag | out | low | hwmgr | Never driven high |
 | 19 | HALOW_WAKE_N | libgpiod, open-drain flag | out | low | hwmgr | Never driven high; optional |
 | 20 | INA228_ALERT_N | libgpiod, falling-edge events | in | low | hwmgr | Hardware backstop for battery limits (section 6) |
@@ -70,7 +70,7 @@ Add `gpio-line-names` to the RP1 GPIO controller (`&rp1_gpio`) in the V1 overlay
         "HALOW_PWR_EN", "WIFI_PWR_EN", "HALOW_FAULT_N", "WIFI_FAULT_N",  /* 4-7 */
         "GNSS_RESET_N", "GNSS_PPS", "SUPERVISOR_WDI", "SUPERVISOR_WDO",  /* 8-11 */
         "POWER_GOOD", "EFUSE_FAULT", "GNSS_UART_TX", "GNSS_UART_RX",     /* 12-15 */
-        "", "ETH_SYNC_OUT", "HALOW_RESET_N", "HALOW_WAKE_N",             /* 16-19 */
+        "", "", "HALOW_RESET_N", "HALOW_WAKE_N",                          /* 16-19 */
         "INA228_ALERT_N", "WIFI_WDIS1_N", "", "USB_HUB_RESET_N",         /* 20-23 */
         "HALOW_USB_FAULT_N", "VLM_USB_FAULT_N", "", "",                  /* 24-27 */
         /* 28-53: copy from the CM5 base device tree */;
@@ -225,7 +225,7 @@ Enums use the `RADIO_HALOW` / `RADIO_WIFI` style with an `_UNSPECIFIED` zero val
 | `watchdog_pets_total`, `wdo_edges_total` | count | Heartbeat and supervisor output activity |
 | `recovery_boots_last_hour` | count | Boot counter used for loop protection |
 
-**Timing paths left alone.** hwmgr never requests GPIO9 (PPS) or GPIO17 (ETH_SYNC_OUT) and never touches the GNSS UART, so PPS and Ethernet timing stay independent of recovery. A GNSS reset is the only action that touches the GNSS, and it is manual.
+**Timing paths left alone.** hwmgr never requests the GNSS PPS line or the reserved GPIO17 and never touches the GNSS UART. The dedicated PHY sync signal terminates at an internal test point under D-033; it is not a GPIO consumer. The canonical [pinout record](../hardware/v1-pinout-and-sequencing.md#ethernet-timing-interface) owns the mapping. PPS and Ethernet timing stay independent of recovery. A GNSS reset is the only action that touches the GNSS, and it is manual.
 
 ## 9. Bench tests
 
