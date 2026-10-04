@@ -74,16 +74,7 @@ The current ceiling is **average current the complete converter can sustain**, a
 
 Model: identical series cells give effective stack capacitance `Ccell × derating / N`. With converter input power `P = Pload / efficiency`, terminal floor is the maximum of converter minimum, `P / Iaverage_max` and `sqrt(P × ESR)`. Open-circuit floor adds `P × ESR / Vterminal`. Usable energy is `0.5 × Cstack × (Vinitial² - Vfloor²)`. The draw bound includes maximum `I² × ESR` heating over that window. Efficiency excludes the separately modeled stack ESR (including it again is conservative). The larger of operating and shutdown load sets the common floor; that conservatively reserves shutdown energy without assuming deeper discharge is available.
 
-Example sensitivity only, retaining the earlier unverified current assumption and deliberately optimistic zero ESR:
-
-```sh
-python3 project/scripts/bridge_budget.py \
-  --cells 4 --cell-f 50 --capacitance-factor 0.8 --stack-esr-ohm 0 \
-  --start-v 8 --terminal-min-v 3.5 --average-current-a 5.8 \
-  --efficiency 0.9 --load-w 25 --gap-s 10 --shutdown-w 5 --shutdown-s 10
-```
-
-This case yields about 205 J usable and 333 J required, a −128 J margin. At unchanged inputs the mathematical minimum is about 81.2 F per cell; that is **not** a cell selection. Nonzero ESR, incomplete recharge, temperature and current/voltage margin can increase the requirement. The command rejects a gap below D-027's minimum. Save JSON with exact source/evidence for every input; replace estimates as GHO-30 produces measurements. Equality at the ESR maximum-power boundary offers no design margin.
+Use the source-grounded candidate comparison below for current inputs and exact commands. Save JSON with the source/evidence for every input; replace estimates as GHO-30 produces measurements. Equality at the ESR maximum-power boundary offers no design margin.
 
 Run verification with `python3 -m unittest discover -s project/scripts -p 'test_bridge_budget.py' -v`. Tests cover hand-calculated energy, series capacitance, current floor, ESR penalties, shutdown demand, low charge and invalid inputs; an independent numerical constant-power discharge checks the conservative duration bound.
 
@@ -206,7 +197,7 @@ Power path with S2: pack pogo contacts → BQ25798 (BAT to SYS) → TVS, Q1 and 
 | INA228_ALERT_N | Bus undervoltage limit, GPIO 20 | About 1 ms at fast conversion (est.) | Backup if PFO wiring fails. |
 | Stack voltage | LTC3350 ADC over I2C | Polled | Remaining bridge time; triggers `poweroff` when the stack reaches the shutdown reserve. |
 
-Software policy (proposal): on PFO low with PACK_PRESENT gone, enter swap mode; if the stack falls to the reserve level (about 4.6 V for 56 J on 12.5 F, 4.8 V at end of life, est.) before the pack returns, run a clean shutdown. PFO needs a GPIO; the allocation belongs to the pinout owner ([GHO-9](https://linear.app/ghostnet-labs/issue/GHO-9), [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md)). A latch-release switch would give earlier warning but is not needed with this bridge.
+Software policy (proposal): on PFO low with PACK_PRESENT gone, enter swap mode; if the stack falls to a reserve level calculated from the qualified bank, converter floor and measured shutdown demand before the pack returns, run a clean shutdown. PFO needs a GPIO; the allocation belongs to the pinout owner ([GHO-9](https://linear.app/ghostnet-labs/issue/GHO-9), [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md)). A latch-release switch would give earlier warning but is not needed with this bridge.
 
 ## 5. Recommendation
 
