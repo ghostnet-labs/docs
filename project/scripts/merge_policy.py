@@ -182,6 +182,14 @@ def handle(api, repo, number, profile):
     print(f"PR {number} merged as {result['sha']}")
 
 
+def terminal_blocker(blocker):
+    # CodeQL may publish a neutral aggregate while its analysis is still running.
+    # Keep waiting for success; neutral never satisfies the gate.
+    return "Package changes" in blocker or any(
+        "completed/" + outcome in blocker
+        for outcome in ("failure", "cancelled", "timed_out", "action_required", "skipped", "startup_failure", "stale"))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=["gate", "merge"])
@@ -208,7 +216,7 @@ def main():
             return
         print("\n".join(blockers), flush=True)
         # Fail terminal errors promptly; missing workflows may still be registering.
-        if any("completed/" in b or "Package changes" in b for b in blockers) or time.monotonic() >= deadline:
+        if any(terminal_blocker(b) for b in blockers) or time.monotonic() >= deadline:
             raise SystemExit(1)
         time.sleep(30)
 
