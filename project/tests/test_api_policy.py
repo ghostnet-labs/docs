@@ -19,8 +19,9 @@ class FakeAPI:
                        "required_status_checks": [{"context": GATE, "integration_id": 15368}]}}]
         self.reviews = []
         self.status = {"statuses": [], "state": "pending"}
+        self.files = [{"filename": "AGENTS.md"}]
     def pages(self, path, key=None):
-        if "/files" in path: return [{"filename": "AGENTS.md"}]
+        if "/files" in path: return self.files
         if "/actions/runs" in path: return self.runs
         if "/check-runs" in path: return self.checks
         if "/reviews" in path: return self.reviews
@@ -62,6 +63,15 @@ class APITests(unittest.TestCase):
         api.checks[0]["app"]["id"] = 99
         handle(api, "ghostnet-labs/docs", 7, self.profile)
         self.assertEqual(api.merge_calls, [])
+
+    def test_renamed_source_still_requires_its_tests(self):
+        api = FakeAPI()
+        api.files = [{"filename": "docs/example.md", "previous_filename": "src/main.go"}]
+        api.runs = []
+        profile = {"workflows": [{"path": "go.yml", "paths": ["src/**"]}]}
+        blockers = snapshot(api, "ghostnet-labs/docs", 7, profile)[1]
+        self.assertIn("Missing applicable workflow: go.yml", blockers)
+        self.assertFalse(any("Incomplete changed-file" in b for b in blockers))
 
 if __name__ == "__main__":
     unittest.main()

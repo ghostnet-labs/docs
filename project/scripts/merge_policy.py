@@ -91,10 +91,12 @@ class API:
 
 def snapshot(api, repo, number, profile):
     pr = api.call(f"repos/{repo}/pulls/{number}")
-    files = [f["filename"] for f in api.pages(f"repos/{repo}/pulls/{number}/files")]
+    records = api.pages(f"repos/{repo}/pulls/{number}/files")
+    files = [f["filename"] for f in records]
+    files.extend(f["previous_filename"] for f in records if "previous_filename" in f)
     runs = api.pages(f"repos/{repo}/actions/runs?head_sha={pr['head']['sha']}&event=pull_request", "workflow_runs")
     blockers = evaluate(profile, files, runs, pr["head"]["sha"], number)
-    if len(files) != pr["changed_files"]:
+    if len(records) != pr["changed_files"]:
         blockers.append("Incomplete changed-file inventory; cannot establish applicable tests")
     checks = api.pages(f"repos/{repo}/commits/{pr['head']['sha']}/check-runs", "check_runs")
     blockers.extend(check_blockers(checks))
