@@ -70,7 +70,7 @@ Decision (B-03, D-026): the Wi-Fi card is the [AsiaRF AW7916-AED](https://asiarf
 
 Characteristics: MediaTek MT7916, Linux mt7915e driver (mt76, mesh point and AP plus mesh supported in the driver), Wi-Fi 6E (2.4 GHz plus 5 or 6 GHz), M.2 3052 A+E key, 30 x 52 mm, three IPEX antenna connectors (type to confirm on arrival), PCIe WLAN, no Bluetooth.
 
-Power: the vendor gives 10 W maximum and 8 W average at 3.3 V and asks for a 3.3 V supply of at least 3 A. That is about four times the AIW-170BQ. The +3V3_RADIO allocation is now 4.5 A with a 3.39 V setpoint (section 13 and [v1-3v3-rail.md](v1-3v3-rail.md), [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10)); the socket contact rating and the card's heat are open (GHO-12). Power path: +3V3_RADIO through a TPS22975 to WIFI_3V3, controlled by WIFI_PWR_EN. Antennas: three IPEX external connectors, no PCB antenna.
+Power: the vendor gives 10 W maximum and 8 W average at 3.3 V and asks for a 3.3 V supply of at least 3 A. That is about four times the AIW-170BQ. The +3V3_RADIO allocation is now 4.5 A with a 3.39 V setpoint (section 13 and [v1-3v3-rail.md](v1-3v3-rail.md), [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10)); the socket power-path qualification is tracked in GHO-10/GHO-26 and the card's heat in GHO-12. Normal operation must meet D-028 without a firmware transmit-power cap; see the owning rail record for the connector qualification gate. Power path: +3V3_RADIO through a TPS22975 to WIFI_3V3, controlled by WIFI_PWR_EN. Antennas: three IPEX external connectors, no PCB antenna.
 
 Pin documentation: the AsiaRF pin-out drawing is mapped to carrier nets in [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md) (GHO-9). The card uses PCIe, PERST#, CLKREQ#, PEWAKE# and W_DISABLE1# only; W_DISABLE2# and USB are not connected. Pin numbers are read from finger order and still need a check on a bench card before layout release.
 
@@ -393,7 +393,7 @@ Current V1 parts and their status:
 | HaLow | Gateworks GW16170 / MM8108-M20 | Selected |
 | GNSS | u-blox MAX-M10S-00B | Selected |
 | Ethernet | Amphenol LTW RCP-5SPFFH-SCU7001 sealed feed-through, CAP-WACMSPC1 cap, pigtail to a Molex Pico-Lock 504050-0891 header (magnetics TBD) | Selected |
-| M.2 socket | TE Connectivity 2199119-6 | Selected (reference) |
+| M.2 socket | TE Connectivity 2199119-6 | Mechanical reference; Wi-Fi current qualification required (GHO-10/GHO-26, v1-3v3-rail.md) |
 | Battery connector | Eight Mill-Max 7911 spring contacts (B-12) | Selected for V0; geometry CAD-verify |
 | Shunt | Vishay WFK0612R0100FE66 | Selected |
 | Battery monitor | TI INA228AIDGSR | Selected |
