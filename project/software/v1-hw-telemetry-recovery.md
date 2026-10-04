@@ -30,7 +30,7 @@ No GPIO power, fault, watchdog or recovery code exists in openmanetd today.
 
 ## 2. Signal inventory
 
-"hwmgr" is the proposed openmanetd hardware manager (section 8). Polarity of every fault line is Unverified until the schematic exists (GHO-9).
+"hwmgr" is the proposed openmanetd hardware manager (section 8). Manufacturer polarity and output type are recorded in the canonical [electrical evidence](../hardware/v1-pinout-and-sequencing.md#electrical-sources-and-boot-evidence). Carrier connectivity remains Unverified (GHO-9). Unselected or unconnected fault sources must be reported as unavailable, never healthy or faulted from a floating GPIO.
 
 | GPIO | Line name | Linux interface | Dir | Active | Owner | Notes |
 |---:|---|---|---|---|---|---|
@@ -43,8 +43,8 @@ No GPIO power, fault, watchdog or recovery code exists in openmanetd today.
 | 9 | GNSS_PPS | `pps-gpio` overlay, `/dev/pps0` | in | rising | kernel, read by gpsd/chrony | hwmgr never requests it |
 | 10 | SUPERVISOR_WDI | kernel `gpio-wdt` (`linux,wdt-gpio`) | out | toggle | kernel, armed by hwmgr | See section 7 |
 | 11 | SUPERVISOR_WDO | libgpiod, both-edge events | in | low | hwmgr | TPS386000 watchdog output, logged only |
-| 12 | POWER_GOOD | libgpiod, both-edge events | in | high | hwmgr | Source and level shift Unverified (eFuse PGOOD sits at battery voltage) |
-| 13 | EFUSE_FAULT | libgpiod, both-edge events | in | low (TPS26633 FLT is open-drain low) | hwmgr | Name has no `_N`; polarity to confirm |
+| 12 | POWER_GOOD | libgpiod, both-edge events | in | high | hwmgr | Source/translation Unverified; the reference PGOOD pull-up is battery-domain, not an intrinsic output-high voltage |
+| 13 | EFUSE_FAULT | libgpiod, both-edge events | in | low (TPS26633 FLT is open-drain low) | hwmgr | Chip active-low behavior verified; name retained; pull-up/connectivity open |
 | 14/15 | GNSS_UART_TX/RX | `/dev/ttyAMA0` | n/a | n/a | gpsd | Unchanged |
 | 17 | Reserved | not requested | n/a | n/a | none | Unassigned; dedicated PHY sync test point is separate (D-033, canonical pinout record) |
 | 18 | HALOW_RESET_N | libgpiod, open-drain flag | out | low | hwmgr | Never driven high |
@@ -167,19 +167,21 @@ Clearing a level needs V_comp 0.2 V above its threshold for 60 s (hysteresis).
 
 ## 7. Watchdog
 
-Two watchdogs, layered so the gentler one fires first.
+Proposed layered watchdogs; reset precedence depends on which service stops making progress.
 
 | Layer | Device | Who pets it | Timeout | Effect |
 |---|---|---|---|---|
 | CM5 internal | `bcm2835-wdt` | OpenWrt `procd`, its default `/dev/watchdog` handling | 30 s, pinged every 5 s | SoC reset |
-| Kernel gpio-wdt on SUPERVISOR_WDI | `linux,wdt-gpio`, `hw_algo = "toggle"`, `hw_margin_ms` = 500, `always-running` | Kernel watchdog core toggles WDI every 250 ms; hwmgr pets the userspace side | Userspace timeout 60 s | Kernel stops toggling WDI |
-| TPS386000 | Hardware | WDI edges from the gpio-wdt driver | About 1 to 2 s (reference section 13) | WDO low, path to PMIC_Enable, full power cycle |
+| Kernel gpio-wdt on SUPERVISOR_WDI | `linux,wdt-gpio`, `hw_algo = "toggle"`, `hw_margin_ms` = 400, `always-running` | Kernel heartbeat target 200 ms; hwmgr pets the userspace side (unvalidated) | Userspace timeout 60 s | Kernel stops toggling WDI |
+| TPS386000 | Hardware | WDI edges from the gpio-wdt driver | See reference §13 for verified hardware interval | Latched WDO low; PMIC path and latch-clear circuit unimplemented |
 
-Why this split: the TPS386000 timeout is far too short for a userspace process, so the kernel keeps WDI toggling from driver probe onward and the 1 to 2 s window only catches a hard kernel hang. hwmgr pets the gpio-wdt device every 10 s only while its own loops are healthy, so a wedged hwmgr is caught after 60 s, which is longer than the procd 30 s so a userspace hang gets the softer SoC reset first. hwmgr opens the gpio-wdt by `/sys/class/watchdog/watchdogN/identity`, not by number, and must make sure procd still opens the bcm2835 device (registration order decides which one is `/dev/watchdog`). Magic close is enabled, so a clean hwmgr stop does not trigger a reset; the kernel keeps toggling.
+The proposed heartbeat target must meet the worst-case interval in reference §13 under load. `hw_margin_ms` declares the supported hardware heartbeat to the kernel; it does not reconfigure the supervisor. The proposed value keeps that declaration below the chip's minimum timeout, with measured scheduling margin still required.
 
-Boot gap: from power-on to gpio-wdt probe (bootloader and early kernel) takes several seconds with WDI idle. Unless the TPS386000 watchdog is held off until software arms it, the node resets during every boot. This needs a hardware decision (an arm gate or WDO only reported, not wired to PMIC_Enable, until armed) before the watchdog path is populated.
+hwmgr would pet the software watchdog every 10 s while its loops are healthy. A wedged hwmgr does not necessarily stop procd from petting the CM5 watchdog, so comparing the 30 s and 60 s settings alone does not guarantee a softer reset first. Select watchdogs by identity and verify procd's device choice. Linux [v6.6 gpio_wdt.c](https://github.com/torvalds/linux/blob/v6.6/drivers/watchdog/gpio_wdt.c) starts `always-running` at probe and retains hardware-running state on stop; magic-close support does not disable this external timer. Boot, restart and shutdown behavior require tests of the actual target kernel.
 
-SUPERVISOR_WDO is read on GPIO11 and every edge is logged with a timestamp, so the next boot can tell a watchdog reset from a power loss (with ramoops and the boot counter).
+Boot gap: no WDI service is guaranteed before gpio-wdt probe. GHO-10 must define boot inhibition/arming and timeout latch clearing before connecting WDO to PMIC_Enable. Masking only the reset action does not stop the supervisor timer or clear a timeout latched during boot. Validate shutdown and daemon restart as well as startup; the proposed userspace/kernel watchdog behavior is not implemented or qualified.
+
+SUPERVISOR_WDO is proposed as a logged input. An observed edge can assist diagnosis, but a stalled CPU cannot reliably log the event that resets it. Reset-cause attribution needs validated retained evidence; missing logs must be reported as unknown.
 
 ## 8. Where it lives in openmanetd (proposal)
 
@@ -239,9 +241,9 @@ Run under [GHO-21](https://linear.app/ghostnet-labs/issue/GHO-21) (first power a
 | T4 | Step 2 | Hold the HaLow device unresponsive so step 1 fails | Hub reset, HaLow and OpenVLM re-enumerate; comms told first |
 | T5 | Step 3 | Kill the Wi-Fi card (hold PERST# via PCI remove and block rescan), and separately force WIFI_FAULT_N and HALOW_USB_FAULT_N low | Power cycle with the section 4 timings; scope shows rail off for 2 s or more; PCIe rescan brings the Wi-Fi back |
 | T6 | Backoff and `failed` | Remove the HaLow card | Exactly the retry count and backoff in section 5, then `failed`, Wi-Fi unaffected |
-| T7 | Step 4 | `echo c > /proc/sysrq-trigger` (kernel hang), and `kill -STOP` hwmgr | Kernel hang: TPS386000 fires within 2 s. Stopped hwmgr: procd SoC reset or gpio-wdt at 60 s |
-| T8 | Step 5 | Drag SVS rails out of window with a lab supply; let WDI stop | PMIC_Enable pulled low, CM5 powers back up, boot counter increments |
-| T9 | Boot gap | Cold boot 20 times with the watchdog populated | No watchdog reset during boot |
+| T7 | Step 4 | `echo c > /proc/sysrq-trigger` (kernel hang), and `kill -STOP` hwmgr | When armed, measure WDO assertion from the last WDI edge against reference §13; validate the complete reset path separately. Verify the proposed userspace timeout with hwmgr stopped |
+| T8 | Step 5 | Drag SVS rails out of window with a lab supply; let WDI stop | Verify PMIC_Enable pulse, supervisor latch clearing, reboot and retained boot counter; no permanent PMIC-low latch |
+| T9 | Boot gap | Cold boot 20 times with the watchdog populated | No watchdog reset during boot; arm only after WDI service, with no stale latched WDO |
 | T10 | Battery accuracy | INA228 against a calibrated DMM and electronic load across 9 to 12.6 V and 0.2 to 5 A | Voltage within 0.5 %, current within 1 % |
 | T11 | Thresholds and shutdown | Lab supply ramped down through each level | Each action at its level, ALERT backstop at 9.3 V, clean shutdown logged |
 | T12 | Loop protection | Force step 5 three times in an hour | Fourth boot comes up telemetry-only |
@@ -249,4 +251,4 @@ Run under [GHO-21](https://linear.app/ghostnet-labs/issue/GHO-21) (first power a
 
 ## 10. Dependencies
 
-Items this proposal relies on that other issues must settle are listed with the issue that owns them: GPIO physical pins, boot defaults and fault-line sources ([GHO-9](https://linear.app/ghostnet-labs/issue/GHO-9)); HaLow VBUS control and hub port power wiring ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)); pack cutoff and charger telemetry ([GHO-8](https://linear.app/ghostnet-labs/issue/GHO-8), [GHO-38](https://linear.app/ghostnet-labs/issue/GHO-38)); thermal telemetry and limits ([GHO-12](https://linear.app/ghostnet-labs/issue/GHO-12)). New questions raised here are filed as Linear issues, not kept in this file.
+Items this proposal relies on that other issues must settle are listed with the issue that owns them: supervisor boot inhibition/arming/latch-clear topology ([GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10)); GPIO physical pins, boot defaults and fault-line sources ([GHO-9](https://linear.app/ghostnet-labs/issue/GHO-9)); HaLow VBUS control and hub port power wiring ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)); pack cutoff and charger telemetry ([GHO-8](https://linear.app/ghostnet-labs/issue/GHO-8), [GHO-38](https://linear.app/ghostnet-labs/issue/GHO-38)); thermal telemetry and limits ([GHO-12](https://linear.app/ghostnet-labs/issue/GHO-12)). New questions raised here are filed as Linear issues, not kept in this file.

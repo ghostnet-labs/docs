@@ -9,6 +9,9 @@
 - [Raspberry Pi CM5 IO datasheet](https://pip.raspberrypi.com/documents/RP-008182-DS-cm5io-datasheet.pdf)
 - [AsiaRF AW7916-AED datasheet](https://asiarf.com/wp-content/uploads/2026/07/260709_Datasheet_AW7916-AED_V1-1P.pdf)
 - [Gateworks GW16167/GW16170 M.2 pinout](https://trac.gateworks.com/wiki/expansion/gw16167)
+- [TI TPS22975, SLVSDD0B](https://www.ti.com/lit/ds/symlink/tps22975.pdf), §6 and §10.1.1
+- [TI TPS2663, SLVSE94G](https://www.ti.com/lit/ds/symlink/tps2663.pdf), §5, §8.3.2 and §8.3.10
+- [TI TPS386000, SBVS105F](https://www.ti.com/lit/ds/symlink/tps386000.pdf), §5 and §8.3.3
 
 ## CM5 physical carrier pins
 
@@ -43,16 +46,16 @@ Allocation decision D-024: GNSS uses UART0 on GPIO14/15; system I2C1 uses GPIO2/
 | 1 | 35 | Reserved | I2C0 alternate function; unassigned |
 | 2 | 58 | SYS_I2C_SDA | System I2C1; physical pin verified |
 | 3 | 56 | SYS_I2C_SCL | System I2C1; physical pin verified |
-| 4 | 54 | HALOW_PWR_EN | HaLow power enable; physical pin verified; boot/electrical verification open |
-| 5 | 34 | WIFI_PWR_EN | Wi-Fi power enable; physical pin verified; boot/electrical verification open |
-| 6 | 30 | HALOW_FAULT_N | HaLow fault; physical pin verified; boot/electrical verification open |
-| 7 | 37 | WIFI_FAULT_N | Wi-Fi fault; physical pin verified; boot/electrical verification open |
+| 4 | 54 | HALOW_PWR_EN | TPS22975 ON, active-high output; chip polarity verified; carrier bias/boot timing open |
+| 5 | 34 | WIFI_PWR_EN | TPS22975 ON, active-high output; chip polarity verified; carrier bias/boot timing open |
+| 6 | 30 | HALOW_FAULT_N | Planned input; source unselected: TPS22975 has no fault output; do not report as implemented |
+| 7 | 37 | WIFI_FAULT_N | Planned input; source unselected: TPS22975 has no fault output; do not report as implemented |
 | 8 | 39 | GNSS_RESET_N | GNSS reset; physical pin verified; boot/electrical verification open |
 | 9 | 40 | GNSS_PPS | GNSS timing; physical pin verified; boot/electrical verification open |
-| 10 | 44 | SUPERVISOR_WDI | Watchdog heartbeat; physical pin verified; boot/electrical verification open |
-| 11 | 38 | SUPERVISOR_WDO | Watchdog status; physical pin verified; boot/electrical verification open |
-| 12 | 31 | POWER_GOOD | Power-good; physical pin verified; boot/electrical verification open |
-| 13 | 28 | EFUSE_FAULT | eFuse fault; physical pin verified; boot/electrical verification open |
+| 10 | 44 | SUPERVISOR_WDI | TPS386000 WDI input, either-edge heartbeat; carrier boot/arming open |
+| 11 | 38 | SUPERVISOR_WDO | TPS386000 WDO, active-low open-drain input to CM5; pull-up/boot recovery open |
+| 12 | 31 | POWER_GOOD | Planned input; eFuse PGOOD active-high open-drain; battery-domain pull-up needs translation |
+| 13 | 28 | EFUSE_FAULT | TPS26633 FLT active-low open-drain input; CM5-domain pull-up/connectivity open |
 | 14 | 55 | GNSS_UART_TX | GNSS UART0 TX; physical pin verified |
 | 15 | 51 | GNSS_UART_RX | GNSS UART0 RX; physical pin verified |
 | 16 | 29 | Reserved | Freed: was BT_USB_FAULT_N, and V1 has no Bluetooth (D-026). Unassigned spare |
@@ -100,9 +103,38 @@ The drawing names the PCIe pairs from the card's point of view, which matches th
 
 Gateworks documents pins 2/4/72/74 as 3.3 V, pin 3/5 as USB D+/D-, pin 56 W_DISABLE1# to RESET_N with a 200 kΩ pull-up, and pin 54 W_DISABLE2# to WAKE with a 10 kΩ pull-up. No PCIe/PERST/CLKREQ/PEWAKE signals are listed; leave them unconnected unless Gateworks documents otherwise. Since pull-ups return to HALOW_3V3, GPIO18/19 must drive low to assert and input/high-Z to release, never high.
 
+## Electrical sources and boot evidence
+
+Checked 2026-10-04 against the TI authorities above. Manufacturer pin behavior is Verified; carrier connectivity and startup waveforms remain Unverified.
+
+| Signal | Device pin / source | Interface evidence |
+|---|---|---|
+| HALOW_PWR_EN / WIFI_PWR_EN | TPS22975 ON, pin 3 | Active high; ON must not float. External bias must hold the intended state before firmware runs |
+| HALOW_FAULT_N / WIFI_FAULT_N | No source selected | TPS22975 has no fault or power-good output. Thermal shutdown is internal, not GPIO telemetry |
+| SUPERVISOR_WDI / SUPERVISOR_WDO | TPS386000 WDI 20 / WDO 19 | WDI accepts either edge; WDO is active-low open-drain. Carrier pull-up and reset path remain open |
+| POWER_GOOD | TPS26633RGER PGOOD 16 is a candidate source | Active-high open-drain. The reference circuit pulls it to OUT for buck enables; that node cannot connect directly to CM5 GPIO |
+| EFUSE_FAULT | TPS26633RGER FLT 14 | Active-low open-drain; provide a CM5-compatible pull-up, with power-off leakage checked |
+| HALOW_USB_FAULT_N / VLM_USB_FAULT_N | Downstream VBUS switch / hub overcurrent path | Exact switch outputs, hub wiring, pull-ups and polarity still require GHO-11/GHO-13 closure |
+
+The [supervisor section](v1-reference.md#supervisor-and-watchdog-ti-tps386000rgpr) owns watchdog timing and latch-clear behavior. GHO-10 owns its startup/arming/reset topology; this audit does not select that circuit or add an arming GPIO.
+
+Firmware source inspection is separate from physical validation. [Firmware PR #23](https://github.com/ghostnet-labs/firmware/pull/23), inspected at `37f8e8d2bdda03327942e419a69bd68bdf64f4cc`, contains:
+
+| Boot configuration | Requested state / role |
+|---|---|
+| `gpio=4,5=op,dh` | Both radio power enables output high |
+| `gpio=18,19=ip,pn`; `gpio=21=ip,pn` | HaLow controls and Wi-Fi disable released as inputs without pulls |
+| `gpio=23=op,dh` | Hub reset output high (released) |
+| `dtoverlay=pps-gpio,gpiopin=9` | GNSS PPS input consumer |
+| `dtparam=uart0=on`; `dtparam=i2c_arm=on` | GNSS UART0 and system I2C requested |
+
+[Official GPIO configuration semantics](https://www.raspberrypi.com/documentation/computers/config_txt.html#gpio) verify `op,dh` means output high and `ip,pn` means input without pulls. These directives apply during firmware configuration and can be overridden by kernel pinctrl; they do not guarantee reset-time levels, rail-ready ordering or daemon handoff. The listed file does not explicitly configure the fault inputs, supervisor pins or reserved GPIO17. GHO-9/GHO-19 retain full boot/device-tree validation, including GPIO23/24/25.
+
 ## Working sequence and recovery
 
-1. Power-off defaults: radio rails and USB VBUS off, hub reset inactive, HaLow controls high-Z, Wi-Fi PERST# asserted.
+This is the intended hardware-controlled order, not evidence that the bring-up firmware implements it. GHO-9/GHO-10/GHO-19 must reconcile firmware release of enables/reset with rail-ready interlocks before carrier freeze.
+
+1. While supplies are absent, software establishes no GPIO state. Hardware bias/interlocks must keep radio enables and USB VBUS off, hold hub reset asserted until its supply/clock are valid, avoid backfeed through radio controls, and meet PCIe PERST# requirements.
 2. Bring up CM5 3.3 V and supervisor; keep USB VBUS switching separate from radio 3.3 V switches.
 3. Enable the selected radio 3.3 V rail after supervisor-good.
 4. Release HaLow reset/WAKE by high-Z GPIO18/19, then enable its USB VBUS and enumerate.

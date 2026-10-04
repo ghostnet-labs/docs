@@ -179,7 +179,7 @@ Undervoltage lockout: a divider from IN_SYS to UVLO to GND with R_top = 464 kOhm
 
 Output ramp: C_dVdT = 22 nF gives t = 20.8 x 10^3 x V_IN x C_dVdT = 5.8 ms at 12.6 V (2,185 V/s), so charging about 25 µF of regulator input capacitance draws about 55 mA. The turn-on delay after UVLO is 742 µs + 49.5 µs per nF x 22 nF, about 1.8 ms.
 
-PGOOD and PGTH: a divider from OUT to PGTH, 243 kOhm over 49.9 kOhm, sets PGOOD rising at 7.04 V and falling at 6.59 V. PGOOD is open drain; pull it up to the eFuse output through 100 kOhm and use it to drive the EN pins of both LM76005 regulators, so they start only after the eFuse ramp completes.
+PGOOD and PGTH: a divider from OUT to PGTH, 243 kOhm over 49.9 kOhm, sets PGOOD rising at 7.04 V and falling at 6.59 V. PGOOD is open drain; pull it up to the eFuse output through 100 kOhm and use it to drive the EN pins of both LM76005 regulators, so they start only after the eFuse ramp completes. This battery-domain PGOOD node must not connect directly to the CM5 POWER_GOOD input; a separate logic-level sensing interface remains to be designed under GHO-9/GHO-10/GHO-13.
 
 Fault response: tie MODE to ground for auto-retry (retry delay about 670 ms), which suits a headless node. MODE open would latch off until SHDN, UVLO, or the input is cycled. Leave IMON unconnected, because the INA228 measures current (if used: 27.9 µA per A, and R_IMON must stay under 12.9 kOhm to keep 2 x I_OL below 4 V).
 
@@ -223,11 +223,11 @@ Critical layout rule: do not place the switching regulator or its inductor direc
 
 ### Radio load switches: TI TPS22975DSGT x 2
 
-U302 is Wi-Fi and U303 is HaLow. 0.6 to 5.7 V, up to 6 A, about 16 mOhm typical, adjustable rise time, quick output discharge, thermal shutdown, about -40 to +105 C. Independent radio power control supports software recovery and hardware-aware mesh behavior.
+U302 is Wi-Fi and U303 is HaLow. 0.6 to 5.7 V, up to 6 A, about 16 mOhm typical, adjustable rise time, quick output discharge, thermal shutdown, about -40 to +105 C. Independent radio power control supports software recovery. The [TPS22975 datasheet](https://www.ti.com/lit/ds/symlink/tps22975.pdf), §6, provides no fault-output pin; the planned radio-fault input sources remain unselected in the canonical [pinout record](v1-pinout-and-sequencing.md#electrical-sources-and-boot-evidence).
 
 ### Supervisor and watchdog: TI TPS386000RGPR
 
-Multi-rail supervision plus watchdog. Rails: SVS1 = CM5_3V3, SVS2 = +5V_SYS, SVS3 = +3V3_RADIO, SVS4 = VBAT_PROTECTED. SUPERVISOR_WDI comes from the CM5 and SUPERVISOR_WDO returns to it. Initial timeout is about 1 to 2 seconds, with a faster software heartbeat. The supervisor fault and watchdog output participates in a path that can pull SYS_PMIC_EN (the CM5 PMIC_Enable) low. Startup, release, watchdog timeout, and recovery behavior must be bench-tested before being treated as field-reliable.
+Multi-rail supervision plus watchdog. Rails: SVS1 = CM5_3V3, SVS2 = +5V_SYS, SVS3 = +3V3_RADIO, SVS4 = VBAT_PROTECTED. SUPERVISOR_WDI comes from the CM5 and SUPERVISOR_WDO returns to it. Verified 2026-10-04 from [TI SBVS105F](https://www.ti.com/lit/ds/symlink/tps386000.pdf), §6.7: the watchdog interval is 450 ms minimum, 600 ms typical, 750 ms maximum. CT pins program reset-release delays, not this interval. §8.3.3 starts the timer at RESET1 release and latches timeout; WDI edges alone do not clear it. Clearing requires MR assertion, a SENSE1 reset event, or supervisor VDD power-down. A PMIC_Enable cycle must not be assumed to remove supervisor VDD. GHO-10 owns boot inhibition/arming, latch clear and reset-pulse design before WDO can participate in SYS_PMIC_EN recovery. Startup, release, watchdog timeout and recovery still require schematic and bench validation.
 
 ## 14. Power budget
 
@@ -512,7 +512,7 @@ This reference supersedes the September 29 Track B reference. The points below w
 - [TI TPS22975 product page](https://www.ti.com/product/TPS22975)
 - [u-blox MAX-M10S datasheet](https://content.u-blox.com/sites/default/files/MAX-M10S_DataSheet_UBX-20035208.pdf)
 
-Manufacturer documentation for the AW7916-AED (pin table), TUSB4041I, TPS386000, Mill-Max 7911 contacts, Ethernet connector, and SMBJ33CA should be added here as it is downloaded and checked.
+Manufacturer documentation for the AW7916-AED (pin table), TUSB4041I, Mill-Max 7911 contacts, Ethernet connector, and SMBJ33CA should be added here as it is downloaded and checked.
 
 ## 33. Summary
 
