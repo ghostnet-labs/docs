@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - "project/**"
+      - "AGENTS.md"
       - ".github/workflows/project-record-checks.yml"
   push:
     branches:
       - main
     paths:
       - "project/**"
+      - "AGENTS.md"
       - ".github/workflows/project-record-checks.yml"
 
 permissions:
