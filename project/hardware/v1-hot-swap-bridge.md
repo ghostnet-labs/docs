@@ -66,6 +66,27 @@ These are estimates, not measured acceptance. Using the same 90% conversion effi
 
 The energy comparison is necessary but insufficient: controller/inductor/FET current, ESR voltage drop and discharge floor must also pass at the same load. The reserve must be replaced with measured shutdown energy; the existing 5 W assumption is unverified. Include temperature, initial charge and repeated-swap conditions in the calculation.
 
+### Reproducible conditional budget
+
+Run [bridge_budget.py](../scripts/bridge_budget.py) with explicit worst-case or measured inputs. It screens capacitance, initial charge, whole-stack ESR, conversion loss, the effective average stack-current ceiling, gap load/time and an additional shutdown reserve. It never selects a controller or declares hardware qualification. Inputs at the held-up bus must include downstream regulator and accessory demand.
+
+The current ceiling is **average current the complete converter can sustain**, after ripple/inductor/sense/FET/thermal margins. Do not copy the LTC3350 peak inductor limit into this input: manufacturer Rev. D, *Minimum VCAP Voltage in Backup Mode* (printed pp24–25) also requires ESR/power-transfer, peak-current and duty-cycle analysis. Converter minimum terminal voltage must incorporate duty cycle, UVLO and regulation headroom; no 3.5 V floor is implied by the tool.
+
+Model: identical series cells give effective stack capacitance `Ccell × derating / N`. With converter input power `P = Pload / efficiency`, terminal floor is the maximum of converter minimum, `P / Iaverage_max` and `sqrt(P × ESR)`. Open-circuit floor adds `P × ESR / Vterminal`. Usable energy is `0.5 × Cstack × (Vinitial² - Vfloor²)`. The draw bound includes maximum `I² × ESR` heating over that window. Efficiency excludes the separately modeled stack ESR (including it again is conservative). The larger of operating and shutdown load sets the common floor; that conservatively reserves shutdown energy without assuming deeper discharge is available.
+
+Example sensitivity only, retaining the earlier unverified current assumption and deliberately optimistic zero ESR:
+
+```sh
+python3 project/scripts/bridge_budget.py \
+  --cells 4 --cell-f 50 --capacitance-factor 0.8 --stack-esr-ohm 0 \
+  --start-v 8 --terminal-min-v 3.5 --average-current-a 5.8 \
+  --efficiency 0.9 --load-w 25 --gap-s 10 --shutdown-w 5 --shutdown-s 10
+```
+
+This case yields about 205 J usable and 333 J required, a −128 J margin. At unchanged inputs the mathematical minimum is about 81.2 F per cell; that is **not** a cell selection. Nonzero ESR, incomplete recharge, temperature and current/voltage margin can increase the requirement. The command rejects a gap below D-027's minimum. Save JSON with exact source/evidence for every input; replace estimates as GHO-30 produces measurements. Equality at the ESR maximum-power boundary offers no design margin.
+
+Run verification with `python3 -m unittest discover -s project/scripts -p 'test_bridge_budget.py' -v`. Tests cover hand-calculated energy, series capacitance, current floor, ESR penalties, shutdown demand, low charge and invalid inputs; an independent numerical constant-power discharge checks the conservative duration bound.
+
 ## 3. Storage options
 
 ### S1. Supercapacitor bank directly on the input bus
