@@ -1,7 +1,7 @@
 # V1 3.3 V radio rail sizing
 
 **Owner:** [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10) — size the +3V3_RADIO supply for the AsiaRF AW7916-AED (D-026)  
-**Status:** Calculated. No new part. Bench measurement on the two AW7916-AED cards closes it.
+**Status:** Regulator calculations recorded; the socket power path remains unqualified. [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10) owns electrical closure and [GHO-26](https://linear.app/ghostnet-labs/issue/GHO-26) owns the qualified connector/BOM choice.
 
 The AW7916-AED needs a 3.3 V supply of at least 3 A (10 W maximum, 8 W average, [datasheet](https://asiarf.com/wp-content/uploads/2026/07/260709_Datasheet_AW7916-AED_V1-1P.pdf)). The old 4 A allocation for +3V3_RADIO does not cover it together with HaLow and GNSS. This file sizes the rail; [v1-reference.md](v1-reference.md) sections 13 and 14 carry the summary.
 
@@ -74,11 +74,17 @@ At 4.5 A and about 88 % efficiency from 12 V the buck loses about 2.0 W, about 0
 
 ## Open risk: socket contact rating
 
-The TE 2199119-6 socket is rated 0.5 A per contact ([TE](https://www.te.com/en/product-2199119-6.html)). The card draws 3.3 V through four contacts (pins 2, 4, 72 and 74), 2 A in total. The card's 2.4 A average and 3 A peak exceed that rating. Brief bursts are normal for M.2 Wi-Fi and accelerator cards, but a sustained 2.4 A would run the contacts hot. Actions:
+The TE 2199119-6 socket's recorded rating is 0.5 A per contact ([TE](https://www.te.com/en/product-2199119-6.html)). Four 3.3 V contacts give a preliminary 2 A screening ceiling only if current shares evenly; this arithmetic does not establish a qualified whole-connector rating. The card's recorded average and peak demand exceed that screening ceiling. Do not assume transmit bursts waive the contact rating or that the preliminary copper/contact-drop budget proves compliance.
 
-1. Bench gate: measure the card's current on the CM5 at full-rate 802.11s traffic on both bands for 30 minutes, with a thermocouple on the socket.
-2. If the sustained current is above 2 A, cap transmit power in firmware (`txpower` in the radio's UCI) until it is under 2 A, and record the range cost.
-3. Ask TE (and JAE or Attend) for a 3052 A+E socket with a higher per-contact rating before layout freeze.
+[D-028](../decisions.md) requires normal operation without CPU/radio performance throttling. A firmware transmit-power cap cannot close this electrical gate. Built-in emergency protection remains enabled; any protection event is recorded as a fault, not a passing operating point.
+
+Qualification work is tracked in GHO-10 and GHO-26:
+
+1. Measure the card's sustained current, burst peaks/duty cycle, supply voltage at the card and socket temperature during the full simultaneous operating profile defined in [v1-thermal-rf-plan.md](v1-thermal-rf-plan.md), including the required ambient endpoints. A short nominal-temperature run is screening evidence only.
+2. Obtain manufacturer evidence for the exact socket's allowable per-contact and whole-connector current with the actual contact population, current sharing, copper, temperature rise, ambient derating and transient profile. Measure contact/path resistance and voltage drop; verify startup/inrush separately.
+3. If that evidence does not cover the full unthrottled operating load and margins, select a suitably rated, mechanically compatible socket or redesign the power path, then repeat electrical and fit review before layout/BOM freeze. A supplier-qualified alternative is required; no alternative part is selected by this record.
+
+TE 2199119-6 remains a mechanical reference pending this gate, not a released Wi-Fi power connector.
 
 ## Bench checks
 
