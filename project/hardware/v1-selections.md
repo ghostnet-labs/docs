@@ -1,5 +1,10 @@
 # Track B: V1 custom carrier selections
 
+## Expanded capability scope
+
+The current capability contract is [Maer requirements](../requirements/maer-capabilities.md) (D-029 through D-032). This document describes the selected baseline and does not by itself demonstrate the expanded contract. GHO-50 owns POC hardware reconciliation; GHO-55 owns V1 impact and freeze disposition. 
+
+
 ## Goal
 
 A product-oriented V1 carrier for the CM5 with two M.2 radio modules, GNSS, sealed Gigabit Ethernet, battery telemetry, node-side voice/PTT through an external OpenVLM USB audio module, and a fanless rugged enclosure. It is headless, with no buttons or user-facing LEDs. V1 has one sealed USB-C DATA / CHARGE service port that carries USB-C PD charging and CM5 console and service data, plus a separate sealed USB-C host port for the OpenVLM module. Hidden test pads are acceptable. This file owns the Track B selections. [v1-reference.md](v1-reference.md) is supporting engineering detail and refers to these rows by ID.

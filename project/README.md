@@ -10,6 +10,10 @@ This folder holds the engineering records for the ghostnet-labs OpenMANET field 
 
 Data flows one way: Track A produces measurements and Track B consumes them. Track B must not lock any decision that Track A can settle.
 
+## Expanded Maer capability contract
+
+[requirements/maer-capabilities.md](requirements/maer-capabilities.md) owns the accepted expanded requirements (D-029 through D-032). [GHO-49](https://linear.app/ghostnet-labs/issue/GHO-49) publishes the handoff; [GHO-55](https://linear.app/ghostnet-labs/issue/GHO-55) reconciles V1 before freeze. The selected CM5 baseline above does not establish compliance with that expanded contract. The [planning study](poc/history-2026-10-04-maer-beast-poc.md) is historical provenance, not a purchasing record.
+
 ## One fact, one place
 
 Every fact has exactly one owner. Everywhere else refers to it by ID or link and never restates its value.
@@ -18,6 +22,7 @@ Every fact has exactly one owner. Everywhere else refers to it by ID or link and
 |---|---|
 | Status, priority, who is doing what, next steps, blockers, open questions | Linear issues and project status updates |
 | POC order quantities, vendors, prices, buy links, cart and delivery status | Linear doc [OpenMANET POC — Purchase BOM](https://linear.app/ghostnet-labs/document/openmanet-poc-purchase-bom-ff58aa264535) and [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36) |
+| Expanded networking/controller, channel recovery, monitoring and coexistence requirements | [requirements/maer-capabilities.md](requirements/maer-capabilities.md) |
 | Decisions (D-nnn) and retired or rejected items (R-nn) | [decisions.md](decisions.md) |
 | Track A part selections and rationale (A-nn), mounting, selection risks | [poc/track-a.md](poc/track-a.md) |
 | POC bench wiring, firmware revision, safety rules, arrival checks | [poc/bench-bom-and-topology.md](poc/bench-bom-and-topology.md) |

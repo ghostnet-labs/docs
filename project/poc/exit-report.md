@@ -1,5 +1,10 @@
 # POC exit report (GHO-33) and PCB inputs (GHO-32)
 
+## Expanded capability scope
+
+The current capability contract is [Maer requirements](../requirements/maer-capabilities.md) (D-029 through D-032). This document describes the selected baseline and does not by itself demonstrate the expanded contract. GHO-50 owns POC hardware reconciliation; GHO-55 owns V1 impact and freeze disposition. 
+
+
 **Status: template, no results yet.** The bench hardware is not ordered
 ([GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36)). Fill each row from
 the evidence on the linked issue. A row stays "Not run" until there is a log,
@@ -61,3 +66,7 @@ and a link to the V1 issue that carries it.
 | -- | -- | -- |
 | GW16170 transmit power, current and heat | The bench uses the GW16167 | [GHO-12](https://linear.app/ghostnet-labs/issue/GHO-12) |
 | V1 power path and INA228 telemetry | The bench uses the Waveshare UPS and INA219 | [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10) |
+
+## Expanded acceptance evidence
+
+Include the requirement-to-evidence matrix from [Maer requirements](../requirements/maer-capabilities.md). Link GHO-50 through GHO-54 and GHO-39; record Not run for absent evidence. Baseline two-node results alone cannot close expanded dense-node, radio-concurrency, monitoring or missed-switch qualification. GHO-32 maps each material result to GHO-55 and its affected V1 owners.

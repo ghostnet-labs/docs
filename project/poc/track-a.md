@@ -1,5 +1,10 @@
 # Track A: off-the-shelf POC part selections
 
+## Expanded capability scope
+
+The current capability contract is [Maer requirements](../requirements/maer-capabilities.md) (D-029 through D-032). This document describes the selected baseline and does not by itself demonstrate the expanded contract. GHO-50 owns POC hardware reconciliation; GHO-55 owns V1 impact and freeze disposition. 
+
+
 Wiring, firmware revision, safety rules and arrival checks are in [bench-bom-and-topology.md](bench-bom-and-topology.md). The cross-track comparison is in [../hardware/v1-selections.md](../hardware/v1-selections.md#track-a-versus-track-b).
 
 ## Goal
