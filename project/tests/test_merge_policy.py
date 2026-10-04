@@ -66,7 +66,7 @@ class GateTests(unittest.TestCase):
         self.assertTrue(reviews_clear([review, dict(review, id=2, state="DISMISSED")]))
 
     def test_native_protection_required(self):
-        rules = [{"type": "pull_request"}, {"type": "required_review_thread_resolution"},
+        rules = [{"type": "pull_request", "parameters": {"required_review_thread_resolution": True}},
                  {"type": "required_status_checks", "parameters": {"strict_required_status_checks_policy": True,
                    "required_status_checks": [{"context": GATE, "integration_id": 15368}]}}]
         self.assertTrue(protection_ready(rules))

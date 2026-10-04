@@ -108,7 +108,8 @@ def reviews_clear(reviews):
 def protection_ready(rules):
     types = {r["type"] for r in rules}
     checks = [r for r in rules if r["type"] == "required_status_checks"]
-    return {"pull_request", "required_review_thread_resolution"} <= types and any(
+    pull_requests = [r for r in rules if r["type"] == "pull_request"]
+    return any(r["parameters"].get("required_review_thread_resolution") for r in pull_requests) and any(
         r["parameters"]["strict_required_status_checks_policy"] and
         any(c["context"] == GATE and c.get("integration_id") == 15368
             for c in r["parameters"]["required_status_checks"]) for r in checks)
