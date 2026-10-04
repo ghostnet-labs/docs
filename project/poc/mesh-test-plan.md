@@ -1,5 +1,10 @@
 # Two-node mesh test plan (GHO-31)
 
+## Expanded capability scope
+
+The current capability contract is [Maer requirements](../requirements/maer-capabilities.md) (D-029 through D-032). This document describes the selected baseline and does not by itself demonstrate the expanded contract. GHO-50 owns POC hardware reconciliation; GHO-55 owns V1 impact and freeze disposition. 
+
+
 How to run [GHO-31](https://linear.app/ghostnet-labs/issue/GHO-31) on the two
 bench nodes once both pass the bring-up runbook
 ([bring-up-runbook.md](bring-up-runbook.md) steps 1–3). Results, logs and
