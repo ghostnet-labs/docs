@@ -8,6 +8,7 @@ Newest first. Add new rows at the top. Do not edit past rows except to fix a fac
 
 | ID | Date | Decision | Why, and what it supersedes |
 |---|---|---|---|
+| D-033 | 2026-10-04 | Expose the dedicated CM5 PHY sync signal at an internal test point only; reserve GPIO17 and keep GNSS PPS independent. | Resolves GHO-9’s ambiguous ETH_SYNC_OUT GPIO allocation. CM5 datasheet Release 3 identifies a separate PHY sync pin and RP1 GPIO; their physical identities and net routing are owned by [v1-pinout-and-sequencing.md](hardware/v1-pinout-and-sequencing.md#ethernet-timing-interface). Replaces the unspecified GPIO-or-test-point option in the engineering reference. No software timing capture or PHY sync-input circuit is selected; GHO-9/GHO-13 still require schematic and bench evidence. Accepted by the project owner on 2026-10-04; publication proceeds through a review PR. |
 | D-032 | 2026-10-04 | Reopen compute/carrier and radio allocation as an unrestricted-size/power/cooling POC comparison; record the owner-confirmed expanded contract in [maer-capabilities.md](requirements/maer-capabilities.md). | CM5, CN9130 and DART candidates are evaluated under GHO-50. Existing A/B selections are not silently replaced; GHO-55 reconciles V1 before freeze. Dual-HaLow single-host support remains subject to D-004 and GHO-39; this decision authorizes evaluation of the R-14 option, not a claim that support exists. The earlier planning study is retained only as history. |
 | D-031 | 2026-10-04 | Adopt selective coexistence scheduling after practical shielding/filtering/antenna isolation and channel/power selection; protect control/recovery and voice before bulk traffic. | Owner accepted the tradeoffs discussed in the Maer planning session. Scheduling applies to measured conflicts, not every mesh transmission. GHO-54 owns dense-node evidence, actual radio timing controls, monitoring gaps and fallback; no deterministic mesh-wide timing is presumed. |
 | D-030 | 2026-10-04 | Add independent aircraft and public-safety/aviation receive monitoring, offline EUD presentation and prioritized sharing to the capability contract. | GHO-53 owns exact receiver selection and evidence; this does not freeze an SDR BOM or claim encrypted-call decoding. Details are owned by maer-capabilities.md. |
@@ -41,7 +42,7 @@ Newest first. Add new rows at the top. Do not edit past rows except to fix a fac
 | D-002 | Not recorded (before 2026-09-30) | Track B input protection uses the TPS26633 eFuse with a fixed 32.8 V clamp, with the INA228 shunt after the eFuse. | Supersedes the adjustable overvoltage cutoff and 40 W limit (R-06). |
 | D-001 | Not recorded (before 2026-09-30) | Track B Wi-Fi is the Advantech AIW-170BQ. Track A rejected MT7921-class adapters. | MT7915 and MT7916 are retired for V1 (R-07). MT7921-class adapters lack 802.11s mesh-point support (R-08). |
 
-The next decision takes ID **D-033**. When you add a row, also add a row to Retired and rejected for anything the decision retires, and close or update the Linear issue the decision settles.
+The next decision takes ID **D-034**. When you add a row, also add a row to Retired and rejected for anything the decision retires, and close or update the Linear issue the decision settles.
 
 ## Retired and rejected
 

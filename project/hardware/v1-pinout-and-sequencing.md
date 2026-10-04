@@ -24,6 +24,7 @@ These are CM5 connector pin numbers, not BCM GPIO numbers.
 | GPIO_VREF | 78 |
 | CM5 3.3 V | 84 / 86 |
 | PMIC_Enable / nRPIBOOT | 99 / 93 |
+| Ethernet_SYNC_OUT (dedicated PHY timing pin) | 18 |
 | SCL0 GPIO39 / SDA0 GPIO38 | 80 / 82 |
 
 GPIO signal ownership and physical CM5 connector pin numbers are maintained together in the allocation table below (D-024).
@@ -55,7 +56,7 @@ Allocation decision D-024: GNSS uses UART0 on GPIO14/15; system I2C1 uses GPIO2/
 | 14 | 55 | GNSS_UART_TX | GNSS UART0 TX; physical pin verified |
 | 15 | 51 | GNSS_UART_RX | GNSS UART0 RX; physical pin verified |
 | 16 | 29 | Reserved | Freed: was BT_USB_FAULT_N, and V1 has no Bluetooth (D-026). Unassigned spare |
-| 17 | 50 | ETH_SYNC_OUT | Ethernet timing; physical pin verified; boot/electrical verification open |
+| 17 | 50 | Reserved | Unassigned spare (D-033); no connection to the dedicated PHY timing pin |
 | 18 | 49 | HALOW_RESET_N | HaLow reset; active-low open-drain, physical pin verified; boot/electrical verification open |
 | 19 | 26 | HALOW_WAKE_N | HaLow wake; active-low open-drain, optional; physical pin verified; boot/electrical verification open |
 | 20 | 27 | INA228_ALERT_N | Battery monitor alert; physical pin verified; boot/electrical verification open |
@@ -66,6 +67,12 @@ Allocation decision D-024: GNSS uses UART0 on GPIO14/15; system I2C1 uses GPIO2/
 | 25 | 41 | VLM_USB_FAULT_N | OpenVLM port-3 VBUS switch / downstream overcurrent fault; physical pin verified |
 | 26 | 24 | Reserved | Unassigned; physical pin verified |
 | 27 | 48 | Reserved | Unassigned; physical pin verified |
+
+## Ethernet timing interface
+
+Verified 2026-10-04 against Raspberry Pi CM5 datasheet Release 3, §2.2.2 (printed page 7) and §4.2 Table 4 (printed pages 17–18): Ethernet_SYNC_OUT is the dedicated PHY timing signal on connector pin 18, with 3.3 V signalling and optional input configuration. GPIO17 is a separate RP1 GPIO on connector pin 50; it is not an alternate name or mux for the PHY signal.
+
+D-033 routes connector pin 18 as net ETH_SYNC_OUT to internal test point TP_ETH_SYNC only. Do not connect it to GPIO17 or GNSS_PPS. GPIO17 remains unassigned, with no GPIO consumer, output drive, or timing overlay. GNSS_PPS retains its allocation in the GPIO table above. This preserves a probe point without selecting a PHY-to-GPIO capture circuit. Any future GPIO capture or PHY sync-input circuit needs a separately reviewed allocation, direction, boot-state and driver design. PHY timing-driver support, pulse configuration and waveform measurements are not verified by the connector mapping. GHO-9/GHO-13 retain schematic and bench implementation gates.
 
 ## AW7916-AED M.2 signals
 

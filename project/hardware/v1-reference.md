@@ -141,7 +141,7 @@ ESD: a low-capacitance Gigabit Ethernet ESD device is required near the Ethernet
 
 Chassis: CHASSIS_GND is reserved. Do not connect the Ethernet connector shield directly to digital ground without a deliberate strategy.
 
-Timing: the CM5 PHY supports IEEE 1588-2008 and exposes a 3.3 V SYNC_OUT. ETH_SYNC_OUT is reserved to a CM5 GPIO or test point and is not hard-wired to GNSS PPS.
+Timing: the CM5 PHY supports IEEE 1588-2008 and exposes a dedicated 3.3 V sync interface. D-033 selects an internal test point only; no GPIO capture connection is selected and GNSS PPS stays independent. The physical pin, net and GPIO reservation are owned by [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md#ethernet-timing-interface).
 
 ## 11. Battery pack and charging
 
