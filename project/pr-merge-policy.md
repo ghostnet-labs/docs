@@ -21,7 +21,7 @@ The packages feed currently has no standalone package-build CI. Its code changes
 
 ## Operations
 
-The always-running read-only gate excludes itself to avoid waiting forever. The handler runs after completed PR workflows, when a PR becomes ready or its labels change, and after review updates. It reconciles open same-repository PRs and leaves fork PRs for explicit review. Runtime errors fail the automation rather than silently treating missing evidence as a pass.
+The always-running read-only gate excludes itself to avoid waiting forever. The handler runs after completed PR workflows, when a PR becomes ready or its labels change, and after review updates. A scheduled reconciliation also revisits roughly every 15 minutes, covering external dependency merges and resolved conversations without a local workflow event; GitHub runner delays can postpone it. It reconciles open same-repository PRs and leaves fork PRs for explicit review. Runtime errors fail the automation rather than silently treating missing evidence as a pass.
 
 Strict up-to-date checks can require updating a PR after another merges. This intentionally demands fresh CI against the new base. Merge protections must be installed and verified before the handler will merge anything; workflow YAML alone does not enforce manual merges.
 
