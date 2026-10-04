@@ -107,19 +107,60 @@ The LTC3350 (VIN 4.5 to 35 V, 1 to 4 series cells, step-down CC/CV charging, ste
 
 Charge voltage: the charger is step-down only, and its output ideal diode turns on whenever +VBUS_HOLD falls 65 mV below the stack. If the stack sat above the lowest pack voltage (8.4 V), it would discharge into the load whenever the pack ran low. So the stack is held at **8.0 V, 2.0 V per cell** with the VCAP DAC. That is well under the 2.7 V cell rating, which helps life in a warm sealed enclosure, and the datasheet suggests raising the DAC as cells age to keep stored energy constant (up to about 2.1 V per cell here).
 
-Low-load discharge-floor estimate: 3.5 V on the stack (est.), set by current. At 18 W out the stack supplies 18 / 0.9 / 3.5 = 5.7 A, which matches a 3.2 A charge setting (peak inductor limit is 180 % of charge current, so 5.8 A). Below that the boost cannot hold full load.
+### Source-grounded cell/controller comparison (2026-10-04)
 
-Usable energy = ½C(8.0² − 3.5²) = 25.9 J per farad of stack.
+B-24 remains a candidate architecture. This comparison advances GHO-38/GHO-10; it does not select parts or replace measured load and CAD review.
 
-| Population | Stack C | New | End of life (-20 %) | Covers at 10 s |
-|---|---:|---:|---:|---|
-| 4 x 25 F | 6.25 F | 162 J | 129 J | (b) with reserve, or (a) typical without reserve |
-| 4 x 50 F | 12.5 F | 323 J | 259 J | Low-load sensitivity only; does not cover the revised 25 W gap plus reserve even before a higher current-limited floor |
-| 4 x 100 F | 25 F | 647 J | 517 J | Larger energy candidate; actual discharge floor and current capability must be recalculated |
+**Controller evidence:** [LTC3350 Rev. D](https://www.analog.com/media/en/technical-documentation/data-sheets/ltc3350.pdf), Electrical Characteristics (printed pp4–5), *Setting Input and Charge Currents* (p21), *Low Current Charging and High Current Backup* (p22), *Minimum VCAP Voltage in Backup Mode* (pp24–25), and *Inductor Selection* (pp26–27): charge sense is nominal 32 mV; peak-inductor sense is 51/58/65 mV minimum/typical/maximum, not an average-current specification. At RT = 107 kΩ, frequency minimum is 490 kHz. Step-up maximum-duty capability has an 87% minimum and 93% typical value. Saturation and copper losses require separate checks.
 
-At 25 W out, an assumed 5.8 A stack-current limit would require a floor of at least 25 / (0.9 × 5.8) = 4.79 V, before ESR and margin. The four-50-F bank would then provide only about 256 J new / 205 J at end of life, below the 334 J gap-plus-reserve estimate. At 35 W the same calculation raises the floor to 6.70 V. These conditional calculations use the earlier current estimate, not a verified LTC3350 operating limit; verify the complete boost design from the manufacturer procedure before choosing cells. Do not size solely from the 3.5 V energy table.
+For a conditional 7 V boost, 3.3 µH nominal with −20% inductance, and ±1% sense resistance, ideal continuous-conduction ripple is ΔI = Vcap(1 − Vcap/7)/(L × f). Its maximum below 7 V is 7/(4 × 2.64 µH × 490 kHz) = 1.353 A. Subtracting half this ripple from the minimum peak threshold gives the following **screening ceilings**, before extra saturation, conduction, control/transient and thermal margins:
 
-Size: a 50 F 2.7 V radial cell is about 18 mm diameter x 40 mm (est., typical of Eaton HV, Kyocera AVX SCC and similar); four are about 41 cm³ of cylinder, about 3,000 mm² of board if laid flat. 25 F cells are about 16 x 25 mm (est.), about 1,700 mm² laid flat. Cost class: LTC3350 about $15 to $20 at low quantity, cells $3 to $6 each, FETs, inductor and sense resistors about $5 (all est., check Mouser and DigiKey). Leakage: LTC3350 input quiescent current 4 mA (datasheet), about 50 mW at 12 V, 0.5 % of a 10 W load; supercap leakage is tens of µA per cell after conditioning (est.). The eFuse being off when the radio is off must also cut the LTC3350, so it does not drain a stored pack. Aging: end of life is usually defined as -20 % C or 2x ESR; life roughly halves per 10 C hotter and falls steeply above 2.5 V per cell (est., rule of thumb). The LTC3350 measures C and ESR in circuit, so software can report bridge health.
+| RSNSC candidate | Minimum-threshold peak | Conditional average ceiling | Maximum-threshold peak for component stress |
+|---|---:|---:|---:|
+| 10 mΩ ±1% | 5.050 A | 4.373 A | 6.566 A |
+| 5 mΩ ±1% | 10.099 A | 9.423 A | 13.131 A |
+
+This calculation is an ideal-model inference, not a guaranteed converter rating. The earlier 5.8 A number was nominal peak current and must not be entered as sustainable average current. The ideal duty-only floor is 7 × (1 − 0.87) = 0.91 V, but losses, UVLO and buck regulation headroom raise the real floor; the 3.5 V value below remains unverified. A 5 mΩ choice requires a new inductor/FET/shunt/layout review; the earlier ≥8 A saturation estimate is insufficient against the possible peak. Charge setting would nominally become 6.4 A, so RSNSI/input-power management must restrict recharge while maintaining full-node demand. At 9 A, a 5 mΩ shunt alone dissipates about 0.405 W.
+
+**Cell evidence:** [KYOCERA AVX SCC, TDS-SC-0001 Rev 11](https://datasheets.kyocera-avx.com/AVX-SCC.pdf), printed p2 rating/life tables and p4 drawings: the two 100 F parts below have +30/−10% initial tolerance. Qualification limits use ≥70% capacitance and ≤200% ESR. For conservative screening, combine initial minimum with that retention as 0.9 × 0.7 = 0.63 of nominal C; use twice maximum DC ESR at 5 s, rather than the smaller 1 kHz figure. Those test limits are not a service-life guarantee or cold-temperature bound.
+
+| Candidate population | Series-group nominal C | Whole-bank screening ESR | Maximum single-body envelope D × L | Total body cylinder volume / flat bounding area |
+|---|---:|---:|---:|---:|
+| 4 × SCCV60B107SRB, radial | 100 F | 0.144 Ω | 19 × 62 mm | 70.3 cm³ / 4,712 mm² |
+| 4 × SCCW45B107SSB, solder pin | 100 F | 0.096 Ω | 23 × 47 mm | 78.1 cm³ / 4,324 mm² |
+| 8 × SCCV60B107SRB, four series groups of two parallel cells (4S2P) | 200 F | 0.072 Ω | 19 × 62 mm | 140.6 cm³ / 9,424 mm² |
+
+The last column is calculated from drawing tolerances: sum of cylinders πD²L/4 and flat body rectangles D × L. It excludes leads, vent/mounting clearance, matching/interconnects and power electronics. The eight-cell rectangles already exceed the 138 × 67 mm carrier area (9,246 mm²). An off-board/bracket or stacked enclosure arrangement needs manufacturer CAD and a checked assembly; body volume alone proves no fit.
+
+#### Reproduce the screen
+
+Common assumptions: four series groups, 8 V initial charge, 3.5 V converter terminal minimum, 9.422602974583173 A average screening ceiling from the 5 mΩ case, 90% conversion efficiency excluding bank ESR, ≥10 s full-load gap, and an additional 5 W × 10 s shutdown reserve. All voltage/load/efficiency/reserve assumptions need qualified tolerances or measurements. Wiring/contact ESR is additional.
+
+| Population | Load held for 10 s | Open-circuit bank floor | Available energy | Conservative energy margin including reserve |
+|---|---:|---:|---:|---:|
+| Four radial | 25 W | 4.643 V | 334.2 J | −93.4 J |
+| Four radial | 35 W stress case | 5.484 V | 267.2 J | −307.7 J |
+| Four solder pin | 25 W | 4.262 V | 361.0 J | −35.3 J |
+| Four solder pin | 35 W stress case | 5.032 V | 304.6 J | −226.8 J |
+| Eight radial, 4S2P | 25 W | 4.071 V | 746.9 J | +366.4 J |
+| Eight radial, 4S2P | 35 W stress case | 4.806 V | 644.3 J | +134.6 J |
+
+Negative conservative margin means this worksheet has **not demonstrated** the duration; it need not prove physical failure because the ESR-loss bound is conservative. Positive margin establishes only a conditional desk budget. Four radial cells with the 10 mΩ current assumption have just 120.1 J available at 25 W and no usable 8 V window at 35 W, exposing why the old current assumption must change.
+
+For each row, run the existing worksheet with `--cell-f 100 --stack-esr-ohm 0.144` (four radial), `100 / 0.096` (four solder pin), or `200 / 0.072` (4S2P); other arguments are:
+
+```sh
+python3 project/scripts/bridge_budget.py \
+  --cells 4 --cell-f 200 --capacitance-factor 0.63 --stack-esr-ohm 0.072 \
+  --start-v 8 --terminal-min-v 3.5 --average-current-a 9.422602974583173 \
+  --efficiency 0.9 --load-w 25 --gap-s 10 --shutdown-w 5 --shutdown-s 10
+```
+
+Repeat with `--load-w 35`; this is a capability stress case, not measured consumption. 4S2P uses four monitored series groups, not eight series cells; assembly must qualify current sharing, shorts and balancing behavior.
+
+The SCC voltage/temperature rating is 2.7 V to 65°C or 2.3 V to 85°C. Proposed 2 V cell charge is below both, but external ambient does not establish cell temperature. Cold ESR and effective capacitance, self-heating, enclosure/passive cooling, leakage and lifetime still require characterization for D-028. The datasheet temperature curves are not guaranteed cold maximum ESR values. Preserve normal performance; none of these options closes thermal qualification by throttling.
+
+Next evidence: measured full-node/accessory and shutdown demand (GHO-30), exact minimum initial charge and added path ESR, a derated high-current power stage and guaranteed terminal floor (GHO-10), and matched-cell mounting/clearance/passive thermal CAD (GHO-7/GHO-12). Choose a population only after those gates; no procurement is authorized here.
 
 ### S3. Supercapacitor holdup on +5V_SYS only
 
@@ -149,7 +190,7 @@ Power path with S2: pack pogo contacts → BQ25798 (BAT to SYS) → TVS, Q1 and 
 | eFuse reverse blocking | When the pack is pulled, the TPS26633 and Q1 block reverse current, and the LTC3350 input ideal diode (fast-off at 30 mV reverse) also blocks, so the stack never backfeeds the pogo contacts or the charger. Two blocking stages; keep both. |
 | eFuse UVLO (7.95 V rising, 7.43 V falling) | The eFuse turns off when the pack goes; that is now harmless. On a near-empty pack (8.4 V) the rising threshold, up to 8.3 V across tolerance, leaves little margin, so a refitted near-empty pack may not start. Existing issue, worth a bench check. |
 | Inrush on reinsertion through C_dVdT | The eFuse sees only its own output bulk (47 to 100 µF), not the regulators' input capacitance and never the stack, so the existing 22 nF C_dVdT ramp (5.8 ms, about 55 mA per 25 µF) is unchanged. Load moves back to the input when the eFuse output rises above +VBUS_HOLD. The stack then recharges at the programmed rate. |
-| Stack recharge | RSNSC = 32 mV / 3.2 A = 10 mOhm (est.). Recharge 3.5 to 8.0 V on 12.5 F at 3.2 A takes about 18 s (est.). RSNSI = 32 mV / 5.0 A = 6.4 mOhm sets total input current below the eFuse's 5.17 A minimum limit; the LTC3350 trims charge current to fit (est., check against D-019). A second swap within that time gets a partly charged bridge. |
+| Stack recharge | RSNSC = 32 mV / 3.2 A = 10 mOhm (est.). Recharge timing depends on the selected bank, input budget and minimum charge level; characterize it with the candidate comparison above. RSNSI = 32 mV / 5.0 A = 6.4 mOhm sets total input current below the eFuse's 5.17 A minimum limit; the LTC3350 trims charge current to fit (est., check against D-019). A second swap within that time gets a partly charged bridge. |
 | **Buck EN (change)** | Today both bucks' EN come from the eFuse PGOOD. On pack removal PGOOD falls at 6.59 V and would switch the bucks off while the bridge is still full. EN must come from a divider on +VBUS_HOLD (or PGOOD OR'd with the LTC3350 CAPGD); eFuse PGOOD goes to GPIO 12 POWER_GOOD only. |
 | **Supervisor SVS4 (change)** | SVS4 monitors VBAT_PROTECTED and its fault can pull SYS_PMIC_EN low, which would reset the CM5 on every swap. Move SVS4 to +VBUS_HOLD, or mask it while PFO is low. |
 | Backup regulation point | Set LTC3350 OUTFB so +VBUS_HOLD holds about 7.0 V in backup (est.): above what the 5 V buck needs and the new EN threshold, below any normal pack voltage. |
@@ -169,20 +210,20 @@ Software policy (proposal): on PFO low with PACK_PRESENT gone, enter swap mode; 
 
 ## 5. Recommendation
 
-**Candidate: S2 input-bus backup architecture (B-24), not a frozen LTC3350/cell design.** It can keep both regulated rails supplied across a swap and isolates the eFuse from direct supercapacitor charging. The earlier four-50-F population needs re-sizing under the revised energy/current check above. If volume or current capability does not close, compare a larger bank, a higher-current controller or a separately protected bridge-cell architecture against the same requirement; do not fall back to radios-off operation. Final cell MPN, current capability, thermal/ESR margins and CAD placement remain GHO-38/GHO-10/GHO-7 work.
+**Candidate: S2 input-bus backup architecture (B-24), not a frozen LTC3350/cell design.** It can keep both regulated rails supplied across a swap and isolates the eFuse from direct supercapacitor charging. Use the source-grounded population/current comparison above to advance cell and power-stage sizing. If volume or current capability does not close, compare a larger bank, a higher-current controller or a separately protected bridge-cell architecture against the same requirement; do not fall back to radios-off operation. Final cell MPN, current capability, thermal/ESR margins and CAD placement remain GHO-38/GHO-10/GHO-7 work.
 
 ### BOM additions (all candidates)
 
 | Part | Qty | Notes |
 |---|---:|---|
 | Analog Devices LTC3350EUHF#PBF | 1 | Backup controller, 5 x 7 mm QFN |
-| 50 F 2.7 V radial supercapacitor, about 18 x 40 mm | 4 | Vendor open; match cells from one lot |
+| Supercapacitor population | Open | Exact candidate MPNs and 4S/4S2P tradeoffs are compared above; match and qualify cells |
 | N-MOSFET, 30 V class, low RDS(on) | 4 | Input and output ideal diodes, synchronous top and bottom |
-| Inductor, about 3.3 µH, Isat ≥ 8 A (est.) | 1 | Check against the datasheet design procedure |
+| Inductor | 1 | Nominal 3.3 µH used only for screening; saturation/current/thermal selection must cover the chosen sense threshold, tolerance and ripple |
 | Sense resistors 10 mOhm (RSNSC) and 6.4 mOhm (RSNSI) | 2 | Values est. |
 | Dividers for PFI, OUTFB, buck EN; INTVCC and DRVCC caps | about 10 | |
 
-Board area (est.): about 20 x 25 mm (500 mm²) for the controller and power parts, plus about 3,000 mm² for four 50 F cells laid flat (about 1,700 mm² for 25 F), about 38 % of the 138 x 67 mm board in total. Mounting the cells off-board on a bracket or upright in the enclosure needs CAD (Q-07) and is probably the realistic path.
+Power-electronics placement remains unverified. Use the cell envelopes above for GHO-7 assembly review; any off-board or upright placement needs checked retention, interconnects, clearance and thermal paths.
 
 ### Bench tests
 
