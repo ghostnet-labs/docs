@@ -1,0 +1,233 @@
+{
+  "docs": {
+    "branch": "main",
+    "workflows": [
+      {
+        "path": ".github/workflows/project-record-checks.yml",
+        "paths": null
+      },
+      {
+        "path": ".github/workflows/docs-website.yml",
+        "paths": null
+      }
+    ]
+  },
+  "firmware": {
+    "branch": "24.10",
+    "workflows": [
+      {
+        "path": ".github/workflows/build-pr-bcm2710.yml",
+        "paths": [
+          "boards/ekh-bcm2710/**",
+          "boards/common_extras/**",
+          "patches/ekh-bcm2710/**",
+          "scripts/openmanet_setup.sh",
+          ".github/workflows/build-firmware.yml",
+          ".github/workflows/build-pr-bcm2710.yml",
+          "boards/common/**",
+          "include/kernel*",
+          "package/kernel/**",
+          "target/linux/bcm27xx/**",
+          "feeds.conf.default"
+        ]
+      },
+      {
+        "path": ".github/workflows/build-pr-bcm2711.yml",
+        "paths": [
+          "boards/ekh-bcm2711/**",
+          "boards/common_extras/**",
+          "patches/ekh-bcm2711/**",
+          "scripts/openmanet_setup.sh",
+          ".github/workflows/build-firmware.yml",
+          ".github/workflows/build-pr-bcm2711.yml",
+          "boards/common/**",
+          "include/kernel*",
+          "package/kernel/**",
+          "target/linux/bcm27xx/**",
+          "feeds.conf.default"
+        ]
+      },
+      {
+        "path": ".github/workflows/build-pr-bcm2712.yml",
+        "paths": [
+          "boards/ekh-bcm2712/**",
+          "boards/common_extras/**",
+          "patches/ekh-bcm2712/**",
+          "patches/ekh-bcm2711/**",
+          "scripts/openmanet_setup.sh",
+          ".github/workflows/build-firmware.yml",
+          ".github/workflows/build-pr-bcm2712.yml",
+          "boards/common/**",
+          "include/kernel*",
+          "package/kernel/**",
+          "target/linux/bcm27xx/**",
+          "feeds.conf.default"
+        ]
+      },
+      {
+        "path": ".github/workflows/build-pr-halowlink2.yml",
+        "paths": [
+          "boards/halowlink2/**",
+          "boards/common/**",
+          "boards/common_extras/**",
+          "patches/halowlink2/**",
+          "scripts/openmanet_setup.sh",
+          ".github/workflows/build-firmware.yml",
+          ".github/workflows/build-pr-halowlink2.yml",
+          "include/kernel*",
+          "package/kernel/**",
+          "target/linux/ramips/**",
+          "feeds.conf.default"
+        ]
+      },
+      {
+        "path": ".github/workflows/build-pr-hd01v2.yml",
+        "paths": [
+          "boards/ht-hd01-v2/**",
+          "boards/common/**",
+          "boards/common_extras/**",
+          "patches/ht-hd01-v2/**",
+          "scripts/openmanet_setup.sh",
+          ".github/workflows/build-firmware.yml",
+          ".github/workflows/build-pr-hd01v2.yml",
+          "include/kernel*",
+          "package/kernel/**",
+          "target/linux/ramips/**",
+          "feeds.conf.default"
+        ]
+      },
+      {
+        "path": ".github/workflows/build-pr-venice.yml",
+        "paths": [
+          "boards/venice/**",
+          "boards/common/**",
+          "boards/common_extras/**",
+          "patches/venice/**",
+          "scripts/openmanet_setup.sh",
+          ".github/workflows/build-firmware.yml",
+          ".github/workflows/build-pr-venice.yml",
+          "include/kernel*",
+          "package/kernel/**",
+          "target/linux/imx/**",
+          "feeds.conf.default"
+        ]
+      },
+      {
+        "path": ".github/workflows/kernel.yml",
+        "paths": [
+          ".github/workflows/check-kernel-patches.yml",
+          ".github/workflows/build.yml",
+          ".github/workflows/kernel.yml",
+          "include/kernel*",
+          "package/kernel/**",
+          "target/linux/**"
+        ]
+      },
+      {
+        "path": ".github/workflows/pr-gate.yml",
+        "paths": null
+      },
+      {
+        "path": ".github/workflows/toolchain.yml",
+        "paths": [
+          ".github/workflows/toolchain.yml",
+          "toolchain/**"
+        ]
+      },
+      {
+        "path": ".github/workflows/tools.yml",
+        "paths": [
+          "include/**",
+          "tools/**",
+          ".github/workflows/tools.yml"
+        ]
+      }
+    ]
+  },
+  "openmanetd": {
+    "branch": "main",
+    "workflows": [
+      {
+        "path": ".github/workflows/build-frontend.yml",
+        "paths": [
+          "frontend/**"
+        ]
+      },
+      {
+        "path": ".github/workflows/codeql.yml",
+        "paths": null
+      },
+      {
+        "path": ".github/workflows/test-frontend.yml",
+        "paths": [
+          "frontend/**",
+          ".github/workflows/test-frontend.yml"
+        ]
+      },
+      {
+        "path": ".github/workflows/test-go.yml",
+        "paths": [
+          "**.go",
+          "go.mod",
+          "go.sum",
+          "Makefile",
+          "internal/**",
+          "cmd/**",
+          "proto/**",
+          "sqlc.yaml",
+          "buf.yaml",
+          "buf.gen.yaml",
+          ".github/workflows/test-go.yml"
+        ]
+      }
+    ]
+  },
+  "luci": {
+    "branch": "mm-23.05",
+    "workflows": [
+      {
+        "path": ".github/workflows/build.yml",
+        "paths": null
+      },
+      {
+        "path": ".github/workflows/formal.yml",
+        "paths": null
+      }
+    ]
+  },
+  "OpenVLM": {
+    "branch": "main",
+    "workflows": [
+      {
+        "path": ".github/workflows/codeql.yml",
+        "paths": null
+      },
+      {
+        "path": ".github/workflows/test-go.yml",
+        "paths": [
+          "**.go",
+          "go.mod",
+          "go.sum",
+          "Makefile",
+          "internal/**",
+          "cmd/**",
+          ".github/workflows/test-go.yml"
+        ]
+      }
+    ]
+  },
+  "protobufs": {
+    "branch": "main",
+    "workflows": [
+      {
+        "path": ".github/workflows/buf-ci.yaml",
+        "paths": null
+      }
+    ]
+  },
+  "packages": {
+    "branch": "24.10",
+    "workflows": [],
+    "externalBuild": true
+  }
+}
