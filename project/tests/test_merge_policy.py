@@ -2,7 +2,7 @@ import unittest
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from merge_policy import evaluate, matches, reviews_clear, protection_ready, check_blockers, GATE
+from merge_policy import evaluate, matches, reviews_clear, protection_ready, check_blockers, GATE, terminal_blocker
 
 class GateTests(unittest.TestCase):
     def setUp(self):
@@ -12,6 +12,18 @@ class GateTests(unittest.TestCase):
 
     def evaluate(self, runs, files=None):
         return evaluate(self.profile, files or ["src/main.go"], runs, "current", 7)
+
+    def test_transient_neutral_waits_but_never_passes(self):
+        neutral = dict(self.run, conclusion="neutral")
+        blockers = self.evaluate([neutral])
+        self.assertTrue(blockers)
+        self.assertFalse(any(terminal_blocker(b) for b in blockers))
+        self.assertEqual(self.evaluate([neutral, dict(self.run, id=2)]), [])
+
+    def test_terminal_failures_exit_promptly(self):
+        for outcome in ["failure", "cancelled", "timed_out", "action_required", "skipped"]:
+            self.assertTrue(terminal_blocker("Check test: completed/" + outcome))
+        self.assertFalse(terminal_blocker("Check test: in_progress/None"))
 
     def test_success(self):
         self.assertEqual(self.evaluate([self.run]), [])
