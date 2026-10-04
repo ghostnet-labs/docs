@@ -2,7 +2,7 @@ import unittest
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from merge_policy import evaluate, matches, reviews_clear, protection_ready, GATE
+from merge_policy import evaluate, matches, reviews_clear, protection_ready, check_blockers, GATE
 
 class GateTests(unittest.TestCase):
     def setUp(self):
@@ -73,6 +73,14 @@ class GateTests(unittest.TestCase):
         self.assertFalse(protection_ready(rules[1:]))
         rules[-1]["parameters"]["strict_required_status_checks_policy"] = False
         self.assertFalse(protection_ready(rules))
+
+    def test_external_checks_and_skipped_tests_block(self):
+        check = {"id": 1, "app": {"id": 99}, "name": "External security scan", "status": "completed", "conclusion": "success"}
+        self.assertEqual(check_blockers([check]), [])
+        for changes in [{"status": "in_progress", "conclusion": None}, {"conclusion": "failure"}, {"conclusion": "neutral"}, {"conclusion": "skipped"}]:
+            self.assertTrue(check_blockers([dict(check, **changes)]))
+        self.assertEqual(check_blockers([dict(check, name="Upload ccache cache to s3", conclusion="skipped")]), [])
+        self.assertTrue(check_blockers([dict(check, name="test", conclusion="skipped")]))
 
 if __name__ == "__main__":
     unittest.main()

@@ -94,6 +94,13 @@ def snapshot(api, repo, number, profile):
     files = [f["filename"] for f in api.pages(f"repos/{repo}/pulls/{number}/files")]
     runs = api.pages(f"repos/{repo}/actions/runs?head_sha={pr['head']['sha']}&event=pull_request", "workflow_runs")
     blockers = evaluate(profile, files, runs, pr["head"]["sha"], number)
+    if len(files) != pr["changed_files"]:
+        blockers.append("Incomplete changed-file inventory; cannot establish applicable tests")
+    checks = api.pages(f"repos/{repo}/commits/{pr['head']['sha']}/check-runs", "check_runs")
+    blockers.extend(check_blockers(checks))
+    status = api.call(f"repos/{repo}/commits/{pr['head']['sha']}/status")
+    if status["statuses"] and status["state"] != "success":
+        blockers.append("Commit status has not passed")
     return pr, blockers
 
 
@@ -103,6 +110,23 @@ def reviews_clear(reviews):
         if review["state"] in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}:
             latest[review["user"]["login"]] = review["state"]
     return "CHANGES_REQUESTED" not in latest.values()
+
+
+def check_blockers(checks):
+    latest = {}
+    for check in checks:
+        if check["name"] in {GATE, AUTOMATION}:
+            continue
+        key = (check["name"], check["app"]["id"])
+        if key not in latest or check["id"] > latest[key]["id"]:
+            latest[key] = check
+    blockers = []
+    for check in latest.values():
+        # Explicitly non-test utility jobs skipped by the firmware workflow.
+        allowed_skip = "Upload ccache cache to s3" in check["name"] or "Check packages for ${{ inputs.target }}/${{ inputs.subtarget }}" in check["name"]
+        if check["status"] != "completed" or (check["conclusion"] != "success" and not (check["conclusion"] == "skipped" and allowed_skip)):
+            blockers.append(f"Check {check['name']}: {check['status']}/{check.get('conclusion')}")
+    return blockers
 
 
 def protection_ready(rules):
@@ -130,6 +154,7 @@ def handle(api, repo, number, profile):
         if not api.call(f"repos/{owner}/{name}/pulls/{n}")["merged"]:
             blockers.append("Unmerged dependency: " + dependency)
     checks = api.pages(f"repos/{repo}/commits/{pr['head']['sha']}/check-runs", "check_runs")
+    blockers.extend(check_blockers(checks))
     gates = [c for c in checks if c["name"] == GATE and c["app"]["id"] == 15368]
     if not gates or max(gates, key=lambda c: c["id"])["conclusion"] != "success":
         blockers.append("Current-head Manet merge gate has not passed")
