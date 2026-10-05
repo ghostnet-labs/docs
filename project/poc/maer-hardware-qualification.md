@@ -21,6 +21,10 @@ Sources were reviewed on 2026-10-04 America/Denver (2026-10-05 UTC). Documentati
 
 The slot power result is an engineering inference from the published schematic and regulator/radio specifications, not a measurement of the currently shipping carrier. Obtain its actual revision and assembly/BOM before treating Rev 2.1 as definitive.
 
+### Pinned image USB mapping boundary
+
+The USB findings above describe the cited Linux mainline DTS. Our current [OpenWrt target DTS at firmware revision d994d3b6e8871ce518b15f9bac14699ee859b285](https://github.com/ghostnet-labs/firmware/blob/d994d3b6e8871ce518b15f9bac14699ee859b285/target/linux/mvebu/files-6.6/arch/arm64/boot/dts/marvell/cn9130-clearfog-pro.dts) instead describes `cp0_usb3_0` as slot USB2-only and `cp0_usb3_1` as Type A SuperSpeed. The target exists in the current fork, but controller names/UTMI routing cannot be transferred between these source descriptions without reconciliation. [GHO-65](https://linear.app/ghostnet-labs/issue/GHO-65), under GHO-58, owns comparison of controller/register definitions, bootloader lane configuration and the shipping schematic, followed by target `lsusb -t` and mixed-load verification. This discrepancy is not proof of a hardware fault. Keep controller-specific wiring conditional on the selected image's verified topology.
+
 ## Candidate wiring that reduces the known risks
 
 1. **Two concurrent Wi-Fi modules:** evaluate two mini-PCIe AW7916-NPD cards in CON2 and CON3, rather than adapting M.2 AW7916-AED cards. Each module advertises dual-band concurrency; exact independent 2.4/5 GHz operation and AP/mesh interface combinations must be tested. This is a candidate for the expanded all-band requirement, not a silent replacement of the component register. Marketing mentions of three bands do not establish three simultaneously independent PHYs.
