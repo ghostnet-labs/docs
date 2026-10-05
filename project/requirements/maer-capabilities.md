@@ -35,7 +35,7 @@ Acceptance includes missed announcements, multiple missed switches, cold boot, H
 
 ## 4. Networking hardware exploration
 
-[GHO-50](https://linear.app/ghostnet-labs/issue/GHO-50) owns the expanded compute/radio comparison and procurement reconciliation.
+[GHO-50](https://linear.app/ghostnet-labs/issue/GHO-50) owns the expanded compute/radio comparison and procurement reconciliation. [Candidate integration and qualification](../poc/maer-hardware-qualification.md) supplies the source audit, fixture and procedures; candidate part identities are in [Track A](../poc/track-a.md#expanded-candidate-register). Publication and offline feasibility do not close physical gates.
 
 | Candidate experiment | Boundary |
 |---|---|
