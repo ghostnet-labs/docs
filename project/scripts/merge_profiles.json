@@ -141,6 +141,13 @@
           "tools/**",
           ".github/workflows/tools.yml"
         ]
+      },
+      {
+        "path": ".github/workflows/hardware-qualification.yml",
+        "paths": [
+          "scripts/hardware-qualification/**",
+          ".github/workflows/hardware-qualification.yml"
+        ]
       }
     ]
   },

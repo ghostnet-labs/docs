@@ -41,6 +41,20 @@ This register owns which part fills each function and why. Every row is Selected
 
 **Software.** The OpenMANET firmware tree (OpenWrt 24.10, Morse 2.x drivers) plus the CM5 board target ekh-bcm2712 from the ghostnet-labs/firmware fork (D-021). Hardware validation is tracked in [GHO-28](https://linear.app/ghostnet-labs/issue/GHO-28).
 
+## Expanded candidate register
+
+These rows are **Candidate**, not Selected. They support the D-032 comparison and do not replace the baseline above. [Candidate integration and qualification](maer-hardware-qualification.md) owns wiring/source evidence and procedures; GHO-50 owns selection/qualification, GHO-57 exact SKU/environment/sourcing, and GHO-36 plus the Purchase BOM own all orders/prices/quantities.
+
+| ID | Function | Candidate | Rationale / qualification boundary |
+|---|---|---|---|
+| A-22 | Networking compute | SolidRun CN9130 SoM | Separate carrier networking paths; exact grade/clock/RAM/eMMC and full workload remain gated by GHO-57/GHO-61. No new production compute selected. |
+| A-23 | CN9130 carrier | SolidRun ClearFog CN9130 Pro | Two documented PCIe x1 slots, SATA, USB and native high-speed Ethernet; shipping revision/power and image integration remain GHO-56/GHO-58. |
+| A-24 | Expanded DBDC Wi-Fi | AsiaRF AW7916-NPD, mini-PCIe MT7916 | Avoids an M.2 adapter for the Pro slots. [Manufacturer specification](https://asiarf.com/product/wi-fi-6e-mini-pcie-module-mt7916-aw7916-npd/) requests 3.3 V/3 A supply; published -10°C minimum does not establish required cold operation. Two-card four-PHY modes/power/environment require GHO-56/57/58. Not a replacement of V1 B-03. |
+| A-25 | Alternative compute | Variscite DART-MX8M-PLUS | Auxiliary M7/NPU may help only workloads integrated for them; A53 application workload capacity must be measured under GHO-61. |
+| A-26 | DART carrier | Variscite Sonata | DART integration candidate; bus/radio/receiver topology remains in GHO-50. Do not confuse this platform with the older MX95 study. |
+| A-27 | Scanner receiver | SDRplay RSPduo | Independent dual capture is useful but limited in usable simultaneous bandwidth; GHO-60 maps actual systems and qualifies API/ARM64 dependencies. Not a frozen receiver BOM. |
+| A-28 | CM5 comparison carrier | Raspberry Pi official Compute Module 5 IO Board | Controlled CM5 comparison baseline for D-032; the existing A-02 bench is a distinct configuration and must be labeled separately in results. |
+
 ## Physical notes
 
 - The CM5 plugs directly into the CM5-IO-WIRELESS-BASE. The GW17032 mounts in the included Mini-PCIe adapter on the carrier. The GW16167 mounts on the Pier42 carrier, which connects to a Waveshare USB 2.0 port through the Adafruit 4472 cable. The SAM-M10Q mounts on short standoffs near the edge or top of the assembly and connects through the carrier's GPIO terminals after the pinout is verified.
