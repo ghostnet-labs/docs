@@ -19,13 +19,13 @@ This register owns which part fills each function and why. Every row is Selected
 |---|---|---|---|
 | A-01 | Compute | Raspberry Pi CM5 Wireless, 4 GB RAM, 16 GB eMMC (CM5104016 / SC1594) | The wireless variant is kept as a spare service access point, not the main mesh radio. |
 | A-02 | Carrier | Waveshare CM5-IO-WIRELESS-BASE, 145 x 90 mm (SKU 34618) | CM5 socket, Gigabit Ethernet, M.2 B-key with an included Mini-PCIe adapter, M.2 M-key, USB 3.2, two USB 2.0 ports plus a USB 2.0 header, RTC holder, GPIO terminal, fan header, and 7 to 36 V input. The size is acceptable because Track A prioritizes testability. Sold directly by Waveshare. |
-| A-03 | CM5 service antenna | Raspberry Pi Compute Module 4/5 Antenna Kit (SC0480) | Optional external antenna for the CM5 wireless variant. Install it only if the CM5 radio is used, and set dtparam=ant2. The main mesh Wi-Fi remains the GW17032. |
+| A-03 | CM5 service antenna | Raspberry Pi Compute Module 4/5 Antenna Kit (SC0480) | Optional external antenna for the CM5 wireless variant. Install it only if the CM5 radio is used, and set dtparam=ant2. The main mesh Wi-Fi remains the AW7916-AED (A-09). |
 | A-04 | HaLow radio | Gateworks GW16167, Morse Micro MM8108, M.2 2230 E-key, up to 26 dBm | Same second-generation MM8108 family and supported Morse software path as the Track B GW16170, and orderable from distribution. Worst-case RF, GNSS, and thermal testing must be repeated with the GW16170 before Track B is frozen. Gateworks marketplace shipping is a separate $42. |
 | A-05 | HaLow carrier | Pier42 NGFF M.2 Simple Carrier A/E-Key, configured for E-key / 2230 | USB-connected carrier that lets the GW16167 attach to the CM5 carrier over USB 2.0. The price is converted from EUR and shipping is not included. |
 | A-06 | Internal HaLow USB link | Adafruit 4472, USB-A to USB-C, 6 in (1 plus 1 spare) | Short USB 2.0 link from a Waveshare USB-A port to the Pier42 USB-C port. Verify there is no brownout during HaLow transmit. |
 | A-07 | HaLow pigtail | GCT CAB724RF-0150-00-A-1, MMCX right-angle plug to SMA female bulkhead, RG178, 150 mm (1 plus 1 spare) | Matches the GW16167 MMCX port and keeps the card on a 900 MHz antenna path. |
 | A-08 | HaLow antenna | Pulse W1063M, 868 to 928 MHz SMA-male whip (1 plus 1 spare) | The spare covers RF damage and debugging. |
-| A-09 | Wi-Fi radio | Gateworks GW17032 / Compex WLE900VX, Mini-PCIe 3x3 Wi-Fi 5, QCA9880, ath10k | Gateworks recommends and has tested the WLE900VX for 802.11s mesh. It was meant to mount in the carrier's included Mini-PCIe adapter, but that adapter sits on the USB-only B-key slot, so the card can't work there ([bench-bom-and-topology.md §4.1](bench-bom-and-topology.md)). The replacement is the open decision on [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36). It is end of life with remaining stock, so it is a deliberate POC-only part and not a Track B candidate. Marketplace shipping applies. |
+| A-09 | Wi-Fi radio | AsiaRF AW7916-AED, MediaTek MT7916 Wi-Fi 6E, mt7915e, M.2 3052 A+E key, 3 x IPEX, on a Sintech M.2 M-key to A/E-key adapter | The V1 card (B-03), so the POC runs the shipped dual-radio software path and the V1 card's bench gate ([GHO-37](https://linear.app/ghostnet-labs/issue/GHO-37)). It goes in the carrier's M-key slot, the only one with PCIe ([bench-bom-and-topology.md §4.1](bench-bom-and-topology.md)). Replaces the GW17032 (D-034, R-22). The 30 x 52 mm card overhangs the adapter's 2230 mount, so support its far end. Up to 10 W from the carrier's 3.3 V. |
 | A-10 | Wi-Fi pigtails | Digi JF1R6-CR3-6I, U.FL to RP-SMA female bulkhead, 6 in (3 plus 1 spare) | The card is 3x3 with three U.FL ports. The pigtails move all antennas outside the POC box and keep them movable. |
 | A-11 | Wi-Fi antennas | Data Alliance ADD5RA, dual-band 2.4/5 GHz 5 dBi RP-SMA-male (3 plus 1 spare) | Keep placement movable during GPS coexistence tests. |
 | A-12 | GPS | SparkFun GPS Breakout, chip antenna, SAM-M10Q, Qwiic (GPS-21834) | UART GNSS with a built-in SAW filter and LNA. Small, needs no USB port, and uses four short 3.3 V UART wires. |
@@ -57,7 +57,7 @@ These rows are **Candidate**, not Selected. They support the D-032 comparison an
 
 ## Physical notes
 
-- The CM5 plugs directly into the CM5-IO-WIRELESS-BASE. The GW17032 mounts in the included Mini-PCIe adapter on the carrier. The GW16167 mounts on the Pier42 carrier, which connects to a Waveshare USB 2.0 port through the Adafruit 4472 cable. The SAM-M10Q mounts on short standoffs near the edge or top of the assembly and connects through the carrier's GPIO terminals after the pinout is verified.
+- The CM5 plugs directly into the CM5-IO-WIRELESS-BASE. The AW7916-AED mounts on its M-key adapter in the carrier's M.2 M-key slot. The GW16167 mounts on the Pier42 carrier, which connects to a Waveshare USB 2.0 port through the Adafruit 4472 cable. The SAM-M10Q mounts on short standoffs near the edge or top of the assembly and connects through the carrier's GPIO terminals after the pinout is verified.
 - The 145 x 90 mm carrier is the primary mounting platform. The Pier42 carrier and the SAM-M10Q sit adjacent to it or on standoffs with short, strain-relieved cables, and the Waveshare UPS goes underneath or beside it. All antennas stay movable for RF and GNSS coexistence tests.
 - Track A does not target MPU5-class packaging.
 
@@ -82,7 +82,7 @@ Moved from the BOM sheet's "Mounting & Enclosure" and "Physical Audit" tabs. Rec
 | 1 | Waveshare CM5-IO-WIRELESS-BASE (A-02) | Primary board on M2.5 standoffs inside the Bud box | The 145 x 90 mm carrier drives the enclosure footprint. Keep USB, Ethernet, GPIO terminal and RTC access reachable. | Dry-fit |
 | 2 | CM5 module and optional cooler (A-01) | CM5 mounts on the carrier; cooler only if the thermal test needs it | Test bare first if height is tight. Track B should use enclosure conduction instead of a tall heatsink if possible. | Measure |
 | 3 | GW16167 on Pier42 carrier (A-04, A-05) | Pier42 board mounted separately on nylon standoffs; short USB-A to USB-C cable to the carrier | Strain-relieve the USB cable and MMCX pigtail. Keep away from the GPS if possible. | Dry-fit |
-| 4 | GW17032 / WLE900VX (A-09) | Waveshare's included Mini-PCIe adapter | Attach all three U.FL pigtails before transmit. Strain-relieve the pigtails near the card. | Dry-fit |
+| 4 | AW7916-AED (A-09) | Sintech M-key to A/E-key adapter in the carrier's M.2 M-key slot; standoff under the card's far end | Attach all three IPEX pigtails before transmit. Strain-relieve the pigtails near the card. | Dry-fit |
 | 5 | HaLow SMA bulkhead (A-07) | GCT MMCX-to-SMA pigtail through the enclosure wall | Drill after radio placement. Keep the bend radius gentle and avoid pulling on the MMCX. | Pending holes |
 | 6 | Wi-Fi RP-SMA bulkheads (A-10) | Three U.FL-to-RP-SMA bulkheads through the enclosure wall | Spread antennas for testing; final placement depends on GPS C/N0 data. | Pending holes |
 | 7 | SAM-M10Q GPS breakout (A-12) | Small standoffs or adhesive mount, antenna face skyward | Far corner from the HaLow whip (D-020). | Dry-fit |
@@ -99,7 +99,7 @@ Moved from the BOM sheet's "Compatibility Review" tab.
 |---|---|
 | Carrier (A-02) | Large for a product; Track B uses a custom carrier. |
 | HaLow (A-04, A-05) | Power and current under transmit must be measured. |
-| Wi-Fi (A-09) | EOL and not a Track B candidate; buy and verify quickly. |
+| Wi-Fi (A-09) | Adapter fit with a 3052 card, IPEX connector type vs the A-10 pigtails, and 10 W draw on the carrier's 3.3 V are unverified until arrival. |
 | Wi-Fi antennas (A-10, A-11) | Never transmit with a missing antenna; strain-relieve the pigtails. |
 | GPS (A-12) | RF coexistence must be measured near HaLow and Wi-Fi. |
 | Power (A-14, A-15) | USB-C behavior and run time need bench verification. |

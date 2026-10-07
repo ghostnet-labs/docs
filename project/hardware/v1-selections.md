@@ -77,7 +77,7 @@ Differences are acceptable for a POC unless a row says otherwise. Track A feeds 
 | Item | Track A | Track B | Resolution |
 |---|---|---|---|
 | CM5 SKU | 4 GB / 16 GB eMMC, wireless (A-01) | 8 GB / 32 GB eMMC, no wireless (B-01) | Acceptable for a POC. The Track B SKU is chosen later. |
-| Wi-Fi radio | GW17032 / WLE900VX Mini-PCIe 3x3 Wi-Fi 5, QCA9880, ath10k (A-09) | AW7916-AED M.2 3052 Wi-Fi 6E, MT7916, mt7915e (B-03) | Track A uses a card that Gateworks has tested for 802.11s. Track B must still show a mesh link on the bench ([GHO-37](https://linear.app/ghostnet-labs/issue/GHO-37)). |
+| Wi-Fi radio | AW7916-AED on an M-key adapter (A-09, D-034) | AW7916-AED M.2 3052 Wi-Fi 6E, MT7916, mt7915e (B-03) | Same card. The POC bench runs the V1 card's mesh gate ([GHO-37](https://linear.app/ghostnet-labs/issue/GHO-37)); V1 still has to prove its own socket, power and antennas. |
 | HaLow radio | GW16167 through the Pier42 USB carrier (A-04, A-05) | GW16170 high-power MM8108-M20 in a native M.2 E-key slot (B-02) | Same MM8108 family and software path. Repeat high-power RF, GNSS, and thermal testing with the GW16170 before Track B is frozen. |
 | Power source | Waveshare 3S UPS, 5 V output, three M35A cells, about 37 Wh (A-14, A-15) | Custom 3S2P pack, 9 to 12.6 V, about 75.6 Wh, charged over USB-C (B-11) | Same cell baseline. Measure Track A run time and regulator losses before resizing the Track B pack. |
 | System power | About 10 W typical (estimate) | 35 W design capability target, not expected consumption | Measure in Track A, then resize ([GHO-30](https://linear.app/ghostnet-labs/issue/GHO-30) then [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10)). |

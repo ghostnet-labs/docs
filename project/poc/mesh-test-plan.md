@@ -27,7 +27,7 @@ Facts from openmanetd (`internal/network/uci_wireless.go`,
 - The secondary link defaults to channel 8, HE40, SAE, `mesh_rssi_threshold -80`, `mcast_rate 24000`. It is meant to be faster than HaLow at short range, not to add range.
 - `bat0` sits in the `br-ahwlan` bridge with the Ethernet ports. A mesh-gate advertises `gw_mode server`, a mesh-point `client`.
 - Multicast: `bat0 multicast_mode 0` by default (batman floods all multicast). ATAK SA is 239.2.3.1, ATAK chat 224.10.10.1, voice talk groups 239.192.41.1:38801–38864.
-- The wizard only offers the Wi-Fi backhaul on an MT7915/MT7916 radio. With the AW7916-AED fitted it is the real software path. With an ath10k card (GW17032) it isn't offered, and the secondary link has to be written by hand (Appendix A), which tests the radios but not the shipped software.
+- The wizard only offers the Wi-Fi backhaul on an MT7915/MT7916 radio. The POC uses the AW7916-AED (MT7916, D-034), so this is the real software path. Appendix A is only a fallback if a non-MediaTek card has to stand in; it tests the radios but not the shipped software.
 
 ## Setup (both nodes)
 
@@ -70,7 +70,7 @@ output, `logread`, and `dmesg`.
 - With only two nodes, there is no multi-hop routing. A third node is on [GHO-40](https://linear.app/ghostnet-labs/issue/GHO-40).
 - POC radios aren't V1 radios: GW16167 vs GW16170 transmit power ([bench-bom-and-topology.md](bench-bom-and-topology.md) §1).
 
-## Appendix A: secondary link by hand (ath10k only)
+## Appendix A: secondary link by hand (fallback, non-MediaTek card)
 
 Use this only if the Wi-Fi card is not MT7915/MT7916. It writes the same
 option set the wizard uses, after the wizard has finished with no Wi-Fi
