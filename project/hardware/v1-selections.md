@@ -53,7 +53,7 @@ VBAT_PROTECTED feeds an LM76005 5 V buck (+5V_SYS for the CM5 and USB, including
 ## PCB and thermal approach
 
 - Eight-layer stackup. The final stackup and impedance rules come from the chosen fabricator. Controlled impedance is required for PCIe, USB, Ethernet, and RF lines.
-- Thermal operating requirement and permitted cooling strategy are D-028; qualification remains under GHO-12. Fanless, with the enclosure acting as the heat spreader: the CM5 couples to the shell through a thermal interface, and the power converters couple to the chassis through copper pours and thermal vias.
+- Thermal operating requirement and permitted cooling strategy are D-028; qualification remains under GHO-12. Fanless, with the enclosure acting as the heat spreader and external fins on the lid (D-035): the CM5 and the Wi-Fi card couple to the lid through thermal interface pads, and the power converters couple to the chassis through copper pours and thermal vias.
 - Top side: CM5, both M.2 slots, GNSS, Ethernet, and RF connectors. Bottom side: converters, INA228, protection, load switches, supervisor, and test pads.
 - Power sits in a concentrated island of about 45 x 25 mm in the lower middle. No inductors, regulators, or tall parts go under the CM5, which has about 2.5 mm of underside clearance. Switching power should not sit under RF modules.
 - The module footprints (CM5, the 30 x 22 mm HaLow card and the 30 x 52 mm Wi-Fi card) total about 4,420 mm2, roughly 48 percent of 138 x 67 mm. The real constraints are RF connector placement, antenna separation, keepouts, M.2 clearances, the Ethernet and battery connectors, inductors, thermal copper, mounting holes, and enclosure walls.
