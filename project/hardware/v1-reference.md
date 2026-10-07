@@ -245,7 +245,7 @@ The per-load peak estimate for the 3.3 V rail is HaLow 1.0 A, Wi-Fi 3.03 A (the 
 
 ## 15. Fanless thermal strategy
 
-- Aluminum enclosure as heat spreader, with a thermal interface from the CM5 to the enclosure
+- Aluminum enclosure as heat spreader, with external fins on the lid and thermal interface pads from the CM5 and the Wi-Fi card to the lid (D-035)
 - Copper thermal areas and thermal vias, with power converters coupled through copper pours and vias to the chassis
 - A concentrated power island, kept away from GNSS and RF
 - No fan and no switching regulators beneath RF modules
