@@ -41,7 +41,7 @@ Two scripts run on the node; copy them over with `scp` once SSH works:
 
 Power off between each addition, fit antennas first, then:
 
-1. The Wi-Fi card in the M.2 M-key slot through its adapter, with all three antennas (the B-key Mini-PCIe adapter has no PCIe; see bench-bom-and-topology.md §4.1). Check `lspci` lists it.
+1. The AW7916-AED in the M.2 M-key slot on its Sintech adapter, with all three antennas (the B-key Mini-PCIe adapter has no PCIe; see bench-bom-and-topology.md §4.1). Check `lspci` lists it.
 2. Pier42 + GW16167 on a carrier USB-A port, W1063M on the HaLow port.
 3. SAM-M10Q on its Serial Basic in another USB-A port. PPS goes to terminal "18" and GND to the GND terminal (connections 8 and 8a). Put the GNSS where it sees the sky.
 
@@ -56,7 +56,7 @@ Paste the output on [GHO-29](https://linear.app/ghostnet-labs/issue/GHO-29). For
 | FAIL | First look |
 | -- | -- |
 | no morse netdev | `lsusb` (Morse Micro device?), `dmesg \| grep -i morse` (firmware load), USB cable seated, Pier42 3.3 V. |
-| no ath10k netdev | `lspci` (QCA988x?), `dmesg \| grep ath10k` (firmware or board file). |
+| no Wi-Fi netdev | `lspci` (MT7916, 14c3:7906?), `dmesg \| grep mt7915` (firmware load). Check the 3.3 V rail if the card isn't listed. |
 | gpsd device missing | `dmesg \| grep ch341`; `uci get gpsd.core.device` should be `/dev/ttyUSB0`. |
 | `/dev/pps0` missing | `dtoverlay=pps-gpio` in the boot partition's `config.txt`, `lsmod \| grep pps`. |
 | no INA219 hwmon | `logread -e ina219-ups`. Find the i2c-gpio bus with `ls /sys/bus/i2c/devices/` and run `i2cdetect -y <n>`; expect 0x41. No device usually means missing pull-ups or swapped SDA/SCL (terminals 22/27). |
