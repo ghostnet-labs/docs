@@ -36,7 +36,7 @@ Status words are defined in [../README.md](../README.md). Open parts are tracked
 | B-15 | Input eFuse | TI TPS26633RGER (limit 5.56 A, UVLO 7.4 to 8.0 V, fixed 32.8 V overvoltage clamp) | Selected. Values calculated, verify on the bench (see D-019). |
 | B-16 | Reverse polarity | TI CSD19533Q5A | Candidate. Topology to verify. |
 | B-17 | TVS | Diodes Inc. SMBJ33CA | Candidate. Depends on the pack and charging input. |
-| B-18 | 5 V and 3.3 V bucks | TI LM76005 x 2 (about 2 A and 4.5 A allocations) | Selected. The 3.3 V allocation was raised to 4.5 A at 3.39 V for the AW7916-AED (D-026, [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10), [v1-3v3-rail.md](v1-3v3-rail.md)). 5 V sizing still pending Track A power data. |
+| B-18 | 5 V and 3.3 V bucks | TI LM76005 x 2 (2.5 A and 4.5 A allocations) | Selected. The 3.3 V allocation was raised to 4.5 A at 3.39 V for the AW7916-AED (D-026, [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10), [v1-3v3-rail.md](v1-3v3-rail.md)). The 5 V allocation is 2.5 A, the CM5 maximum from its datasheet §B.3; the USB accessory load on top is still pending. |
 | B-19 | Radio load switches | TI TPS22975DSGT x 2 (WIFI_PWR_EN and HALOW_PWR_EN) | Selected. |
 | B-20 | Supervisor | TI TPS386000RGPR (four rails, watchdog, PMIC_Enable recovery) | Selected. Bench-test recovery. |
 | B-21 | RF connectors | MMCX (HaLow), 3 x IPEX on the Wi-Fi card (type to confirm on arrival), GNSS active antenna connector | GNSS connector open ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)). |
