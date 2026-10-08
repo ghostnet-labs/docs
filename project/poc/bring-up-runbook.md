@@ -80,7 +80,8 @@ Sources available on the bench:
 | Battery current | UPS INA219 | `curr1_input` | mA | Uses the 10 mΩ shunt from `/etc/config/ups`; check the sign on charge and discharge. |
 | Battery power | UPS INA219 | `power1_input` | µW | |
 | SoC temperature | CM5 | `/sys/class/thermal/thermal_zone0/temp` | m°C | |
-| Undervoltage / throttling | CM5 firmware | `vcgencmd get_throttled` | bit flags | `vcgencmd` isn't in the image; the logger writes `na`. |
+| Undervoltage / throttling | CM5 firmware | `vcgencmd get_throttled` | bit flags | From `bcm27xx-utils` (pinned in the ekh-bcm2712 image for GHO-30). Without `vcgencmd` the logger writes `na`. |
+| 5 V input, core rail | CM5 PMIC | `vcgencmd pmic_read_adc` | V, A | Logged as `ext5v_v` (EXT5V_V), `core_v` (VDD_CORE_V) and `core_a` (VDD_CORE_A); `na` without `vcgencmd`. EXT5V_V is the CM5 5 V input from the carrier. |
 | 5 V input current | USB-C power meter | Read by eye or photo | A, W | Between UPS and carrier. |
 | Radio TX activity | netdev counters | `/sys/class/net/<if>/statistics/tx_bytes` | bytes | Lines up power steps with traffic. |
 
