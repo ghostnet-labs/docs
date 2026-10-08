@@ -235,6 +235,8 @@
   "packages": {
     "branch": "24.10",
     "workflows": [],
-    "externalBuild": true
+    "externalBuild": true,
+    "externalBuildRepo": "ghostnet-labs/firmware",
+    "externalBuildPinPath": "feeds.conf.default"
   }
 }
