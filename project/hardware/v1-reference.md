@@ -131,7 +131,7 @@ Consequences: the feed-through has no magnetics. The board carries a discrete fo
 - No logic-ground pins. The header is on the MDI side of the 1500 Vrms isolation barrier, so any extra pins are chassis or shield only.
 - Untwist each pair 10 mm or less at the header and 13 mm or less at the plug.
 - Pair-to-pair skew is not critical (1000BASE-T allows 50 ns).
-- PCB routing is 100 ohm differential, with intra-pair length matched to about 1 mm.
+- PCB routing is 100 ohm differential, with P and N in each pair length-matched within 0.15 mm ([CM5 datasheet](https://datasheets.raspberrypi.com/cm5/cm5-datasheet.pdf) §2.2). Matching between pairs is not needed while they differ by less than 50 mm.
 
 Magnetics part: not yet selected.
 
@@ -199,7 +199,7 @@ A small signal FET (Q2) is also required from B_GATE to IN_SYS, driven by DRV, a
 
 ### 5 V buck: TI LM76005
 
-5.0 V, about 2 A initial allocation (about 10 W), synchronous buck, 3.5 to 60 V input, 5 A class capability retained for margin and transients. Calculated starting values, from the LM76005 datasheet (SNVSBK5A) and an 8 to 33 V input range:
+5.0 V, 2.5 A allocation (about 12.5 W) for the CM5 alone, which the [CM5 datasheet](https://datasheets.raspberrypi.com/cm5/cm5-datasheet.pdf) §B.3 says can draw up to 2.5 A at 5 V. The switched USB VBUS load for the OpenVLM accessory comes on top and is still to be sized ([GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10), [GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)). Synchronous buck, 3.5 to 60 V input, 5 A class capability retained for margin and transients. Calculated starting values, from the LM76005 datasheet (SNVSBK5A) and an 8 to 33 V input range:
 
 Output setting: V_FB is 1.006 V typical (0.987 to 1.017 V). R_FBT = 100 kOhm and R_FBB = 24.9 kOhm give 5.05 V (4.95 to 5.10 V across the reference tolerance). Use 1 percent resistors of 100 ppm/C or better.
 
@@ -207,7 +207,7 @@ Switching frequency: 400 kHz, with the RT pin left open (the default; 99.6 kOhm 
 
 Inductor: 6.8 µH. Ripple is 1.1 A peak to peak at 12.6 V and 1.6 A at 33 V, which is 22 to 31 percent of 5 A. The saturation current must exceed the high-side current limit of 6.0 to 7.8 A, so select 8 A or higher (the earlier 6 A figure is too low), with low DCR and a shielded body.
 
-Input capacitors: 2 x 4.7 µF 100 V X7R plus 47 nF at PVIN, as in the datasheet example. Input ripple is about 0.15 V at 2 A and 12 V with 8 µF effective. Add 47 to 100 µF of bulk capacitance on the eFuse output.
+Input capacitors: 2 x 4.7 µF 100 V X7R plus 47 nF at PVIN, as in the datasheet example. Input ripple is about 0.19 V at 2.5 A and 12 V with 8 µF effective. Add 47 to 100 µF of bulk capacitance on the eFuse output.
 
 Output capacitors: start with 3 x 47 µF 10 V X7R, as in the datasheet example, and confirm loop stability and the CM5 load step on the bench (the datasheet table lists 180 µF at 400 kHz). Add a 47 pF C0G feedforward capacitor across R_FBT.
 
@@ -233,9 +233,9 @@ Multi-rail supervision plus watchdog. Rails: SVS1 = CM5_3V3, SVS2 = +5V_SYS, SVS
 
 Initial design allocation:
 
-- \+5V_SYS: 2 A, about 10 W
+- \+5V_SYS: 2.5 A, about 12.5 W (CM5 maximum, CM5 datasheet §B.3; USB accessory load still to add)
 - \+3V3_RADIO: 4.5 A, about 15.3 W at 3.39 V ([v1-3v3-rail.md](v1-3v3-rail.md))
-- Combined: about 25.3 W output, about 28 W input at 90 percent efficiency (3.5 A at 8 V)
+- Combined: about 27.8 W output, about 30.9 W input at 90 percent efficiency (3.9 A at 8 V)
 - System capability target: about 35 W, which is about 4.4 A at 8 V
 - The input path should support at least about 5 A continuous at low battery voltage; the initial eFuse current limit is about 5.5 A
 
@@ -245,7 +245,7 @@ The per-load peak estimate for the 3.3 V rail is HaLow 1.0 A, Wi-Fi 3.03 A (the 
 
 ## 15. Fanless thermal strategy
 
-- Aluminum enclosure as heat spreader, with a thermal interface from the CM5 to the enclosure
+- Aluminum enclosure as heat spreader, with external fins on the lid and thermal interface pads from the CM5 and the Wi-Fi card to the lid (D-035)
 - Copper thermal areas and thermal vias, with power converters coupled through copper pours and vias to the chassis
 - A concentrated power island, kept away from GNSS and RF
 - No fan and no switching regulators beneath RF modules

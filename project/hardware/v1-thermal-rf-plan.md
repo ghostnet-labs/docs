@@ -3,13 +3,14 @@
 **Owner:** [GHO-12](https://linear.app/ghostnet-labs/issue/GHO-12), model the fanless enclosure thermal paths and RF coexistence.  
 **Status:** first-pass estimate revised against D-028 on 2026-10-03. No hardware measured yet; no qualification claimed. Validation runs under [GHO-23](https://linear.app/ghostnet-labs/issue/GHO-23); rail sizing is [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10).
 
-This file models heat and GNSS interference for the V1 carrier and sets the first-board tests. It records no decisions. Part values come from [v1-selections.md](v1-selections.md), [v1-reference.md](v1-reference.md), [v1-3v3-rail.md](v1-3v3-rail.md) and [v1-battery-pack.md](v1-battery-pack.md); if they change, those files win. Every number here is tagged as a datasheet fact, an estimate, or "to measure".
+This file models heat and GNSS interference for the V1 carrier and sets the first-board tests. Decisions it depends on live in [decisions.md](../decisions.md): D-028 (requirement) and D-035 (finned lid). Part values come from [v1-selections.md](v1-selections.md), [v1-reference.md](v1-reference.md), [v1-3v3-rail.md](v1-3v3-rail.md) and [v1-battery-pack.md](v1-battery-pack.md); if they change, those files win. Every number here is tagged as a datasheet fact, an estimate, or "to measure".
 
 ## Summary
 
 - Internal heat is about **16 W typical and 25 W peak** (estimate). Track A's 10 W typical figure predates the AW7916-AED, whose vendor average alone is 8 W.
 - A sealed 145 x 74 x 27 mm aluminum body sheds about **0.27 to 0.38 W/K** to still air (estimate). At 16 W the case runs **42 to 59 K over ambient**.
 - **Thermal requirement: D-028.** Normal operation must not depend on performance throttling. Passive thermal pads, heat spreaders/heatsinks and enclosure area must close the heat budget; the current flat-shell model is not proof of compliance.
+- **Selected passive path: D-035, a finned lid.** External fins on the enclosure lid, with the AW7916-AED and the CM5 padded to the lid. Software temperature throttling is only a last-resort emergency backstop. Fin geometry, the height it adds and the pad stack are still to size ([GHO-7](https://linear.app/ghostnet-labs/issue/GHO-7)).
 - **Top component risk: B-03.** AsiaRF's [product specification](https://asiarf.com/product/wi-fi-6e-m-2-ae-key-module-mt7916-aw7916-aed/) states operating −10 to +70 °C (checked 2026-10-03). D-028's cold endpoint is below that published range. Supplier clarification/qualification is required; storage temperature is not an operating rating. The published upper bound is not identified as a shield-surface or junction limit, so the model cannot establish a component pass/fail by comparing a thermocouple with 70 °C.
 - RF: the largest GNSS risks are the GW16170 at up to +28.5 dBm (blocking) and the Wi-Fi card 2.5 mm from the GNSS receiver (near-field noise). Two intermod products and two clock harmonics land on GNSS bands and need targeted tests.
 
@@ -70,7 +71,7 @@ The 25 W peak is a transient. The body's heat capacity is roughly 250 J/K (estim
 
 1. **The Wi-Fi card needs an engineered heat path to the lid.** The no-pad model predicts a large temperature rise, but a surface-temperature pass/fail needs a supplier-defined limit. AsiaRF sells the card with a 30 x 30 x 10 mm heatsink; it is a useful bench reference, but 10 mm likely does not fit under the lid, so plan a pad to the lid instead. Whether the 70 °C rating is ambient or card surface is not stated; ask AsiaRF.
 2. **The old 70 °C surface-target calculation gives about 2.5 to 4.7 W at 25 °C ambient**, with other loads about 8 W. This is sensitivity only: the vendor operating rating is not a verified surface target. Do not turn this calculation into a nominal power cap.
-3. **The flat-shell estimate does not demonstrate D-028 compliance.** The table's 25 and 45 °C ambients are sensitivity cases, not requirement endpoints. Compare a fitted spreader/pad stack, a finned lid and a larger passive cooling surface within the mechanical constraints; do not use Wi-Fi-off operation or a lower ambient rating to silently change the requirement. Heat flow into the pack requires explicit cell-temperature analysis, not treating the battery as a free heatsink.
+3. **The flat-shell estimate does not demonstrate D-028 compliance.** The table's 25 and 45 °C ambients are sensitivity cases, not requirement endpoints. The selected path is a finned lid (D-035), estimated on the decision card to roughly double heat shedding (estimate, not yet modeled here). Size the fins, pad stack and any spreader against the D-028 endpoints within the GHO-7 envelope; do not use Wi-Fi-off operation or a lower ambient rating to silently change the requirement. Heat flow into the pack requires explicit cell-temperature analysis, not treating the battery as a free heatsink.
 4. **Touch temperature.** A handheld case at 60 to 85 °C is too hot to hold. Check against IEC 62368-1 touch limits once the case temperature is measured.
 5. **GNSS sits 2.5 mm from the Wi-Fi card** (§18). The MAX-M10S is rated to +85 °C ambient, and its TCXO drifts with temperature. Measure its local temperature.
 6. **Battery cells sit under the radio.** Li-ion charge temperature limits are low. Check the Molicel M35A charge and discharge limits against the measured pack top temperature, and keep a gap or insulation layer if needed.
@@ -82,7 +83,7 @@ Passive-design evidence required before qualification:
 | Evidence | Required result |
 |---|---|
 | Supplier limits | Operating ambient, measured sensor/surface limits and cold-start behavior distinguished for each limiting part |
-| Thermal-interface stack | Actual gap, pad conductivity/compression, heatsink/spreader geometry and contact pressure checked in GHO-7 |
+| Thermal-interface stack | Actual gap, pad conductivity/compression, lid fin geometry (D-035), spreader geometry and contact pressure checked in GHO-7 |
 | Continuous load | Measured simultaneous CPU/radio/accessory demand and charging losses used, not a throttled profile |
 | Touch comfort | Contact surfaces and usage duration defined in GHO-12; measured case temperatures meet the agreed criterion |
 | Qualification | Endpoint operation with no automatic CPU throttling or policy-driven TX/channel reduction; faults and protection events recorded |

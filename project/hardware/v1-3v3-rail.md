@@ -70,7 +70,7 @@ At 4.5 A and about 88 % efficiency from 12 V the buck loses about 2.0 W, about 0
 
 ## Input side
 
-+5V_SYS 10 W plus +3V3_RADIO 15.3 W is about 25.3 W out, about 28 W in at 90 % efficiency, which is 3.5 A at 8 V. The 5.56 A eFuse limit and the 35 W capability target stay as they are.
++5V_SYS 12.5 W (the CM5's 2.5 A maximum) plus +3V3_RADIO 15.3 W is about 27.8 W out, about 30.9 W in at 90 % efficiency, which is 3.9 A at 8 V. The 5.56 A eFuse limit and the 35 W capability target stay as they are.
 
 ## Open risk: socket contact rating
 

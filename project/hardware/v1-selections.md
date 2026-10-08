@@ -36,7 +36,7 @@ Status words are defined in [../README.md](../README.md). Open parts are tracked
 | B-15 | Input eFuse | TI TPS26633RGER (limit 5.56 A, UVLO 7.4 to 8.0 V, fixed 32.8 V overvoltage clamp) | Selected. Values calculated, verify on the bench (see D-019). |
 | B-16 | Reverse polarity | TI CSD19533Q5A | Candidate. Topology to verify. |
 | B-17 | TVS | Diodes Inc. SMBJ33CA | Candidate. Depends on the pack and charging input. |
-| B-18 | 5 V and 3.3 V bucks | TI LM76005 x 2 (about 2 A and 4.5 A allocations) | Selected. The 3.3 V allocation was raised to 4.5 A at 3.39 V for the AW7916-AED (D-026, [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10), [v1-3v3-rail.md](v1-3v3-rail.md)). 5 V sizing still pending Track A power data. |
+| B-18 | 5 V and 3.3 V bucks | TI LM76005 x 2 (2.5 A and 4.5 A allocations) | Selected. The 3.3 V allocation was raised to 4.5 A at 3.39 V for the AW7916-AED (D-026, [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10), [v1-3v3-rail.md](v1-3v3-rail.md)). The 5 V allocation is 2.5 A, the CM5 maximum from its datasheet §B.3; the USB accessory load on top is still pending. |
 | B-19 | Radio load switches | TI TPS22975DSGT x 2 (WIFI_PWR_EN and HALOW_PWR_EN) | Selected. |
 | B-20 | Supervisor | TI TPS386000RGPR (four rails, watchdog, PMIC_Enable recovery) | Selected. Bench-test recovery. |
 | B-21 | RF connectors | MMCX (HaLow), 3 x IPEX on the Wi-Fi card (type to confirm on arrival), GNSS active antenna connector | GNSS connector open ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)). |
@@ -53,7 +53,7 @@ VBAT_PROTECTED feeds an LM76005 5 V buck (+5V_SYS for the CM5 and USB, including
 ## PCB and thermal approach
 
 - Eight-layer stackup. The final stackup and impedance rules come from the chosen fabricator. Controlled impedance is required for PCIe, USB, Ethernet, and RF lines.
-- Thermal operating requirement and permitted cooling strategy are D-028; qualification remains under GHO-12. Fanless, with the enclosure acting as the heat spreader: the CM5 couples to the shell through a thermal interface, and the power converters couple to the chassis through copper pours and thermal vias.
+- Thermal operating requirement and permitted cooling strategy are D-028; qualification remains under GHO-12. Fanless, with the enclosure acting as the heat spreader and external fins on the lid (D-035): the CM5 and the Wi-Fi card couple to the lid through thermal interface pads, and the power converters couple to the chassis through copper pours and thermal vias.
 - Top side: CM5, both M.2 slots, GNSS, Ethernet, and RF connectors. Bottom side: converters, INA228, protection, load switches, supervisor, and test pads.
 - Power sits in a concentrated island of about 45 x 25 mm in the lower middle. No inductors, regulators, or tall parts go under the CM5, which has about 2.5 mm of underside clearance. Switching power should not sit under RF modules.
 - The module footprints (CM5, the 30 x 22 mm HaLow card and the 30 x 52 mm Wi-Fi card) total about 4,420 mm2, roughly 48 percent of 138 x 67 mm. The real constraints are RF connector placement, antenna separation, keepouts, M.2 clearances, the Ethernet and battery connectors, inductors, thermal copper, mounting holes, and enclosure walls.
@@ -77,7 +77,7 @@ Differences are acceptable for a POC unless a row says otherwise. Track A feeds 
 | Item | Track A | Track B | Resolution |
 |---|---|---|---|
 | CM5 SKU | 4 GB / 16 GB eMMC, wireless (A-01) | 8 GB / 32 GB eMMC, no wireless (B-01) | Acceptable for a POC. The Track B SKU is chosen later. |
-| Wi-Fi radio | GW17032 / WLE900VX Mini-PCIe 3x3 Wi-Fi 5, QCA9880, ath10k (A-09) | AW7916-AED M.2 3052 Wi-Fi 6E, MT7916, mt7915e (B-03) | Track A uses a card that Gateworks has tested for 802.11s. Track B must still show a mesh link on the bench ([GHO-37](https://linear.app/ghostnet-labs/issue/GHO-37)). |
+| Wi-Fi radio | AW7916-AED on an M-key adapter (A-09, D-034) | AW7916-AED M.2 3052 Wi-Fi 6E, MT7916, mt7915e (B-03) | Same card. The POC bench runs the V1 card's mesh gate ([GHO-37](https://linear.app/ghostnet-labs/issue/GHO-37)); V1 still has to prove its own socket, power and antennas. |
 | HaLow radio | GW16167 through the Pier42 USB carrier (A-04, A-05) | GW16170 high-power MM8108-M20 in a native M.2 E-key slot (B-02) | Same MM8108 family and software path. Repeat high-power RF, GNSS, and thermal testing with the GW16170 before Track B is frozen. |
 | Power source | Waveshare 3S UPS, 5 V output, three M35A cells, about 37 Wh (A-14, A-15) | Custom 3S2P pack, 9 to 12.6 V, about 75.6 Wh, charged over USB-C (B-11) | Same cell baseline. Measure Track A run time and regulator losses before resizing the Track B pack. |
 | System power | About 10 W typical (estimate) | 35 W design capability target, not expected consumption | Measure in Track A, then resize ([GHO-30](https://linear.app/ghostnet-labs/issue/GHO-30) then [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10)). |
