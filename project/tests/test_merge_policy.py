@@ -1,8 +1,11 @@
+import base64
 import unittest
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from merge_policy import evaluate, matches, reviews_clear, protection_ready, check_blockers, GATE, terminal_blocker
+from merge_policy import (evaluate, matches, reviews_clear, protection_ready,
+                          check_blockers, external_build_blockers, GATE,
+                          terminal_blocker)
 
 class GateTests(unittest.TestCase):
     def setUp(self):
@@ -93,6 +96,74 @@ class GateTests(unittest.TestCase):
             self.assertTrue(check_blockers([dict(check, **changes)]))
         self.assertEqual(check_blockers([dict(check, name="Upload ccache cache to s3", conclusion="skipped")]), [])
         self.assertTrue(check_blockers([dict(check, name="test", conclusion="skipped")]))
+
+
+class FakeExternalAPI:
+    def __init__(self, commit, compare="ahead", pinned=None, gate="success", pr_gate="success"):
+        self.commit = commit
+        self.compare = compare
+        self.pinned = commit if pinned is None else pinned
+        self.gate = gate
+        self.pr_gate = pr_gate
+
+    def call(self, path, data=None, method=None):
+        if "/compare/" in path:
+            return {"status": self.compare}
+        if path.endswith("/pulls/42"):
+            return {"draft": False, "head": {"sha": "integration-head"}}
+        if "/contents/feeds.conf.default?ref=integration-head" in path:
+            text = f"src-git openmanet https://github.com/ghostnet-labs/packages.git^{self.pinned}\n"
+            return {"content": base64.b64encode(text.encode()).decode()}
+        if path.endswith("/commits/integration-head/status"):
+            return {"statuses": [], "state": "success"}
+        raise AssertionError(path)
+
+    def pages(self, path, key=None):
+        if path.endswith("/commits/integration-head/check-runs"):
+            return [
+                {"id": 1, "name": GATE, "app": {"id": 15368}, "status": "completed", "conclusion": self.gate},
+                {"id": 2, "name": "PR gate", "app": {"id": 15368}, "status": "completed", "conclusion": self.pr_gate},
+            ]
+        raise AssertionError(path)
+
+
+class ExternalBuildTests(unittest.TestCase):
+    commit = "a" * 40
+    profile = {"workflows": [], "externalBuild": True,
+               "externalBuildRepo": "ghostnet-labs/firmware",
+               "externalBuildPinPath": "feeds.conf.default"}
+    files = ["openmanetd/Makefile"]
+
+    def pr(self, body=None):
+        if body is None:
+            body = ("External-Integration-PR: https://github.com/ghostnet-labs/firmware/pull/42\n"
+                    f"External-Integration-Commit: {self.commit}\n")
+        return {"body": body, "head": {"sha": "package-head"}}
+
+    def test_verified_external_integration_passes(self):
+        api = FakeExternalAPI(self.commit)
+        self.assertEqual(external_build_blockers(api, "ghostnet-labs/packages", self.pr(), self.files, self.profile), [])
+
+    def test_missing_external_integration_fails_closed(self):
+        api = FakeExternalAPI(self.commit)
+        blockers = external_build_blockers(api, "ghostnet-labs/packages", self.pr(""), self.files, self.profile)
+        self.assertTrue(blockers)
+
+    def test_stale_external_integration_commit_fails(self):
+        api = FakeExternalAPI(self.commit, compare="diverged")
+        blockers = external_build_blockers(api, "ghostnet-labs/packages", self.pr(), self.files, self.profile)
+        self.assertIn("does not contain", blockers[0])
+
+    def test_mismatched_external_pin_fails(self):
+        api = FakeExternalAPI(self.commit, pinned="b" * 40)
+        blockers = external_build_blockers(api, "ghostnet-labs/packages", self.pr(), self.files, self.profile)
+        self.assertIn("does not pin", blockers[0])
+
+    def test_failed_external_checks_fail(self):
+        api = FakeExternalAPI(self.commit, pr_gate="failure")
+        blockers = external_build_blockers(api, "ghostnet-labs/packages", self.pr(), self.files, self.profile)
+        self.assertTrue(any("External integration" in b for b in blockers))
+
 
 if __name__ == "__main__":
     unittest.main()
