@@ -35,6 +35,7 @@ Every fact has exactly one owner. Everywhere else refers to it by ID or link and
 | Track B CM5 physical pins, GPIO signal ownership, mux facts, and sequencing | [hardware/v1-pinout-and-sequencing.md](hardware/v1-pinout-and-sequencing.md) (canonical; GHO-9) |
 | Track B engineering detail: calculations, interfaces, placement, and validation plan | [hardware/v1-reference.md](hardware/v1-reference.md) (supporting; the registers above win; it links to the canonical pin/GPIO record) |
 | CAD floorplan model and clearance check | firmware [`docs/hardware/v1-mechanical/`](https://github.com/ghostnet-labs/firmware/tree/24.10/docs/hardware/v1-mechanical) (a script, so it lives with code) |
+| Unified UI origin, routing, sign-in behavior, recovery route and navigation (D-037) | [software/unified-ui-design.md](software/unified-ui-design.md) |
 | Firmware source, board target, CI and build evidence | [ghostnet-labs/firmware](https://github.com/ghostnet-labs/firmware) and its PRs |
 | History of the 2026-09-29 Track A options | [poc/history-2026-09-29.md](poc/history-2026-09-29.md) (historical, never authoritative) |
 
