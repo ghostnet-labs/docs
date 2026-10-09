@@ -188,7 +188,7 @@ Return
   Browser Back, or open https://<node>:8081/ -> OpenMANET UI
   (the OpenMANET session is untouched by the LuCI visit, so no re-login
    unless it expired)
-  A LuCI theme link back to the OpenMANET UI is a later item.
+  LuCI theme header: "Back to OpenMANET" (GHO-73, packages #14)
 
 Recovery
   openmanetd down  ->  http://<node>/cgi-bin/luci/ on uhttpd :80
@@ -201,5 +201,4 @@ Device context: the topbar chips (node ID, mesh, GPS, battery) are on every Open
 - Bridging or sharing sessions between OpenMANET and LuCI.
 - Moving openmanetd to ports 80/443, or uhttpd to loopback (option 2).
 - Redirecting uhttpd's `/` to the OpenMANET UI.
-- A LuCI theme or menu entry that links back to the OpenMANET UI.
 - Turning the proxy on by default; that waits for the bench checks in section 4 and Justin's sign-off (D-036).
