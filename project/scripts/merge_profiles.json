@@ -219,9 +219,11 @@
   },
   "packages": {
     "branch": "24.10",
-    "workflows": [],
-    "externalBuild": true,
-    "externalBuildRepo": "ghostnet-labs/firmware",
-    "externalBuildPinPath": "feeds.conf.default"
+    "workflows": [
+      {
+        "path": ".github/workflows/build-packages.yml",
+        "paths": null
+      }
+    ]
   }
 }
