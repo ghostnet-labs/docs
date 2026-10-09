@@ -8,6 +8,8 @@ This folder holds the engineering records for the ghostnet-labs OpenMANET field 
 - Track A is an off-the-shelf proof of concept, tracked in the Linear project [OpenMANET POC](https://linear.app/ghostnet-labs/project/openmanet-poc-66239aa64a35).
 - Track B is the custom V1 carrier and battery pack, tracked in [OpenMANET V1](https://linear.app/ghostnet-labs/project/openmanet-v1-1c6a34ebffa2).
 
+The node's web interface work (one primary OpenMANET UI with LuCI behind Advanced, D-036) is tracked separately in [OpenMANET Unified UI](https://linear.app/ghostnet-labs/project/openmanet-unified-ui-937d7bff9664).
+
 Data flows one way: Track A produces measurements and Track B consumes them. Track B must not lock any decision that Track A can settle.
 
 ## Expanded Maer capability contract
