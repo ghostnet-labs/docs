@@ -192,6 +192,6 @@ Common equipment: K-type thermocouples (at least 12 channels) with a logger; IR 
 ## Links
 
 - [GHO-12](https://linear.app/ghostnet-labs/issue/GHO-12): this work.
-- [GHO-23](https://linear.app/ghostnet-labs/issue/GHO-23): V1 validation, where tests T1 to T12 run.
+- [GHO-23](https://linear.app/ghostnet-labs/issue/GHO-23): V1 validation, where tests T1 to T12 run alongside [v1-validation-procedures.md](v1-validation-procedures.md).
 - [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10): 3.3 V rail and power path; uses T0 and T1 results.
 - [GHO-30](https://linear.app/ghostnet-labs/issue/GHO-30) and [GHO-31](https://linear.app/ghostnet-labs/issue/GHO-31): Track A power, thermal and GPS coexistence, which feed T0.
