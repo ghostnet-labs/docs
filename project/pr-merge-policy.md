@@ -17,7 +17,7 @@ Every project PR is completed through CI and GitHub's enforced merge rules. `AGE
 
 Docs always checks GPIO records, agent-instruction links and the merge policy regression suite; its website also gets a PR Jekyll build. Firmware retains its board/kernel/toolchain/tools builds and existing PR gate. Go services retain Go/CodeQL and applicable frontend tests/builds. Protobufs retains Buf validation/breaking checks. LuCI retains formalities and its package build.
 
-The packages feed currently has no standalone package-build CI. Its code changes are deliberately blocked by the gate until a current-head integration-build verifier is implemented. A metadata or Markdown check cannot substitute for compiling packages. Documentation/policy-only feed changes can pass without claiming a package build.
+Packages retains `Build packages`, which compiles every package a PR touches in the pinned OpenWrt SDK for one aarch64 and one MIPS target, using the firmware's feeds. A metadata or Markdown check cannot substitute for compiling packages. PRs that touch no package still run the workflow, with the compile steps skipped.
 
 ## Operations
 

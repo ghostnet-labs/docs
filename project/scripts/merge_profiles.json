@@ -234,7 +234,11 @@
   },
   "packages": {
     "branch": "24.10",
-    "workflows": [],
-    "externalBuild": true
+    "workflows": [
+      {
+        "path": ".github/workflows/build-packages.yml",
+        "paths": null
+      }
+    ]
   }
 }

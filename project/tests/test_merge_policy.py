@@ -1,3 +1,4 @@
+import json
 import unittest
 import sys
 from pathlib import Path
@@ -69,6 +70,15 @@ class GateTests(unittest.TestCase):
         profile = {"workflows": [], "externalBuild": True}
         self.assertTrue(evaluate(profile, ["net/test/Makefile"], [], "current", 7))
         self.assertEqual(evaluate(profile, ["README.md"], [], "current", 7), [])
+
+    def test_packages_profile_requires_compile_workflow(self):
+        profiles = json.loads((Path(__file__).resolve().parents[1] / "scripts" / "merge_profiles.json").read_text())
+        profile = profiles["packages"]
+        self.assertNotIn("externalBuild", profile)
+        self.assertIn("Missing applicable workflow: .github/workflows/build-packages.yml",
+                      evaluate(profile, ["net/test/Makefile"], [], "current", 7))
+        build = dict(self.run, path=".github/workflows/build-packages.yml")
+        self.assertEqual(evaluate(profile, ["net/test/Makefile"], [build], "current", 7), [])
 
     def test_requested_changes_and_dismissal(self):
         review = {"id": 1, "user": {"login": "reviewer"}, "state": "CHANGES_REQUESTED"}
