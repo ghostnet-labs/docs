@@ -93,7 +93,7 @@ Power: +3V3_RADIO through a TPS22975 to HALOW_3V3, controlled by HALOW_PWR_EN. A
 
 M.2 pinout, from the Gateworks GW16167 and GW16170 wiki page (checked September 30, 2026): pins 2, 4, 72, and 74 carry 3.3 V; pin 3 is USB D+ and pin 5 is USB D-; pin 56 (W_DISABLE1#) is wired to the module RESET_N with a 200 kOhm pull-up to the card's own 3.3 V rail; pin 54 (W_DISABLE2#) is wired to the module WAKE with a 10 kOhm pull-up to the same rail. The card does not enumerate on USB while either pin is held low. The wiki lists no PCIe, PERST#, CLKREQ#, or PEWAKE# signals for this card, so V1 leaves those M.2 pins unconnected unless Gateworks documents otherwise.
 
-Control pin drive: the pull-ups return to the card's switched rail, so the CM5 GPIOs wired to pins 54 and 56 (GPIO 18 and 19 in section 16) must be driven open-drain: output low to assert, input to release, never driven high. That keeps the GPIO from back-feeding the card while HALOW_3V3 is off. Do not infer HaLow pin behavior from generic Morse Micro documentation or another Gateworks module. The Morse Micro Linux driver does not support two HaLow radios on one host, so the node carries one HaLow radio.
+Control pin drive: the pull-ups return to the card's switched rail, so the CM5 GPIOs wired to card pin 56 (RESET_N, GPIO18 HALOW_RESET_N) and card pin 54 (WAKE, GPIO19 HALOW_WAKE_N) in the [pinout ledger](v1-pinout-and-sequencing.md) must be driven open-drain: output low to assert, input to release, never driven high. That keeps the GPIO from back-feeding the card while HALOW_3V3 is off. Do not infer HaLow pin behavior from generic Morse Micro documentation or another Gateworks module. The Morse Micro Linux driver does not support two HaLow radios on one host, so the node carries one HaLow radio.
 
 ## 8. USB
 
@@ -119,7 +119,7 @@ Antenna: external active antenna. The bias source and its short-circuit protecti
 
 Placement: a quiet RF corner, away from buck converters, Ethernet magnetics, CM5 high-speed routing, Wi-Fi, and HaLow.
 
-Backup: V_BCKP is reserved; backup storage is not selected. Test pads: SAFEBOOT_N and EXTINT.
+Backup: V_BCKP is reserved; backup storage is not selected. Test pads: SAFEBOOT_N and EXTINT. EXTINT stays a test pad unless [GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11) uses it for antenna-short detection, as [docs PR #57](https://github.com/ghostnet-labs/docs/pull/57) proposes.
 
 RF protection: do not automatically populate a generic TVS on the GNSS RF line. Select protection for the 1.575 GHz path with its capacitance and insertion-loss limits.
 
@@ -266,7 +266,7 @@ This file does not own or duplicate the GPIO allocation. The canonical CM5 physi
 - 03_USB_HALOW_AUDIO: TUSB4041I, 24 MHz crystal, CM5 USB2 upstream, GW16170 on port 1, port 2 spare, external OpenVLM USB-C DFP on port 3, port 4 reserved, switched/current-limited VBUS, CC pull-up, USB ESD, hub reset, per-port overcurrent signals
 - 04_ETHERNET: CM5 PHY interface, discrete 1000BASE-T magnetics, sealed Ethernet connector, four MDI differential pairs, Ethernet ESD, chassis and shield, ETH_SYNC_OUT
 - 05_GNSS: MAX-M10S-00B, UART, I2C, PPS, reset, VCC_RF, active antenna, optional RF protection and filter footprints, backup provision, test pads
-- 06_POWER: battery contacts, 10 mOhm shunt, INA228, SMBJ33CA, CSD19533Q5A, Q2 pulldown FET, TPS26633, LM76005 5 V, LM76005 3.3 V, TPS22975 x 2, GNSS filtering, protection, fault, and telemetry
+- 06_POWER: battery contacts, 10 mOhm shunt, INA228, SMBJ33CA, CSD19533Q5A, Q2 pulldown FET, TPS26633, LM76005 5 V, LM76005 3.3 V, HaLow TPS22975 (the Wi-Fi TPS22975 is on 02_PCIE_WIFI), USB-C charge input from the B-07 port, TPS25751A PD controller (B-08), BQ25798 charger and power path (B-09), pack-swap bridge (B-24, candidate), GNSS filtering, protection, fault, and telemetry
 - 07_SYSTEM: apply the canonical GPIO allocation in [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md), plus supervisor, watchdog, PMIC_Enable recovery, radio power and fault, GNSS reset and PPS, USB hub reset and fault, and Ethernet timing
 
 ## 18. Mechanical architecture

@@ -149,5 +149,6 @@ This is the intended hardware-controlled order, not evidence that the bring-up f
 - Confirm the AW7916-AED pin numbers above against a bench card (the AsiaRF drawing has no numbers), and whether the card holds W_DISABLE1# or PEWAKE# internally. GPIO16 and GPIO22 are freed (D-026).
 - Confirm TE 2199119-6 footprint, hub VBUS/ESD/straps, and eight-contact battery allocation.
 - Bench-validate PCIe/USB enumeration, sequencing, and PMIC_Enable recovery.
+- Allocate BRIDGE_ACTIVE_N (B-24 bridge), PACK_PRESENT and the pack I2C bus; none has a GPIO yet ([GHO-13](https://linear.app/ghostnet-labs/issue/GHO-13)). Spares: GPIO16, 17, 22, 26 and 27.
 
 **Acceptance status:** CM5 PCIe/USB/power pins, CM5 mux facts, Gateworks control behavior, and a D-024 logical allocation (GNSS on GPIO14/15; hub reset on GPIO23; HaLow/VLM USB faults on GPIO24/25) are recorded. GPIO0–27 physical connector mappings are verified from the manufacturer table. Device-tree defaults, schematic implementation, and bench evidence remain open.
