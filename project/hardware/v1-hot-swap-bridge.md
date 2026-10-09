@@ -12,7 +12,7 @@ Every number marked **(est.)** is an estimate. Track A figures are also estimate
 | Item | Recommendation |
 |---|---|
 | Architecture | Analog Devices LTC3350 supercapacitor backup controller between the eFuse output and the regulators, creating a held-up bus (+VBUS_HOLD) |
-| Evaluated population (not frozen) | 4 x 50 F 2.7 V supercapacitors in series, run at 2.0 V per cell (8.0 V stack) |
+| Evaluated population (not frozen) | Open. In the 2026-10-04 screen (section 3) four 100 F cells in series do not demonstrate 10 s at 25 W; eight 100 F cells as 4S2P are the only population with positive desk margin, and their bodies exceed the board area. The earlier 4 x 50 F population is superseded. |
 | What it must cover | D-027 at the measured full-node load, with no swap-mode performance reduction; a shutdown reserve is additional (estimate below) |
 | Smaller population | Not a compliant fallback if it requires radios off; alternatives must still satisfy D-027 |
 | Detection | LTC3350 PFO plus the pack's PACK_PRESENT contact to CM5 GPIOs; INA228 bus undervoltage alert as a backup |
@@ -181,7 +181,7 @@ Power path with S2: pack pogo contacts → BQ25798 (BAT to SYS) → TVS, Q1 and 
 | eFuse reverse blocking | When the pack is pulled, the TPS26633 and Q1 block reverse current, and the LTC3350 input ideal diode (fast-off at 30 mV reverse) also blocks, so the stack never backfeeds the pogo contacts or the charger. Two blocking stages; keep both. |
 | eFuse UVLO (7.95 V rising, 7.43 V falling) | The eFuse turns off when the pack goes; that is now harmless. On a near-empty pack (8.4 V) the rising threshold, up to 8.3 V across tolerance, leaves little margin, so a refitted near-empty pack may not start. Existing issue, worth a bench check. |
 | Inrush on reinsertion through C_dVdT | The eFuse sees only its own output bulk (47 to 100 µF), not the regulators' input capacitance and never the stack, so the existing 22 nF C_dVdT ramp (5.8 ms, about 55 mA per 25 µF) is unchanged. Load moves back to the input when the eFuse output rises above +VBUS_HOLD. The stack then recharges at the programmed rate. |
-| Stack recharge | RSNSC = 32 mV / 3.2 A = 10 mOhm (est.). Recharge timing depends on the selected bank, input budget and minimum charge level; characterize it with the candidate comparison above. RSNSI = 32 mV / 5.0 A = 6.4 mOhm sets total input current below the eFuse's 5.17 A minimum limit; the LTC3350 trims charge current to fit (est., check against D-019). A second swap within that time gets a partly charged bridge. |
+| Stack recharge | RSNSC is open (GHO-38). 10 mOhm gives 32 mV / 10 mOhm = 3.2 A charge current but only a 4.4 A backup average ceiling, which fails the budget; the passing budget in section 3 assumes 5 mOhm, which needs a new inductor. Recharge timing depends on the selected bank, input budget and minimum charge level; characterize it with the candidate comparison above. RSNSI = 32 mV / 5.0 A = 6.4 mOhm sets total input current below the eFuse's 5.17 A minimum limit; the LTC3350 trims charge current to fit (est., check against D-019). A second swap within that time gets a partly charged bridge. |
 | **Buck EN (change)** | Today both bucks' EN come from the eFuse PGOOD. On pack removal PGOOD falls at 6.59 V and would switch the bucks off while the bridge is still full. EN must come from a divider on +VBUS_HOLD (or PGOOD OR'd with the LTC3350 CAPGD); eFuse PGOOD goes to GPIO 12 POWER_GOOD only. |
 | **Supervisor SVS4 (change)** | SVS4 monitors VBAT_PROTECTED and its fault can pull SYS_PMIC_EN low, which would reset the CM5 on every swap. Move SVS4 to +VBUS_HOLD, or mask it while PFO is low. |
 | Backup regulation point | Set LTC3350 OUTFB so +VBUS_HOLD holds about 7.0 V in backup (est.): above what the 5 V buck needs and the new EN threshold, below any normal pack voltage. |
@@ -211,7 +211,7 @@ Software policy (proposal): on PFO low with PACK_PRESENT gone, enter swap mode; 
 | Supercapacitor population | Open | Exact candidate MPNs and 4S/4S2P tradeoffs are compared above; match and qualify cells |
 | N-MOSFET, 30 V class, low RDS(on) | 4 | Input and output ideal diodes, synchronous top and bottom |
 | Inductor | 1 | Nominal 3.3 µH used only for screening; saturation/current/thermal selection must cover the chosen sense threshold, tolerance and ripple |
-| Sense resistors 10 mOhm (RSNSC) and 6.4 mOhm (RSNSI) | 2 | Values est. |
+| Sense resistors RSNSC (5 or 10 mOhm, open) and 6.4 mOhm (RSNSI) | 2 | Values est. |
 | Dividers for PFI, OUTFB, buck EN; INTVCC and DRVCC caps | about 10 | |
 
 Power-electronics placement remains unverified. Use the cell envelopes above for GHO-7 assembly review; any off-board or upright placement needs checked retention, interconnects, clearance and thermal paths.

@@ -45,7 +45,7 @@ The 138 x 67 mm PCB target is important but not sacred. Do not compromise RF, th
 - USB: CM5 USB2 to the four-port TI TUSB4041I hub; port 1 to the GW16170 HaLow module, port 2 spare (V1 has no Bluetooth, D-026), port 3 to a dedicated sealed USB-C host connector for external OpenVLM VLMKW0100, and port 4 is spare. B-07 remains the separate USB-C charge/service port.
 - Ethernet: CM5 integrated Gigabit PHY to discrete magnetics and the sealed Amphenol LTW Ethernet connector
 - GNSS: CM5 UART, I2C, and PPS to the MAX-M10S, with an external active antenna
-- Power path: battery spring contacts, SMBJ33CA bidirectional TVS, CSD19533Q5A blocking FET, TPS26633 eFuse, then the 10 mOhm Kelvin shunt (INA228 monitoring) and VBAT_PROTECTED
+- Power path: battery spring contacts, SMBJ33CA bidirectional TVS, CSD19533Q5A blocking FET, TPS26633 eFuse (where the TVS, blocking FET and eFuse sit now that charging is in the radio is under review, section 12), then the 10 mOhm Kelvin shunt (INA228 monitoring) and VBAT_PROTECTED
 - Regulation: VBAT_PROTECTED feeds an LM76005 5 V buck (+5V_SYS to the CM5 and USB) and an LM76005 3.3 V buck (+3V3_RADIO). +3V3_RADIO feeds WIFI_3V3 and HALOW_3V3 through two TPS22975 switches, and a filtered +3V3_GNSS.
 
 ## 4. Compute
@@ -181,7 +181,7 @@ Undervoltage lockout: a divider from IN_SYS to UVLO to GND with R_top = 464 kOhm
 
 Output ramp: C_dVdT = 22 nF gives t = 20.8 x 10^3 x V_IN x C_dVdT = 5.8 ms at 12.6 V (2,185 V/s), so charging about 25 µF of regulator input capacitance draws about 55 mA. The turn-on delay after UVLO is 742 µs + 49.5 µs per nF x 22 nF, about 1.8 ms.
 
-PGOOD and PGTH: a divider from OUT to PGTH, 243 kOhm over 49.9 kOhm, sets PGOOD rising at 7.04 V and falling at 6.59 V. PGOOD is open drain; pull it up to the eFuse output through 100 kOhm and use it to drive the EN pins of both LM76005 regulators, so they start only after the eFuse ramp completes. This battery-domain PGOOD node must not connect directly to the CM5 POWER_GOOD input; a separate logic-level sensing interface remains to be designed under GHO-9/GHO-10/GHO-13.
+PGOOD and PGTH: a divider from OUT to PGTH, 243 kOhm over 49.9 kOhm, sets PGOOD rising at 7.04 V and falling at 6.59 V. PGOOD is open drain; pull it up to the eFuse output through 100 kOhm and use it to drive the EN pins of both LM76005 regulators, so they start only after the eFuse ramp completes. With the B-24 pack-swap bridge fitted (D-027 needs one), EN must instead follow +VBUS_HOLD, or the bucks switch off at the start of every swap ([v1-hot-swap-bridge.md](v1-hot-swap-bridge.md) section 4). This battery-domain PGOOD node must not connect directly to the CM5 POWER_GOOD input; a separate logic-level sensing interface remains to be designed under GHO-9/GHO-10/GHO-13.
 
 Fault response: tie MODE to ground for auto-retry (retry delay about 670 ms), which suits a headless node. MODE open would latch off until SHDN, UVLO, or the input is cycled. Leave IMON unconnected, because the INA228 measures current (if used: 27.9 µA per A, and R_IMON must stay under 12.9 kOhm to keep 2 x I_OL below 4 V).
 
@@ -229,7 +229,7 @@ U302 is Wi-Fi and U303 is HaLow. 0.6 to 5.7 V, up to 6 A, about 16 mOhm typical,
 
 ### Supervisor and watchdog: TI TPS386000RGPR
 
-Multi-rail supervision plus watchdog. Rails: SVS1 = CM5_3V3, SVS2 = +5V_SYS, SVS3 = +3V3_RADIO, SVS4 = VBAT_PROTECTED. SUPERVISOR_WDI comes from the CM5 and SUPERVISOR_WDO returns to it. Verified 2026-10-04 from [TI SBVS105F](https://www.ti.com/lit/ds/symlink/tps386000.pdf), §6.7: the watchdog interval is 450 ms minimum, 600 ms typical, 750 ms maximum. CT pins program reset-release delays, not this interval. §8.3.3 starts the timer at RESET1 release and latches timeout; WDI edges alone do not clear it. Clearing requires MR assertion, a SENSE1 reset event, or supervisor VDD power-down. A PMIC_Enable cycle must not be assumed to remove supervisor VDD. GHO-10 owns boot inhibition/arming, latch clear and reset-pulse design before WDO can participate in SYS_PMIC_EN recovery. Startup, release, watchdog timeout and recovery still require schematic and bench validation.
+Multi-rail supervision plus watchdog. Rails: SVS1 = CM5_3V3, SVS2 = +5V_SYS, SVS3 = +3V3_RADIO, SVS4 = VBAT_PROTECTED; with the B-24 bridge fitted, SVS4 moves to +VBUS_HOLD or is masked while PFO is low, or it resets the CM5 on every swap ([v1-hot-swap-bridge.md](v1-hot-swap-bridge.md) section 4). SUPERVISOR_WDI comes from the CM5 and SUPERVISOR_WDO returns to it. Verified 2026-10-04 from [TI SBVS105F](https://www.ti.com/lit/ds/symlink/tps386000.pdf), §6.7: the watchdog interval is 450 ms minimum, 600 ms typical, 750 ms maximum. CT pins program reset-release delays, not this interval. §8.3.3 starts the timer at RESET1 release and latches timeout; WDI edges alone do not clear it. Clearing requires MR assertion, a SENSE1 reset event, or supervisor VDD power-down. A PMIC_Enable cycle must not be assumed to remove supervisor VDD. GHO-10 owns boot inhibition/arming, latch clear and reset-pulse design before WDO can participate in SYS_PMIC_EN recovery. Startup, release, watchdog timeout and recovery still require schematic and bench validation.
 
 ## 14. Power budget
 
@@ -331,7 +331,7 @@ Stackup: eight layers is the starting assumption. Conceptually: L1 components, c
 
 Top and bottom: the top side carries the CM5, M.2 modules, GNSS, Ethernet, and RF connectors. The bottom side can carry converters, the INA228, protection support, load switches, supervisors, small support ICs, and test pads. Do not automatically place switching power underneath RF modules; RF isolation and thermal paths drive the final decision.
 
-Power layout rules: the battery path runs battery contacts, TVS, blocking FET, and eFuse, then the shunt, then VBAT_PROTECTED (the shunt sits after the eFuse so the INA228 never sees reverse polarity). Keep high-current paths short, wide, low resistance, and thermally capable. Keep Kelvin sense traces isolated from switching current. Follow TI reference layouts for buck loops and keep switching nodes small.
+Power layout rules: the battery path runs battery contacts, TVS, blocking FET, and eFuse (placement under review, section 12), then the shunt, then VBAT_PROTECTED (the shunt sits after the eFuse so the INA228 never sees reverse polarity). Keep high-current paths short, wide, low resistance, and thermally capable. Keep Kelvin sense traces isolated from switching current. Follow TI reference layouts for buck loops and keep switching nodes small.
 
 The pack-swap operating requirement is D-027; B-24 and [v1-hot-swap-bridge.md](v1-hot-swap-bridge.md) own the bridge candidate and sizing study. The thermal operating requirement is D-028; [v1-thermal-rf-plan.md](v1-thermal-rf-plan.md) evaluates passive closure. Neither requirement is qualified yet.
 
@@ -385,35 +385,7 @@ Still to define: radio power-management software, the hardware telemetry API, ha
 
 ## 25. Bill of materials and status
 
-Current V1 parts and their status:
-
-| Function | Part | Status |
-|---|---|---|
-| Compute | Raspberry Pi CM5008032 | Selected |
-| CM5 connector | Amphenol 10164227-1004A1RLF | Selected |
-| Wi-Fi 6E | AsiaRF AW7916-AED (MT7916, M.2 3052) | Selected (D-026) |
-| HaLow | Gateworks GW16170 / MM8108-M20 | Selected |
-| GNSS | u-blox MAX-M10S-00B | Selected |
-| Ethernet | Amphenol LTW RCP-5SPFFH-SCU7001 sealed feed-through, CAP-WACMSPC1 cap, pigtail to a Molex Pico-Lock 504050-0891 header (magnetics TBD) | Selected |
-| M.2 socket | TE Connectivity 2199119-6 | Mechanical reference; Wi-Fi current qualification required (GHO-10/GHO-26, v1-3v3-rail.md) |
-| Battery connector | Eight Mill-Max 7911 spring contacts (B-12) | Selected for V0; geometry CAD-verify |
-| Shunt | Vishay WFK0612R0100FE66 | Selected |
-| Battery monitor | TI INA228AIDGSR | Selected |
-| Input eFuse | TI TPS26633RGER | Selected |
-| Reverse FET | TI CSD19533Q5A | Candidate |
-| Reverse FET pulldown (Q2) | BSS138 or equivalent | Candidate |
-| TVS | Diodes Inc. SMBJ33CA | Initial candidate |
-| 5 V buck | TI LM76005 | Selected |
-| 3.3 V buck | TI LM76005 | Selected |
-| Radio switches | TI TPS22975DSGT x 2 | Selected |
-| Supervisor / watchdog | TI TPS386000RGPR | Selected |
-| USB hub | TI TUSB4041IPAPRG4, four-port USB 2.0 hub | Selected (D-023) |
-| USB VBUS switch | TBD | Open |
-| USB ESD | TBD | Open |
-| Ethernet ESD | TBD | Open |
-| GNSS backup | TBD | Open |
-| GNSS RF protection | TBD | Open |
-| Enclosure | TBD | Open |
+Parts and their status are kept in the selections register ([v1-selections.md](v1-selections.md), B-01 to B-25). Open parts are listed in section 26.
 
 Project status by area:
 
@@ -425,7 +397,7 @@ Project status by area:
 ## 26. Critical open items
 
 - Mechanical: import the pack contact and latch models, exact CM5, AW7916-AED, GW16170, TE M.2 socket, and Ethernet connector CAD; select the actual RF connectors; define enclosure wall thickness and bosses; freeze mounting holes; run 3D collision analysis; verify antenna cable bend radii, Ethernet connector enclosure intrusion, and battery latch and insertion and removal.
-- Electrical: verify every CM5 GPIO mux and pin; verify the exact AW7916-AED M.2 pin assignment and control pins (the GW16170 pins are verified in section 7); check the calculated TPS26633 and LM76005 component values in sections 12 and 13; verify the reverse-FET topology; validate the TVS against the actual battery and transients; finalize the LM76005 components; select USB VBUS switches, USB ESD, and Ethernet ESD; finalize GNSS backup, GNSS RF protection, and the chassis and shield strategy; finalize the supervisor recovery topology; verify PMIC_Enable behavior; verify startup and radio power sequencing; select the USB-C PD controller and charger, and review the power path with charging in the radio (section 11).
+- Electrical: verify every CM5 GPIO mux and pin; verify the exact AW7916-AED M.2 pin assignment and control pins (the GW16170 pins are verified in section 7); check the calculated TPS26633 and LM76005 component values in sections 12 and 13; verify the reverse-FET topology; validate the TVS against the actual battery and transients; finalize the LM76005 components; select USB VBUS switches, USB ESD, and Ethernet ESD; finalize GNSS backup, GNSS RF protection, and the chassis and shield strategy; finalize the supervisor recovery topology; verify PMIC_Enable behavior; verify startup and radio power sequencing; integrate the selected PD controller and charger (B-08, B-09) and review the power path with charging in the radio (section 11).
 - Software: validate CM5 PCIe Wi-Fi and the mt7915e path, the GW16170 on the CM5, and HaLow firmware; define radio power management, the hardware telemetry API, hardware-aware mesh metrics, the watchdog service, GNSS PPS handling, Ethernet timing handling, and the fault and recovery state machine.
 
 ## 27. Validation plan
