@@ -71,7 +71,7 @@ Decision (B-03, D-026): the Wi-Fi card is the [AsiaRF AW7916-AED](https://asiarf
 
 Characteristics: MediaTek MT7916, Linux mt7915e driver (mt76, mesh point and AP plus mesh supported in the driver), Wi-Fi 6E (2.4 GHz plus 5 or 6 GHz), M.2 3052 A+E key, 30 x 52 mm, three IPEX antenna connectors (type to confirm on arrival), PCIe WLAN, no Bluetooth.
 
-Power: the vendor gives 10 W maximum and 8 W average at 3.3 V and asks for a 3.3 V supply of at least 3 A. That is about four times the AIW-170BQ. The +3V3_RADIO allocation is now 4.5 A with a 3.39 V setpoint (section 13 and [v1-3v3-rail.md](v1-3v3-rail.md), [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10)); the socket power-path qualification is tracked in GHO-10/GHO-26 and the card's heat in GHO-12. Normal operation must meet D-028 without a firmware transmit-power cap; see the owning rail record for the connector qualification gate. Power path: +3V3_RADIO through a TPS22975 to WIFI_3V3, controlled by WIFI_PWR_EN. Antennas: three IPEX external connectors, no PCB antenna.
+Power: the vendor gives 10 W maximum and 8 W average at 3.3 V and asks for a 3.3 V supply of at least 3 A. Conflict, open: the same AsiaRF page also says 9 W maximum, 3 A recommended and 2.5 A minimum, and 10 W at 3.135 V is 3.19 A, above D-026's 3 A ([v1-gpio-and-m2-audit.md](v1-gpio-and-m2-audit.md) §2.1; GHO-10/GHO-26). That is about four times the AIW-170BQ. The +3V3_RADIO allocation is now 4.5 A with a 3.39 V setpoint (section 13 and [v1-3v3-rail.md](v1-3v3-rail.md), [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10)); the socket power-path qualification is tracked in GHO-10/GHO-26 and the card's heat in GHO-12. Normal operation must meet D-028 without a firmware transmit-power cap; see the owning rail record for the connector qualification gate. Power path: +3V3_RADIO through a TPS22975 to WIFI_3V3, controlled by WIFI_PWR_EN. Antennas: three IPEX external connectors, no PCB antenna.
 
 Pin documentation: the AsiaRF pin-out drawing is mapped to carrier nets in [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md) (GHO-9). The card uses PCIe, PERST#, CLKREQ#, PEWAKE# and W_DISABLE1# only; W_DISABLE2# and USB are not connected. Pin numbers are read from finger order and still need a check on a bench card before layout release.
 
@@ -79,7 +79,7 @@ Known risk: an AsiaRF MT7916 card failed to load on a Pi 5 because of the extern
 
 ## 6. Wi-Fi PCIe
 
-The CM5 PCIe Gen2 x1 link carries the 100 MHz REFCLK, TX/RX pairs, PERST#, and CLKREQ# to the AW7916-AED. The CM5 PCIe TX already has the relevant AC coupling, so do not add capacitors on the CM5 TX path; add 220 nF capacitors on the card TX to CM5 RX path as required. PEWAKE#/nWAKE is not used.
+The CM5 PCIe Gen2 x1 link carries the 100 MHz REFCLK, TX/RX pairs, PERST#, and CLKREQ# to the AW7916-AED. The CM5 PCIe TX already has the relevant AC coupling, so do not add capacitors on the CM5 TX path; the card TX to CM5 RX path gets 0 Ω links in 220 nF capacitor footprints, with capacitors fitted only if the bench card lacks TX AC coupling (D-046). PEWAKE#/nWAKE is not used.
 
 M.2 socket reference: TE Connectivity 2199119-6, about 21.9 x 8.7 x 3.2 mm. Check the exact footprint and pin implementation against the manufacturer documentation before freeze.
 
@@ -229,7 +229,7 @@ Critical layout rule: do not place the switching regulator or its inductor direc
 
 ### Radio load switches: TI TPS22975DSGT x 2
 
-U302 is Wi-Fi and U303 is HaLow. 0.6 to 5.7 V, up to 6 A, about 16 mOhm typical, adjustable rise time, quick output discharge, thermal shutdown, about -40 to +105 C. Independent radio power control supports software recovery. The [TPS22975 datasheet](https://www.ti.com/lit/ds/symlink/tps22975.pdf), §6, provides no fault-output pin; the planned radio-fault input sources remain unselected in the canonical [pinout record](v1-pinout-and-sequencing.md#electrical-sources-and-boot-evidence).
+U302 is Wi-Fi and U303 is HaLow. 0.6 to 5.7 V, up to 6 A, about 16 mOhm typical, adjustable rise time, quick output discharge, thermal shutdown, about -40 to +105 C. Independent radio power control supports software recovery. The [TPS22975 datasheet](https://www.ti.com/lit/ds/symlink/tps22975.pdf), §6, provides no fault-output pin; a TPS3780D dual voltage detector on WIFI_3V3 and HALOW_3V3 supplies the radio fault inputs (candidate, D-046; [pinout record](v1-pinout-and-sequencing.md#electrical-sources-and-boot-evidence)). ON pull-downs are 4.7 kΩ.
 
 ### Supervisor and watchdog: TI TPS386000RGPR
 
@@ -266,7 +266,7 @@ This file does not own or duplicate the GPIO allocation. The canonical CM5 physi
 ## 17. Schematic sheets
 
 - 01_CM5: CM5, two Amphenol connectors, +5V_CM5, GPIO_VREF, PCIe, USB2, Ethernet, UART, I2C, PPS, PMIC_Enable, internal test pads
-- 02_PCIE_WIFI: AW7916-AED, M.2 E-key socket, PCIe Gen2 x1, 100 MHz REFCLK, PERST#, CLKREQ#, 220 nF card TX capacitors, Wi-Fi TPS22975 sized for at least 3 A, three IPEX
+- 02_PCIE_WIFI: AW7916-AED, M.2 E-key socket, PCIe Gen2 x1, 100 MHz REFCLK, PERST#, CLKREQ#, 0 Ω links in card TX capacitor footprints, Wi-Fi TPS22975 sized for at least 3 A, three IPEX
 - 03_USB_HALOW_AUDIO: TUSB4041I, 24 MHz crystal, CM5 USB3-0 USB 2.0 pair upstream, HUB_1V1 buck (TLV62568) from CM5_3V3, HUB_3V3 = CM5_3V3, GRSTz held low by 2.2 kΩ until firmware release, GW16170 on port 1, port 2 spare, external OpenVLM USB-C DFP on port 3, port 4 reserved, switched/current-limited VBUS, CC pull-up, USB ESD, hub reset, per-port overcurrent signals
 - 04_ETHERNET: CM5 PHY interface, discrete 1000BASE-T magnetics, sealed Ethernet connector, four MDI differential pairs, Ethernet ESD, chassis and shield, ETH_SYNC_OUT
 - 05_GNSS: MAX-M10S-00B, UART, I2C, PPS, reset, VCC_RF, active antenna, optional RF protection and filter footprints, backup provision, test pads

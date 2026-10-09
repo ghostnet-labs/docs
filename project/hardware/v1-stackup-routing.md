@@ -113,7 +113,7 @@ Match at the end that has the mismatch, with small serpentine bumps (amplitude n
 
 ### PCIe AC-coupling capacitors
 
-The 220 nF capacitors go on the card TX to CM5 RX pair only (M.2 pins 41/43 to CM5 pins 116/118); the CM5 already couples its TX. Place them close to the M.2 socket, since the CM5 datasheet asks for them near the driving source. Use 0201 (0402 if 0201 is not wanted): both capacitors side by side, pads symmetric, no stubs, pads inline with the trace. On L1 the capacitor pads are wider than the 0.18 mm trace, so void L2 under the pads (pad outline plus 0.1 mm), keep L3 clear under that void so L4 becomes the reference, and stitch L2 to L4 next to it. Confirm the void size in GHO-15.
+The 220 nF capacitor footprints (fitted with 0 Ω links by default, D-046) go on the card TX to CM5 RX pair only (M.2 pins 41/43 to CM5 pins 116/118); the CM5 already couples its TX. Place them close to the M.2 socket, since the CM5 datasheet asks for them near the driving source. Use 0201 (0402 if 0201 is not wanted): both capacitors side by side, pads symmetric, no stubs, pads inline with the trace. On L1 the capacitor pads are wider than the 0.18 mm trace, so void L2 under the pads (pad outline plus 0.1 mm), keep L3 clear under that void so L4 becomes the reference, and stitch L2 to L4 next to it. Confirm the void size in GHO-15.
 
 ### Reference-plane continuity
 
