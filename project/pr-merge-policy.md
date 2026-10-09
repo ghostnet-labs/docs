@@ -15,7 +15,7 @@ Every project PR is completed through CI and GitHub's enforced merge rules. `AGE
 
 `project/scripts/merge_profiles.json` owns the reviewed workflow/path inventory for docs, firmware, openmanetd, OpenVLM, protobufs, LuCI and packages. Update it when changing workflow triggers. The gate waits for each applicable workflow to register and finish, so an empty check list cannot establish success.
 
-Docs always checks GPIO records, agent-instruction links and the merge policy regression suite; its website also gets a PR Jekyll build. Firmware retains its board/kernel/toolchain/tools builds and existing PR gate. Go services retain Go/CodeQL and applicable frontend tests/builds. Protobufs retains Buf validation/breaking checks. LuCI retains formalities and its package build.
+Docs always checks GPIO records, agent-instruction links and the merge policy regression suite; its website also gets a PR Jekyll build. Firmware retains its board/kernel/toolchain/tools builds and existing PR gate. Go services retain Go/CodeQL and applicable frontend tests/builds; openmanetd UI changes also need its browser e2e suite (Playwright, axe and the bundle-size budget) to pass. Protobufs retains Buf validation/breaking checks. LuCI retains formalities and its package build.
 
 Packages retains `Build packages`, which compiles every package a PR touches in the pinned OpenWrt SDK for one aarch64 and one MIPS target, using the firmware's pinned feeds. A metadata or Markdown check cannot substitute for compiling packages. PRs that touch no package still run the workflow, with the compile steps skipped. The firmware integration-evidence check (GHO-82, `externalBuild`) remains in the policy for any profile that sets it.
 

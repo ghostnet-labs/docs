@@ -171,6 +171,17 @@
           "buf.gen.yaml",
           ".github/workflows/test-go.yml"
         ]
+      },
+      {
+        "path": ".github/workflows/e2e-frontend.yml",
+        "paths": [
+          "frontend/**",
+          "internal/frontend/**",
+          "internal/config/**",
+          "tools/e2e-frontend/**",
+          "tools/ui-lab/tools/sample-api.py",
+          ".github/workflows/e2e-frontend.yml"
+        ]
       }
     ]
   },

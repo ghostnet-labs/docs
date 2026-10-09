@@ -86,6 +86,18 @@ class GateTests(unittest.TestCase):
         build = dict(self.run, path=".github/workflows/build-packages.yml")
         self.assertEqual(evaluate(profile, ["net/test/Makefile"], [build], "current", 7), [])
 
+    def test_openmanetd_profile_requires_browser_e2e_for_ui_changes(self):
+        profiles = json.loads((Path(__file__).resolve().parents[1] / "scripts" / "merge_profiles.json").read_text())
+        profile = profiles["openmanetd"]
+        e2e = ".github/workflows/e2e-frontend.yml"
+        for changed in ["frontend/src/App.jsx", "internal/frontend/server.go", "internal/config/config.go"]:
+            self.assertIn("Missing applicable workflow: " + e2e,
+                          evaluate(profile, [changed], [], "current", 7), changed)
+        self.assertNotIn("Missing applicable workflow: " + e2e,
+                         evaluate(profile, ["internal/mgmt/alfred.go"], [], "current", 7))
+        runs = [dict(self.run, id=i, path=w["path"]) for i, w in enumerate(profile["workflows"])]
+        self.assertEqual(evaluate(profile, ["frontend/src/App.jsx"], runs, "current", 7), [])
+
     def test_requested_changes_and_dismissal(self):
         review = {"id": 1, "user": {"login": "reviewer"}, "state": "CHANGES_REQUESTED"}
         self.assertFalse(reviews_clear([review]))
