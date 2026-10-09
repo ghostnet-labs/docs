@@ -96,6 +96,7 @@ Bench checks before the flag is turned on by default (open in GHO-70 and GHO-71)
 - If openmanetd is down, crashed or misconfigured, LuCI is still at `http://<node>/cgi-bin/luci/` on uhttpd, port 80. This route does not depend on openmanetd.
 - To turn the proxy off, set `frontend.luciProxy.enable: false` (or remove the key). The change is read on config reload.
 - A later packages change could redirect uhttpd's `/` to the OpenMANET UI. That is out of scope here and needs its own decision; the recovery route must remain reachable.
+- First boot moves to the OpenMANET setup wizard with the next openmanetd bump in firmware, gated on a CM5 bench run (D-038). Online firmware updates come from ghostnet-labs/firmware releases (D-039).
 
 ## 6. Configuration ownership
 
