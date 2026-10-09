@@ -128,21 +128,6 @@
         "paths": null
       },
       {
-        "path": ".github/workflows/toolchain.yml",
-        "paths": [
-          ".github/workflows/toolchain.yml",
-          "toolchain/**"
-        ]
-      },
-      {
-        "path": ".github/workflows/tools.yml",
-        "paths": [
-          "include/**",
-          "tools/**",
-          ".github/workflows/tools.yml"
-        ]
-      },
-      {
         "path": ".github/workflows/hardware-qualification.yml",
         "paths": [
           "scripts/hardware-qualification/**",
