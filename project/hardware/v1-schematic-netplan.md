@@ -95,7 +95,7 @@ Each row is one hierarchical port. "Fixed" means a record fixes the connection, 
 | VLM_USB_FAULT_N | 03 | 01_CM5 | Record: ledger |
 | HALOW_USB_FAULT_N | none | 01_CM5 | Record: ledger. No source (K-4) |
 | HALOW_FAULT_N, WIFI_FAULT_N | none | 01_CM5 | Record: ledger says source unselected |
-| SUPERVISOR_WDI, SUPERVISOR_WDO | 01 / 07 | 07 / 01 | Record: ledger |
+| SUPERVISOR_WDI, SUPERVISOR_ARM | 01 / 07 | 07 | Record: ledger (D-044) |
 | SYS_PMIC_EN | 07 (recovery path, open) | 01_CM5 pin 99 | Record: §13 |
 | POWER_GOOD | 06 via a translator in 07 (open) | 01_CM5 | Record: ledger |
 | EFUSE_FAULT | 06 (TPS26633 FLT) | 01_CM5 | Record: ledger |
@@ -140,7 +140,7 @@ The remaining pins, from CM5 datasheet Table 4:
 | 94, 96 | CC1, CC2 | Open: records are silent. The CM5 uses them to negotiate 5 A from a USB-C supply; V1 feeds 5 V from a buck | Open, GHO-10/GHO-19 |
 | 97, 100 | CAM_GPIO0, CAM_GPIO1 | No connect | Proposed |
 | 99 | PMIC_Enable | SYS_PMIC_EN (internal 100 kΩ pull-up to 5 V, so every driver must be open drain) | Record: §4, §13; Datasheet |
-| 101 | USB_OTG_ID | Open. The datasheet says tie to GND for a fixed host role, which the hub needs. That blocks device mode for B-07 service and rpiboot (K-3) | Open, GHO-9/GHO-11 |
+| 101 | USB_OTG_ID | Unconnected (internal pull-up, device role), DNP 0 Ω to GND. Pins 103/105 go to B-07 only; the hub uses USB3-0's USB 2.0 pair, pins 134/136 | Record (D-044) |
 | 102 | PCIe_CLK_nREQ | PCIE_CLKREQ_N (must be connected) | Record: ledger; Datasheet §2.3.2 |
 | 103 / 105 | USB_N / USB_P | USB_UP_DM / USB_UP_DP, port to 03 | Record: ledger |
 | 104 | PCIE_nWAKE | No connect (unsupported in software) | Record: §6 |
@@ -237,7 +237,7 @@ TP_WIFI_PEWAKE, TP_WIFI_LED1, TP_WIFI_LED2 (Record). Proposed: TP on WIFI_3V3 at
 | 5 / 6 | SDA/SMBDAT, SCL/SMBCLK | No connect | No EEPROM, no SMBus host |
 | 13 | AUTOENz/HS_SUSPEND | No connect (internal pull-up: automatic charge mode off) | Proposed |
 | 17 | TEST | GND or no connect per the TI reference design | **Unverified** which the reference uses |
-| 19, 25, 37, 45, 53, 60, 63 | VDD (1.1 V core) | HUB_1V1 (0.99 to 1.26 V), 0.1 µF per pin, 10 µF bulk, optional ferrite under 0.05 Ω | Datasheet. Regulator not in any record (K-9) |
+| 19, 25, 37, 45, 53, 60, 63 | VDD (1.1 V core) | HUB_1V1 (0.99 to 1.26 V), 0.1 µF per pin, 10 µF bulk, optional ferrite under 0.05 Ω | Datasheet. Regulator B-26, TLV62568 buck from CM5_3V3 (D-044) |
 | 2, 20, 31, 48 | VDD33 | HUB_3V3, 0.1 µF per pin, 10 µF bulk | Proposed source CM5_3V3, so the hub, its reset and the upstream pair share the CM5 power domain. **Unverified**; GHO-10 |
 | 23, 24, 26, 27, 35, 36, 38, 39, 43, 44, 46, 47, 51, 52, 54, 55, 58, 59, 61, 62 | RSVD | No connect | Datasheet |
 | 28, 40 | NC | No connect | Datasheet |
@@ -327,7 +327,7 @@ TP_ETH_SYNC (Record). No pads on the MDI lines (Proposed: they are 100 Ω pairs 
 | 1, 10, 12 | GND | GND | |
 | 2 | TXD (PIO1) | GNSS_UART_RX (the CM5 receives) | Output in continuous mode |
 | 3 | RXD (PIO0) | GNSS_UART_TX (the CM5 transmits) | Input with pull-up |
-| 4 | TIMEPULSE (PIO4) | GNSS_PPS, plus TP_GNSS_PPS | Shared with SAFEBOOT_N through 1 kΩ inside the module (K-8) |
+| 4 | TIMEPULSE (PIO4) | GNSS_TIMEPULSE to the B-27 buffer input; GNSS_PPS from its output, plus TP_GNSS_PPS | Shared with SAFEBOOT_N through 1 kΩ inside the module (K-8, D-044) |
 | 5 | EXTINT (PIO5) | GNSS_EXTINT to TP_GNSS_EXTINT | Record (§9). PR #57 would use this PIO as ANT_SHORT_N (K-11) |
 | 6 | V_BCKP | GNSS_V_BCKP | Record: reserved, storage not selected. PR #57 candidate: supercapacitor |
 | 7 | V_IO | +3V3_GNSS | |
@@ -469,7 +469,7 @@ No pin numbers: the TPS25751A package is not recorded, and the BQ25798 and LTC33
 
 | Block | Nets | Status |
 |---|---|---|
-| B-07 USB4720-03-A service port | VBUS_SVC, SVC_CC1, SVC_CC2, SVC_DP, SVC_DM, shell to the wall | SVC_DP/DM have no CM5 endpoint (K-3) |
+| B-07 USB4720-03-A service port | VBUS_SVC, SVC_CC1, SVC_CC2, SVC_DP, SVC_DM, shell to the wall | SVC_DP/DM to CM5 pins 103/105 (D-044) |
 | B-08 TPS25751A | SVC_CC1/2, VBUS_SVC, I2C (to the charger and as a target on SYS_I2C, Proposed), interrupt output (no GPIO) | Selected; integration GHO-10 |
 | B-09 BQ25798 | VBUS_SVC in, VBAT_PACK at BAT, VSYS_CHG out, I2C on SYS_I2C (Proposed), interrupt (no GPIO) | Selected; integration GHO-10 |
 | B-24 LTC3350 | Input from VBAT_PROTECTED, output +VBUS_HOLD, PFO to BRIDGE_ACTIVE_N, I2C (Proposed SYS_I2C), PFI divider 562 kΩ over 100 kΩ | Candidate, GHO-38 |
@@ -491,7 +491,7 @@ Proposed: TP on VBAT_PACK, IN_SYS, EFUSE_OUT, VBAT_PROTECTED, +VBUS_HOLD, +5V_SY
 
 | Pin | Name | Net | Notes |
 |---:|---|---|---|
-| 14 | VDD | Open. VDD is 1.8 to 6.5 V, so it cannot come from VBAT_PROTECTED. Proposed: +5V_SYS | K-6 |
+| 14 | VDD | +3V3_RADIO, so WDI and MR meet 0.7 x VDD from a 3.3 V GPIO | Record (D-044) |
 | 10 | SENSE1 | SUP_SENSE1: divider from CM5_3V3 to the 0.4 V threshold | Record SVS1. RESET1 also starts the watchdog (K-6) |
 | 9 | SENSE2 | SUP_SENSE2: divider from +5V_SYS | Record SVS2 |
 | 8 | SENSE3 | SUP_SENSE3: divider from +3V3_RADIO, set against the 3.32 V minimum | Record SVS3; [v1-3v3-rail.md](v1-3v3-rail.md) |
@@ -499,10 +499,10 @@ Proposed: TP on VBAT_PACK, IN_SYS, EFUSE_OUT, VBAT_PROTECTED, +VBUS_HOLD, +5V_SY
 | 6 | SENSE4H | GND (overvoltage monitoring not used) | Datasheet: GND if unused. Proposed |
 | 5, 4, 3, 2 | CT1 to CT4 | Reset delays: open, fixed (resistor to VDD or open) or capacitor | GHO-10 |
 | 13 | VREF | No connect | Proposed |
-| 1 | MR | SUP_MR_N: latch-clear path | GHO-10 owns it (§13) |
+| 1 | MR | SUPERVISOR_ARM, 10 kΩ to GND: watchdog arm and latch clear | Record (D-044) |
 | 20 | WDI | SUPERVISOR_WDI | Record |
-| 19 | WDO | SUPERVISOR_WDO, open drain, pull-up domain open | Record |
-| 15 to 18 | RESET1 to RESET4 | SUP_RESET1_N to SUP_RESET4_N, open drain; where each goes is open | GHO-10 |
+| 19 | WDO | Open drain to the SENSE4L tap (D-044) | Record |
+| 15 to 18 | RESET1 to RESET4 | SUP_RESET1_N to SUP_RESET4_N, open drain. RESET2 and RESET4 wired-OR to SYS_PMIC_EN; RESET1 not connected to it | Record (D-044) |
 | 11 | NC | GND (datasheet recommends) | |
 | 12 | GND | GND | |
 | PAD | Thermal pad | GND | |
@@ -519,7 +519,7 @@ These are the carrier-side defaults that must hold before firmware runs. Signal 
 | HALOW_RESET_N, HALOW_WAKE_N | No carrier resistor (the card has its own pull-ups to HALOW_3V3). Open drain only | Record |
 | WIFI_WDIS1_N | 10 kΩ pull-up to WIFI_3V3. Open drain only | Record |
 | GNSS_RESET_N | No carrier resistor (MAX-M10S internal pull-up) | Proposed; back-feed K-7 |
-| GNSS_PPS | Input; series-resistor footprint at the module | Proposed; K-8 |
+| GNSS_PPS | Input, no pull (`ip,pn`); driven by the B-27 buffer, never an output | Record (D-044) |
 | GNSS_UART_TX, GNSS_UART_RX | No pulls | Proposed; back-feed K-7 |
 | SYS_I2C_SDA, SYS_I2C_SCL | CM5 1.8 kΩ pull-ups only | Datasheet; address map open |
 | USB_HUB_RESET_N | Pull-down at GRSTz: hub held in reset until released | Proposed (ledger sequence step 1) |
@@ -527,7 +527,7 @@ These are the carrier-side defaults that must hold before firmware runs. Signal 
 | HALOW_USB_FAULT_N | Pull-up only (reads "no fault"); no source exists | K-4 |
 | HALOW_FAULT_N, WIFI_FAULT_N | Pull-up to CM5_3V3 only; no source exists | Ledger: source unselected |
 | SUPERVISOR_WDI | Weak pull-down so WDI does not float during boot | Proposed; arming GHO-10 |
-| SUPERVISOR_WDO | Pull-up, domain open | Ledger |
+| SUPERVISOR_ARM | 10 kΩ pull-down | Record (D-044) |
 | POWER_GOOD | Through a translator from EFUSE_PGOOD (battery domain) | Open, GHO-9/GHO-10/GHO-13 |
 | EFUSE_FAULT | Pull-up to CM5_3V3 | Ledger asks for a CM5-domain pull-up; value open |
 | INA228_ALERT_N | Pull-up to CM5_3V3 | Proposed |
@@ -612,19 +612,19 @@ Proposed text for the records owner. README rule 6 asks for a Linear issue per c
 
 **K-2. §17 sheet contents lag the power path.** "v1-reference.md §17 lists the Wi-Fi TPS22975 on both 02_PCIE_WIFI and 06_POWER, and its 06_POWER list leaves out B-07, B-08, B-09 and B-24 (+VBUS_HOLD), which §11 and v1-hot-swap-bridge.md §4 put in the power path. Decide which sheet owns each radio switch and add the charge and bridge blocks to a sheet."
 
-**K-3. B-07 service data has no CM5 endpoint.** "D-009 and B-07 say the USB-C DATA / CHARGE port carries CM5 console and service data. The CM5's only USB 2.0 port that can act as a device (pins 103/105, USB_OTG_ID on pin 101) is the TUSB4041I upstream link (ledger, §3), and the CM5 datasheet says to tie USB_OTG_ID to GND for a fixed host role. rpiboot recovery through nRPIBOOT also needs that port in device mode. The CM5 debug UART exists only on module test points TP35/TP36 (datasheet Table 13), not on the connector, so §4's 'internal debug UART/test points' cannot be routed on the carrier. Choose a service-data architecture (for example a USB 2.0 switch on the CM5 port, or a USB-to-UART bridge to a spare UART) or narrow D-009."
+**K-3. B-07 service data has no CM5 endpoint.** "D-009 and B-07 say the USB-C DATA / CHARGE port carries CM5 console and service data. The CM5's only USB 2.0 port that can act as a device (pins 103/105, USB_OTG_ID on pin 101) is the TUSB4041I upstream link (ledger, §3), and the CM5 datasheet says to tie USB_OTG_ID to GND for a fixed host role. rpiboot recovery through nRPIBOOT also needs that port in device mode. The CM5 debug UART exists only on module test points TP35/TP36 (datasheet Table 13), not on the connector, so §4's 'internal debug UART/test points' cannot be routed on the carrier. Choose a service-data architecture (for example a USB 2.0 switch on the CM5 port, or a USB-to-UART bridge to a spare UART) or narrow D-009." Settled for capture by D-044 (V1 working default).
 
 **K-4. HALOW_USB_FAULT_N has no source.** "D-024 and the ledger keep HALOW_USB_FAULT_N as a HaLow USB fault input. The GW16170 is an M.2 card powered from HALOW_3V3 by a TPS22975, which has no fault output, and hub port 1 has no VBUS switch, so nothing can drive this signal. Name a source or free the GPIO, as D-026 did for BT_USB_FAULT_N."
 
 **K-5. INA228 telemetry is not pack-only in the charger-first path.** "v1-hot-swap-bridge.md §4 places the shunt after BQ25798 SYS and says the INA228 'sees pack current only'. With the charger ahead of the eFuse, the shunt carries the charger's system output, which includes USB-C power while charging, not pack current. §12 and §21 expect battery voltage, current, charge and energy. Decide whether battery telemetry needs a pack-side measurement (for example the BQ25798 or BQ76942 gauges) or a different shunt position."
 
-**K-6. Supervisor topology against CM5 power-up.** "v1-reference.md §13 puts SVS1 on CM5_3V3 and has the TPS386000 able to pull PMIC_Enable low; the watchdog starts when RESET1 releases. The CM5 3.3 V rail only rises after PMIC_Enable rises (CM5 datasheet §3.1), so RESET1 cannot gate PMIC_Enable without holding the CM5 off. TPS386000 VDD is 1.8 to 6.5 V (SBVS105F), so VDD cannot come from VBAT_PROTECTED; the VDD source is not recorded. GHO-10 owns the fix."
+**K-6. Supervisor topology against CM5 power-up.** "v1-reference.md §13 puts SVS1 on CM5_3V3 and has the TPS386000 able to pull PMIC_Enable low; the watchdog starts when RESET1 releases. The CM5 3.3 V rail only rises after PMIC_Enable rises (CM5 datasheet §3.1), so RESET1 cannot gate PMIC_Enable without holding the CM5 off. TPS386000 VDD is 1.8 to 6.5 V (SBVS105F), so VDD cannot come from VBAT_PROTECTED; the VDD source is not recorded. GHO-10 owns the fix." Settled for capture by D-044 (V1 working default).
 
 **K-7. CM5 reverse-voltage rule against always-on domains.** "The CM5 datasheet §4.2.1 forbids external voltage on any pin while the CM5 is powered down. The recovery hierarchy (§22, step 5) powers the CM5 down through PMIC_Enable while +3V3_RADIO, +3V3_GNSS, the supervisor, the eFuse and the charger stay up. The MAX-M10S drives TXD and TIMEPULSE and pulls RESET_N, SDA and SCL up to its own rail; I2C devices on other rails share SYS_I2C. No record addresses isolation. Add a rule and the parts (series resistors, buffers or switched pull-ups) under GHO-9/GHO-10."
 
-**K-8. GNSS TIMEPULSE and SAFEBOOT_N.** "MAX-M10S data sheet R08 Table 10, note 15: SAFEBOOT_N is joined to TIMEPULSE inside the module through 1 kΩ, and the receiver enters safeboot if it is low at start-up. TIMEPULSE is GNSS_PPS to a CM5 input. If the CM5 pin is pulled down, or the CM5 is unpowered when the GNSS starts, the GNSS can boot into safeboot. v1-reference.md §9 treats SAFEBOOT_N as a test pad only. Define the PPS input bias and any series isolation."
+**K-8. GNSS TIMEPULSE and SAFEBOOT_N.** "MAX-M10S data sheet R08 Table 10, note 15: SAFEBOOT_N is joined to TIMEPULSE inside the module through 1 kΩ, and the receiver enters safeboot if it is low at start-up. TIMEPULSE is GNSS_PPS to a CM5 input. If the CM5 pin is pulled down, or the CM5 is unpowered when the GNSS starts, the GNSS can boot into safeboot. v1-reference.md §9 treats SAFEBOOT_N as a test pad only. Define the PPS input bias and any series isolation." Settled for capture by D-044 (V1 working default).
 
-**K-9. No 1.1 V rail for the hub.** "TUSB4041I needs a 1.1 V core supply on seven VDD pins (0.99 to 1.26 V, SLLSEK3F Table 4-1 and §5.3). No record lists a 1.1 V regulator or the hub's 3.3 V source; §17 03_USB_HALOW_AUDIO lists only the crystal. Add the rail to the power tree and the BOM."
+**K-9. No 1.1 V rail for the hub.** "TUSB4041I needs a 1.1 V core supply on seven VDD pins (0.99 to 1.26 V, SLLSEK3F Table 4-1 and §5.3). No record lists a 1.1 V regulator or the hub's 3.3 V source; §17 03_USB_HALOW_AUDIO lists only the crystal. Add the rail to the power tree and the BOM." Settled for capture by D-044 (V1 working default).
 
 **K-10. GNSS antenna bias.** Already raised in PR #57 (conflict 2): §9 says VCC_RF biases the antenna; PR #57 proposes a current-limited switch.
 

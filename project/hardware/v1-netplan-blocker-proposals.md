@@ -315,6 +315,8 @@ CM5_3V3 budget for the hub (Calculated): VDD33 at most 88 mA, plus the buck inpu
 
 ## Decisions for the project owner
 
+The V1 thread picked a working default for each item below, recorded as D-044 in [decisions.md](../decisions.md): option A, TP_NBOOT only with a DNP Hall footprint, the standard BOOT_ORDER retry loop, +3V3_RADIO, repurposing the row, arming after boot, and the buck. Justin has not been asked. Each stays reversible until layout and is revisited at schematic review.
+
 1. **K-3 architecture:** option A (re-home the hub to a USB 3.0 port's USB 2.0 pair; B-07 direct to the OTG port), recommended, or option B (TS3USB221A switch). This changes the ledger's USB pin rows and the stackup routing plan (GHO-9, GHO-14).
 2. **Hardware rpiboot entry without opening the enclosure:** TP_NBOOT only (enclosure open; the default proposal), or a sealed DRV5032FC Hall input behind a marked spot on the wall. The question is whether a magnet-actuated service input is acceptable under "no physical buttons" (§30 rule 9).
 3. **BOOT_ORDER RPIBOOT fallback:** whether a node whose eMMC fails should wait indefinitely in rpiboot (field-recoverable over B-07), or keep retrying the eMMC (it cannot be recovered without the enclosure open or a software request).
