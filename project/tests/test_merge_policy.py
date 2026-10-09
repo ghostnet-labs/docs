@@ -1,12 +1,15 @@
 import base64
+import io
 import json
 import unittest
+import urllib.error
+from contextlib import redirect_stdout
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from merge_policy import (evaluate, matches, reviews_clear, protection_ready,
                           check_blockers, external_build_blockers, GATE,
-                          terminal_blocker)
+                          terminal_blocker, handle, stale_gate_run)
 
 class GateTests(unittest.TestCase):
     def setUp(self):
@@ -82,6 +85,26 @@ class GateTests(unittest.TestCase):
                       evaluate(profile, ["net/test/Makefile"], [], "current", 7))
         build = dict(self.run, path=".github/workflows/build-packages.yml")
         self.assertEqual(evaluate(profile, ["net/test/Makefile"], [build], "current", 7), [])
+
+    def test_openmanetd_profile_requires_browser_e2e_for_ui_changes(self):
+        profiles = json.loads((Path(__file__).resolve().parents[1] / "scripts" / "merge_profiles.json").read_text())
+        profile = profiles["openmanetd"]
+        e2e = ".github/workflows/e2e-frontend.yml"
+        for changed in ["frontend/src/App.jsx", "internal/frontend/server.go", "internal/config/config.go"]:
+            self.assertIn("Missing applicable workflow: " + e2e,
+                          evaluate(profile, [changed], [], "current", 7), changed)
+        self.assertNotIn("Missing applicable workflow: " + e2e,
+                         evaluate(profile, ["internal/mgmt/alfred.go"], [], "current", 7))
+        runs = [dict(self.run, id=i, path=w["path"]) for i, w in enumerate(profile["workflows"])]
+        self.assertEqual(evaluate(profile, ["frontend/src/App.jsx"], runs, "current", 7), [])
+
+    def test_luci_profile_builds_without_openwrt_formalities(self):
+        profiles = json.loads((Path(__file__).resolve().parents[1] / "scripts" / "merge_profiles.json").read_text())
+        paths = [w["path"] for w in profiles["luci"]["workflows"]]
+        self.assertIn(".github/workflows/build.yml", paths)
+        self.assertNotIn(".github/workflows/formal.yml", paths)
+        self.assertEqual(evaluate(profiles["luci"], ["applications/luci-app-x/Makefile"], [], "current", 7),
+                         ["Missing applicable workflow: .github/workflows/build.yml"])
 
     def test_requested_changes_and_dismissal(self):
         review = {"id": 1, "user": {"login": "reviewer"}, "state": "CHANGES_REQUESTED"}
@@ -173,6 +196,119 @@ class ExternalBuildTests(unittest.TestCase):
         api = FakeExternalAPI(self.commit, pr_gate="failure")
         blockers = external_build_blockers(api, "ghostnet-labs/packages", self.pr(), self.files, self.profile)
         self.assertTrue(any("External integration" in b for b in blockers))
+
+
+RULES = [
+    {"type": "pull_request", "parameters": {"required_review_thread_resolution": True}},
+    {"type": "required_status_checks", "parameters": {
+        "strict_required_status_checks_policy": True,
+        "required_status_checks": [{"context": GATE, "integration_id": 15368}]}},
+]
+
+
+class FakeMergeAPI:
+    """Just enough of the GitHub API for handle() on PR 7 with head "head"."""
+
+    def __init__(self, gate="success", gate_status="completed", tests="success", merge_error=None,
+                 rerun_error=None, gate_attempt=1):
+        self.gate_attempt = gate_attempt
+        self.gate = gate
+        self.gate_status = gate_status
+        self.tests = tests
+        self.merge_error = merge_error
+        self.rerun_error = rerun_error
+        self.writes = []
+
+    def call(self, path, data=None, method=None):
+        if method:
+            self.writes.append((method, path))
+            error = self.merge_error if path.endswith("/merge") else self.rerun_error
+            if error:
+                raise urllib.error.HTTPError(path, error, "refused", {}, None)
+            return {"merged": True, "sha": "merged"} if path.endswith("/merge") else {}
+        if path == "repos/o/r/pulls/7":
+            return {"state": "open", "draft": False, "base": {"ref": "main"}, "body": "",
+                    "head": {"sha": "head", "repo": {"full_name": "o/r"}}, "labels": [],
+                    "changed_files": 1, "mergeable_state": "clean"}
+        if path.endswith("/commits/head/status"):
+            return {"statuses": [], "state": "pending"}
+        if path.endswith("/rules/branches/main"):
+            return RULES
+        if path == "repos/o/r/actions/runs/99":
+            return {"run_attempt": self.gate_attempt}
+        raise AssertionError(path)
+
+    def pages(self, path, key=None):
+        if path.startswith("repos/o/r/pulls/7/files"):
+            return [{"filename": "src/main.go"}]
+        if path.startswith("repos/o/r/actions/runs"):
+            return [{"id": 1, "head_sha": "head", "event": "pull_request", "path": "tests.yml",
+                     "pull_requests": [{"number": 7}], "status": "completed", "conclusion": self.tests}]
+        if path.endswith("/commits/head/check-runs"):
+            return [{"id": 5, "name": GATE, "app": {"id": 15368}, "status": self.gate_status,
+                     "conclusion": self.gate if self.gate_status == "completed" else None,
+                     "details_url": "https://github.com/o/r/actions/runs/99/job/5"}]
+        if path.endswith("/reviews"):
+            return []
+        raise AssertionError(path)
+
+
+class AutoMergeTests(unittest.TestCase):
+    profile = {"branch": "main", "workflows": [{"path": "tests.yml", "paths": None}]}
+
+    def handle(self, api):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            handle(api, "o/r", 7, self.profile)
+        return out.getvalue()
+
+    def test_passing_pr_merges(self):
+        api = FakeMergeAPI()
+        self.assertIn("merged", self.handle(api))
+        self.assertEqual(api.writes, [("PUT", "repos/o/r/pulls/7/merge")])
+
+    def test_refused_merge_is_logged_not_raised(self):
+        for code in (405, 409):
+            api = FakeMergeAPI(merge_error=code)
+            self.assertIn(f"HTTP {code}", self.handle(api))
+
+    def test_other_merge_errors_still_fail(self):
+        with self.assertRaises(urllib.error.HTTPError):
+            self.handle(FakeMergeAPI(merge_error=500))
+
+    def test_timed_out_gate_reruns_once_workflows_pass(self):
+        for conclusion in ("failure", "timed_out", "cancelled"):
+            api = FakeMergeAPI(gate=conclusion)
+            self.assertIn("re-running gate run 99", self.handle(api))
+            self.assertEqual(api.writes, [("POST", "repos/o/r/actions/runs/99/rerun")])
+
+    def test_gate_not_rerun_while_workflows_block(self):
+        for tests in ("failure", "in_progress"):
+            api = FakeMergeAPI(gate="failure", tests=tests)
+            self.handle(api)
+            self.assertEqual(api.writes, [])
+
+    def test_running_gate_not_rerun(self):
+        api = FakeMergeAPI(gate_status="in_progress")
+        self.handle(api)
+        self.assertEqual(api.writes, [])
+
+    def test_gate_reruns_are_capped(self):
+        api = FakeMergeAPI(gate="failure", gate_attempt=3)
+        self.handle(api)
+        self.assertEqual(api.writes, [])
+
+    def test_rerun_refusal_is_logged(self):
+        api = FakeMergeAPI(gate="failure", rerun_error=403)
+        self.assertIn("could not re-run gate run 99: HTTP 403", self.handle(api))
+
+    def test_stale_gate_run_ignores_other_blockers_and_bad_urls(self):
+        gate = {"id": 1, "status": "completed", "conclusion": "failure", "details_url": "https://example.com/x"}
+        self.assertIsNone(stale_gate_run([gate], []))
+        self.assertIsNone(stale_gate_run([dict(gate, details_url="https://github.com/o/r/actions/runs/3/job/4")], ["blocked"]))
+        self.assertIsNone(stale_gate_run([], []))
+        newer = dict(gate, id=2, conclusion="success")
+        self.assertIsNone(stale_gate_run([dict(gate, details_url="https://github.com/o/r/actions/runs/3/job/4"), newer], []))
 
 
 if __name__ == "__main__":
