@@ -52,7 +52,7 @@ else
 fi
 has morse_cli && { morse_cli -i "${halow%% *}" version >/dev/null 2>&1 && ok "morse_cli version" || note "morse_cli version failed"; }
 
-# --- Wi-Fi (PCIe on the M.2 M-key slot: AW7916-AED mt7915e, or GW17032 ath10k) ---
+# --- Wi-Fi (PCIe on the M.2 M-key slot: AW7916-AED mt7915e, D-034) ---
 wifi=$(ifaces_by_driver mt7915e)
 [ -n "$wifi" ] || wifi=$(ifaces_by_driver ath10k)
 [ -n "$wifi" ] && ok "Wi-Fi interface(s): $wifi" || bad "no mt7915e/ath10k netdev (lspci, dmesg | grep -E 'mt7915|ath10k|pcie')"
