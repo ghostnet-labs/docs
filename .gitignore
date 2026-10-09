@@ -3,3 +3,5 @@ docs/_site/
 docs/.jekyll-cache/
 docs/.sass-cache/
 vendor/bundle/
+__pycache__/
+*.pyc
