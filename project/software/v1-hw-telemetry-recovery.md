@@ -231,7 +231,7 @@ Enums use the `RADIO_HALOW` / `RADIO_WIFI` style with an `_UNSPECIFIED` zero val
 
 ## 9. Bench tests
 
-Run under [GHO-21](https://linear.app/ghostnet-labs/issue/GHO-21) (first power and boot) and [GHO-23](https://linear.app/ghostnet-labs/issue/GHO-23) (telemetry and recovery validation). Record the board and firmware revision with each result.
+Run under [GHO-21](https://linear.app/ghostnet-labs/issue/GHO-21) (first power and boot) and [GHO-23](https://linear.app/ghostnet-labs/issue/GHO-23) (telemetry and recovery validation). Record the board and firmware revision with each result. Each row is expanded into a full procedure (RC-n is Tn) in [../hardware/v1-validation-procedures.md](../hardware/v1-validation-procedures.md#watchdog-pmic-and-recovery).
 
 | # | Proves | Method | Pass |
 |---|---|---|---|
