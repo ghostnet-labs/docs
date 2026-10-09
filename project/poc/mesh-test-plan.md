@@ -27,17 +27,18 @@ Facts from openmanetd (`internal/network/uci_wireless.go`,
 - The secondary link defaults to channel 8, HE40, SAE, `mesh_rssi_threshold -80`, `mcast_rate 24000`. It is meant to be faster than HaLow at short range, not to add range.
 - `bat0` sits in the `br-ahwlan` bridge with the Ethernet ports. A mesh-gate advertises `gw_mode server`, a mesh-point `client`.
 - Multicast: `bat0 multicast_mode 0` by default (batman floods all multicast). ATAK SA is 239.2.3.1, ATAK chat 224.10.10.1, voice talk groups 239.192.41.1:38801–38864.
-- The wizard only offers the Wi-Fi backhaul on an MT7915/MT7916 radio. The POC uses the AW7916-AED (MT7916, D-034), so this is the real software path. Appendix A is only a fallback if a non-MediaTek card has to stand in; it tests the radios but not the shipped software.
+- The wizard only offers the Wi-Fi backhaul on an MT7915/MT7916 radio. The POC Wi-Fi card is the AsiaRF AW7916-AED (MT7916, `mt7915e`) on a Sintech M.2 M-key to A/E-key adapter in the carrier's M-key slot (A-09, [D-034](../decisions.md)), so these tests run the shipped wizard path on both radios. No hand-written secondary link is needed or supported; the GW17032 fallback is retired (R-22).
 
 ## Setup (both nodes)
 
 1. Attenuators on both HaLow antenna ports (about 50 dB total between the nodes), or nodes at least 1 m apart with whips vertical. Never transmit into an open port.
-2. Both nodes on the bench switch over Ethernet for SSH. Note each node's Ethernet IP.
-3. Run the setup wizard on each node:
+2. On each node, confirm the Wi-Fi card is the AW7916-AED on its M-key adapter (A-09, D-034): `lspci` lists the MediaTek MT7916 and `mesh-snap.sh` shows an `mt7915e` netdev. A node without it cannot run the Wi-Fi backhaul tests; record that on GHO-31 instead of configuring the link by hand.
+3. Both nodes on the bench switch over Ethernet for SSH. Note each node's Ethernet IP.
+4. Run the setup wizard on each node:
    - Node 1: role **Mesh gate**. Node 2: role **Mesh point**.
    - Same HaLow mesh ID, passphrase, channel and bandwidth on both. Use the US default channel and 2 MHz unless a test says otherwise.
    - Wi-Fi (access points step): set the 2.4 GHz radio to **Mesh backhaul**, with the same mesh ID and passphrase on both. Keep channel 8 and 40 MHz.
-4. After the wizard reboots each node, copy [`mesh-snap.sh`](mesh-snap.sh) to both and run `sh mesh-snap.sh > snap-node1-setup.txt`. Attach both files.
+5. After the wizard reboots each node, copy [`mesh-snap.sh`](mesh-snap.sh) to both and run `sh mesh-snap.sh > snap-node1-setup.txt`. Attach both files.
 
 Unplug Ethernet from Node 2 for the radio tests. It is reachable over the mesh at its `ahwlan` address (from `mesh-snap.sh`).
 
@@ -69,39 +70,4 @@ output, `logread`, and `dmesg`.
 - Bench distance: two nodes on a bench saturate each other without attenuation. Throughput numbers are best-case.
 - With only two nodes, there is no multi-hop routing. A third node is on [GHO-40](https://linear.app/ghostnet-labs/issue/GHO-40).
 - POC radios aren't V1 radios: GW16167 vs GW16170 transmit power ([bench-bom-and-topology.md](bench-bom-and-topology.md) §1).
-
-## Appendix A: secondary link by hand (fallback, non-MediaTek card)
-
-Use this only if the Wi-Fi card is not MT7915/MT7916. It writes the same
-option set the wizard uses, after the wizard has finished with no Wi-Fi
-backhaul. `radio1` is the ath10k radio; check with `uci show wireless`.
-ath10k has no HE modes, so use HT40.
-
-```sh
-R=radio1                 # ath10k wifi-device
-ID=openmanet-wifi        # same on both nodes
-KEY=changeme-wifi        # same on both nodes
-uci batch <<EOF
-set wireless.$R.channel='8'
-set wireless.$R.htmode='HT40'
-set wireless.$R.disabled='0'
-set wireless.batmesh1_$R=wifi-iface
-set wireless.batmesh1_$R.device='$R'
-set wireless.batmesh1_$R.network='batmesh1'
-set wireless.batmesh1_$R.mode='mesh'
-set wireless.batmesh1_$R.mesh_id='$ID'
-set wireless.batmesh1_$R.key='$KEY'
-set wireless.batmesh1_$R.encryption='sae'
-set wireless.batmesh1_$R.mesh_fwding='0'
-set wireless.batmesh1_$R.mesh_nolearn='1'
-set wireless.batmesh1_$R.mesh_rssi_threshold='-80'
-set wireless.batmesh1_$R.mcast_rate='24000'
-set wireless.batmesh1_$R.mesh_retry_timeout='255'
-set wireless.batmesh1_$R.mesh_confirm_timeout='255'
-set wireless.batmesh1_$R.mesh_holding_timeout='255'
-EOF
-uci commit && reload_config
-```
-
-The wizard always creates the `network.batmesh1` hardif on `bat0`, so only the
-wireless side is needed. Check with `uci show network.batmesh1`.
+- The Wi-Fi card is the V1 card (B-03), but it is fed through the Sintech adapter and the carrier's M-key slot, not the V1 socket and +3V3_RADIO path. Wi-Fi current and temperature from these tests are POC evidence, not V1 socket qualification ([v1-3v3-rail.md](../hardware/v1-3v3-rail.md)).
