@@ -10,6 +10,7 @@ This folder holds the engineering records for the ghostnet-labs OpenMANET field 
 
 The node's web interface work (one primary OpenMANET UI with LuCI behind Advanced, D-036) is tracked separately in [OpenMANET Unified UI](https://linear.app/ghostnet-labs/project/openmanet-unified-ui-937d7bff9664).
 The current UI parity, configuration-ownership and proxy-path audit is [software/unified-ui-audit.md](software/unified-ui-audit.md) (GHO-67).
+Operator and developer guidance, the LuCI-only task list and the physical-node acceptance checklist are linked from the ownership table below (GHO-79, GHO-81).
 
 Data flows one way: Track A produces measurements and Track B consumes them. Track B must not lock any decision that Track A can settle.
 
@@ -36,6 +37,10 @@ Every fact has exactly one owner. Everywhere else refers to it by ID or link and
 | Track B engineering detail: calculations, interfaces, placement, and validation plan | [hardware/v1-reference.md](hardware/v1-reference.md) (supporting; the registers above win; it links to the canonical pin/GPIO record) |
 | CAD floorplan model and clearance check | firmware [`docs/hardware/v1-mechanical/`](https://github.com/ghostnet-labs/firmware/tree/24.10/docs/hardware/v1-mechanical) (a script, so it lives with code) |
 | Unified UI origin, routing, sign-in behavior, recovery route and navigation (D-037) | [software/unified-ui-design.md](software/unified-ui-design.md) |
+| Unified UI operator procedures (address, primary tasks, Advanced, reconnect, recovery, firmware updates) | [software/unified-ui-operator-guide.md](software/unified-ui-operator-guide.md) |
+| Unified UI repository boundaries, local lab vs. physical-node modes and release procedure | [software/unified-ui-developer-guide.md](software/unified-ui-developer-guide.md) |
+| LuCI-only tasks and the criteria for migrating or retiring each | [software/luci-only-tasks.md](software/luci-only-tasks.md) |
+| Unified UI physical-node acceptance checklist (results go on [GHO-79](https://linear.app/ghostnet-labs/issue/GHO-79)) | [software/unified-ui-acceptance-plan.md](software/unified-ui-acceptance-plan.md) |
 | Firmware source, board target, CI and build evidence | [ghostnet-labs/firmware](https://github.com/ghostnet-labs/firmware) and its PRs |
 | History of the 2026-09-29 Track A options | [poc/history-2026-09-29.md](poc/history-2026-09-29.md) (historical, never authoritative) |
 
