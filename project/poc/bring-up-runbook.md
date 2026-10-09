@@ -6,10 +6,11 @@ parts and the carrier pinout are in
 Waveshare carrier exposes). Results go on the Linear issues named in each
 step, not in this file.
 
-Two scripts run on the node; copy them over with `scp` once SSH works:
+These scripts run on the node; copy them over with `scp` once SSH works:
 
 - [`bench-check.sh`](bench-check.sh) is a read-only pass/fail check of every bench device path. It ends with raw details to paste into Linear.
 - [`bench-log.sh`](bench-log.sh) is a CSV logger for power, thermal and radio TX bytes (GHO-30, GHO-31).
+- [`bench-check-v1.sh`](bench-check-v1.sh) is the same check for the V1 carrier (section 6).
 
 ## 0. Before power
 
@@ -100,3 +101,31 @@ Run it once closed-box without a CM5 cooler and once with one (arrival check 10)
 ## 5. Two nodes (GHO-31)
 
 Repeat steps 1–3 on node 2. Then run [mesh-test-plan.md](mesh-test-plan.md) for [GHO-31](https://linear.app/ghostnet-labs/issue/GHO-31), with the nodes at least 1 m apart or behind attenuators.
+
+## 6. V1 carrier check (GHO-19, GHO-21)
+
+Steps 0–5 are for the Track A bench node. On a Track B V1 carrier, flash the `bcm2712_ghostnet-v1` image (board `ghostnet,v1`) from [firmware PR #23](https://github.com/ghostnet-labs/firmware/pull/23) or from `24.10` once it merges, and record its commit, Actions run and `sha256sum` on [GHO-21](https://linear.app/ghostnet-labs/issue/GHO-21). Do first power on the carrier per GHO-21 before this step.
+
+Once the carrier boots and SSH works, copy [`bench-check-v1.sh`](bench-check-v1.sh) over and run:
+
+```sh
+sh bench-check-v1.sh > /tmp/check-v1.txt 2>&1; cat /tmp/check-v1.txt
+```
+
+It is read-only like `bench-check.sh` and prints the same PASS/WARN/FAIL lines. It checks the board name, the AW7916-AED on PCIe and its mesh point modes, mt7915e errors that point at the Pi 5 PCIe DMA limit, the CM5 USB port in `dwc2` host mode, the TUSB4041I hub and what sits on its ports (B-04), the GW16170 netdev, the INA228 hwmon, gpsd on UART0, `/dev/pps0` on the GNSS PPS line, the OpenVLM CM108B, the absence of Bluetooth (D-026), and the state of every CM5 GPIO in the [canonical pinout record](../hardware/v1-pinout-and-sequencing.md). The `gpio_check` lines in the script must name the same signals as that record; `project/scripts/check_gpio_allocations.py` fails CI when they drift. Expected GPIO boot states come from the V1 distroconfig in firmware PR #23.
+
+Paste the output on GHO-21. For each FAIL:
+
+| FAIL | First look |
+| -- | -- |
+| no PCIe 14c3:7906 | Wi-Fi power enable and W_DISABLE1# lines in the GPIO section of the same output; WIFI_3V3 rail; `dmesg \| grep -i pcie`. |
+| mt7915e errors in dmesg | The Pi 5 external PCIe 32-bit DMA limit ([v1-reference.md](../hardware/v1-reference.md), Wi-Fi known risk). Add `dtoverlay=pcie-32bit-dma-pi5` to the boot partition's `distroconfig.txt`, reboot, re-run, and record the result on [GHO-19](https://linear.app/ghostnet-labs/issue/GHO-19). |
+| no 'mesh point' | `iw phy <phy> info`; firmware version in `dmesg \| grep mt7915`. |
+| no dwc2 root hub | `dtoverlay=dwc2,dr_mode=host` in `distroconfig.txt`; `dmesg \| grep -i dwc2`. |
+| no TI hub | Hub reset line in the GPIO section, hub 3.3 V and 24 MHz clock. |
+| no morse netdev | HaLow power enable and reset lines in the GPIO section; `dmesg \| grep -i morse`. |
+| no i2c 1-0040 / wrong hwmon name | `logread -e ina219-ups`, `i2cdetect -y 1`. The 0x40 address assumes A0/A1 at GND; if the schematic straps differ, change `/etc/config/ups` and report it on GHO-21. |
+| gpsd / ttyAMA0 / console | `uci show gpsd`; `dtparam=uart0=on`; the kernel console must not be on `ttyAMA0`. |
+| `/dev/pps0` missing | `dtoverlay=pps-gpio` in `distroconfig.txt`, `lsmod \| grep pps`. |
+| Bluetooth present | V1 has none (D-026); report the image and `dmesg \| grep -i hci` on GHO-19. |
+| GPIO line | Compare with the pinout record's polarity and boot-state notes; scope the pin before changing anything. A WARN on an idle-high input means the line is asserted or its pull-up is missing (GHO-9). |

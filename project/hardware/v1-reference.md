@@ -428,6 +428,8 @@ Project status by area:
 
 ## 27. Validation plan
 
+The numbered procedures, pass criteria and results template for this matrix are in [v1-validation-procedures.md](v1-validation-procedures.md) ([GHO-23](https://linear.app/ghostnet-labs/issue/GHO-23)).
+
 - Power: minimum and maximum input, cold and hot startup, maximum radio load, Ethernet load, USB load, transient load, radio power cycling, short circuit and current limit, reverse battery, overvoltage, undervoltage, thermal shutdown, and recovery behavior
 - RF: Wi-Fi at 2.4, 5, and 6 GHz, HaLow at 902 to 928 MHz, GNSS acquisition and sensitivity, coexistence, antenna isolation, enclosure and thermal effects, conducted TX, and receiver sensitivity
 - Ethernet: 10/100/1000, negotiation, throughput, sustained traffic, ESD, shield and chassis behavior, and PHY timing
