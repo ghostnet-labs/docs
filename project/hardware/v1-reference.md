@@ -63,6 +63,7 @@ CM5 electrical decisions:
 - PMIC_Enable is used for hardware recovery; nEXTRST is not used as the external reset mechanism
 - No user LEDs; Ethernet LED outputs and CM5 power/activity LEDs are unused
 - No external debug USB connector; debug uses internal test pads and an internal debug UART/test points
+- RTC backup is not yet chosen. CM5 pin 76 VBAT takes 2.5 to 3.5 V and draws about 6 µA with the CM5 off ([CM5 datasheet](https://datasheets.raspberrypi.com/cm5/cm5-datasheet.pdf) Table 3 and §3.3); without a source the RTC loses time whenever the battery is out
 
 ## 5. Wi-Fi 6E: AsiaRF AW7916-AED
 
@@ -114,7 +115,7 @@ About 9.7 x 10.1 x 2.5 mm, multi-constellation, UART, I2C, PPS/time pulse, reset
 
 Power: +3V3_RADIO, filtered, to +3V3_GNSS. No dedicated GNSS power switch is planned for V1, because independent GNSS power cycling is not currently required.
 
-Antenna: external active antenna; VCC_RF provides the antenna bias.
+Antenna: external active antenna. The bias source and its short-circuit protection are open under [GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11). [docs PR #57](https://github.com/ghostnet-labs/docs/pull/57) reports that a shorted antenna draws about 320 mA, above VCC_RF's 250 mA absolute maximum (MAX-M10S data sheet R08; not rechecked here), so the antenna must not run straight from VCC_RF without a current limit. That PR proposes a current-limited switch. The u-blox three-pin antenna supervisor reads open-antenna status on SDA and SCL, so choosing it would give up GNSS I2C.
 
 Placement: a quiet RF corner, away from buck converters, Ethernet magnetics, CM5 high-speed routing, Wi-Fi, and HaLow.
 
@@ -131,15 +132,16 @@ Consequences: the feed-through has no magnetics. The board carries a discrete fo
 - No logic-ground pins. The header is on the MDI side of the 1500 Vrms isolation barrier, so any extra pins are chassis or shield only.
 - Untwist each pair 10 mm or less at the header and 13 mm or less at the plug.
 - Pair-to-pair skew is not critical (1000BASE-T allows 50 ns).
+- All eight header circuits carry MDI, so the header has no spare pin for a shield. Where the pigtail shield bonds is open ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)).
 - PCB routing is 100 ohm differential, with P and N in each pair length-matched within 0.15 mm ([CM5 datasheet](https://datasheets.raspberrypi.com/cm5/cm5-datasheet.pdf) §2.2). Matching between pairs is not needed while they differ by less than 50 mm.
 
 Magnetics part: not yet selected.
 
 Not selected: an external PHY (duplicates CM5 function and adds power, area, cost, and complexity), PoE (not required, adds power-path and thermal complexity), and Ethernet LEDs (status belongs in software and the EUD).
 
-ESD: a low-capacitance Gigabit Ethernet ESD device is required near the Ethernet connector. The part is open.
+ESD: a low-capacitance Gigabit Ethernet ESD device is required. The part and the surge level it must meet are open ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)).
 
-Chassis: CHASSIS_GND is reserved. Do not connect the Ethernet connector shield directly to digital ground without a deliberate strategy.
+Chassis: the bonding strategy is open ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)). The wall RF connectors and the D-035 thermal path already tie the board to the enclosure, so CHASSIS_GND cannot stay unconnected. Do not connect the Ethernet connector shield directly to digital ground without a deliberate strategy.
 
 Timing: the CM5 PHY supports IEEE 1588-2008 and exposes a dedicated 3.3 V sync interface. D-033 selects an internal test point only; no GPIO capture connection is selected and GNSS PPS stays independent. The physical pin, net and GPIO reservation are owned by [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md#ethernet-timing-interface).
 
@@ -287,7 +289,7 @@ PCB: 138 x 67 mm working target (D-026). Enclosure concept: rectangular aluminum
 
 Result (138 x 67 mm board, firmware [PR #24](https://github.com/ghostnet-labs/firmware/pull/24)): no overlaps on either side, with 65 percent of the top side and 13 percent of the bottom side occupied. Rules checked in the script: no switching part sits over or under an RF module on either side, and every power part is at least 15 mm from the GNSS receiver. Centre distances to the GNSS receiver: HaLow card about 116 mm, Wi-Fi card about 34 mm (2.5 mm edge to edge), Wi-Fi socket about 26 mm (6.5 mm edge to edge), bucks about 81 mm, Ethernet feed-through about 128 mm. The Wi-Fi card is now the GNSS receiver's nearest neighbour and the one to review against the coexistence results.
 
-Limits of this check: sizes are nominal, not manufacturer drawings. The magnetics module (14 x 9 mm) and the RJ45 plug and boot (16 x 16 mm) are placeholders until parts are chosen, the Pico-Lock header depth (7.5 mm) is assumed until Molex drawing SD-504050-001 is checked, and the feed-through axis height is assumed. The AW7916-AED has no published STEP, so it is a 30 x 52 x 2.4 mm box (thickness assumed). The antenna connector position on each M.2 card is assumed to be the end opposite the socket, which is unverified for the GW16170 and the AW7916-AED. Estimated stack height: the earlier figure of about 27 mm for the radio body (the pack now adds about 46 mm, master M-02) assumed a 13.4 mm standard jack and is now an upper bound. The tallest top-side part is likely the CM5 on its connectors (about 7.4 mm connector stack plus the module, unverified), and the 3D assembly must recompute it. This does not replace the STEP-based 3D collision check.
+Limits of this check: sizes are nominal, not manufacturer drawings. The magnetics module (14 x 9 mm, 3.5 mm tall or less under D-025) and the RJ45 plug and boot (16 x 16 mm) are placeholders until parts are chosen. Common gigabit magnetics are 6 to 9 mm tall (Würth 7490220122 is 8.8 mm); the one low-profile lead found, Pulse HX5120NL at about 2.1 mm, is unverified and its 16.5 x 9.1 mm body is 2.5 mm longer than the placeholder ([docs PR #57](https://github.com/ghostnet-labs/docs/pull/57)). In addition, the Pico-Lock header depth (7.5 mm) is assumed until Molex drawing SD-504050-001 is checked, and the feed-through axis height is assumed. The AW7916-AED has no published STEP, so it is a 30 x 52 x 2.4 mm box (thickness assumed). The antenna connector position on each M.2 card is assumed to be the end opposite the socket, which is unverified for the GW16170 and the AW7916-AED. Estimated stack height: the earlier figure of about 27 mm for the radio body (the pack now adds about 46 mm, master M-02) assumed a 13.4 mm standard jack and is now an upper bound. The tallest top-side part is likely the CM5 on its connectors (about 7.4 mm connector stack plus the module, unverified), and the 3D assembly must recompute it. This does not replace the STEP-based 3D collision check.
 
 The floorplan is conceptual only: HaLow module upper left, CM5 center, Wi-Fi module right of the CM5, GNSS lower right at the right edge, power and DC section lower middle, USB hub lower center, Ethernet connector lower left, battery contacts on the lower left edge. It must also reserve an enclosure-wall opening and internal cable path for the external OpenVLM USB-C host port, positioned for safe handset/PTT cable access and clear of the Ethernet feed-through and RF connectors. Do not freeze its wall face or coordinates until the actual USB4720-03-A model, shell CAD, cable bend, and access envelope are checked in GHO-7. Actual board/enclosure placement must use manufacturer STEP models.
 

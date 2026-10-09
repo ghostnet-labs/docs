@@ -97,7 +97,7 @@ Propagation delay: about 5.7 ps/mm on L1 (effective Dk 2.92) and 6.85 ps/mm on L
 |---|---|---|---|
 | PCIe TX, RX, REFCLK | 0.10 mm (about 0.7 ps on L3) | Not required | CM5 datasheet 2.3.1 |
 | USB 2.0 | 0.15 mm | Not required; no P/N swap | CM5 datasheet 2.4.2 |
-| MDI, CM5 to magnetics to header | 0.15 mm (tighter than the 1 mm in v1-reference.md section 10) | Under 50 mm | CM5 datasheet 2.2.1 |
+| MDI, CM5 to magnetics to header | 0.15 mm | Under 50 mm | CM5 datasheet 2.2.1 |
 
 Match at the end that has the mismatch, with small serpentine bumps (amplitude no more than twice the gap, segment length at least 3 x trace width), not at the far end. PCIe P and N may be swapped within a pair; USB 2.0 may not. Estimated PCIe run is 30 to 60 mm from the CM5 connector to the M.2 socket under the Wi-Fi card (floorplan estimate, not routed). Keep pairs at least 3 x trace width from other pairs and 5 x from clocks and switching nets.
 
