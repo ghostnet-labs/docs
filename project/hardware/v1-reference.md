@@ -111,7 +111,9 @@ The [OpenVLM host power design review](v1-openvlm-usbc-power.md) compares attach
 
 ## 9. GNSS: u-blox MAX-M10S-00B
 
-About 9.7 x 10.1 x 2.5 mm, multi-constellation, UART, I2C, PPS/time pulse, reset, integrated LNA and SAW filter, -40 to +85 C. Primary interfaces are UART, PPS, and reset; I2C is secondary.
+About 9.7 x 10.1 x 2.5 mm, multi-constellation, UART, I2C, PPS/time pulse, reset, integrated LNA and SAW filter, -40 to +85 C. Primary interfaces are UART, PPS, and reset; I2C is secondary. Constellations: GPS + Galileo + BeiDou B1C (D-045).
+
+An external GNSS SAW filter is populated between the antenna bias tee and RF_IN, and the internal LNA runs in bypass mode (CFG-HW-RF_LNA_MODE) because the external active antenna gives 10 dB or more of gain ([v1-rf-coexistence.md](v1-rf-coexistence.md) §2.2, §2.6; D-045). The active antenna must have a filter ahead of its LNA (§2.5).
 
 Power: +3V3_RADIO, filtered, to +3V3_GNSS. No dedicated GNSS power switch is planned for V1, because independent GNSS power cycling is not currently required.
 
@@ -207,7 +209,7 @@ A small signal FET (Q2) is also required from B_GATE to IN_SYS, driven by DRV, a
 
 Output setting: V_FB is 1.006 V typical (0.987 to 1.017 V). R_FBT = 100 kOhm and R_FBB = 24.9 kOhm give 5.05 V (4.95 to 5.10 V across the reference tolerance). Use 1 percent resistors of 100 ppm/C or better.
 
-Switching frequency: 400 kHz, with the RT pin left open (the default; 99.6 kOhm gives the same nominal value). Start with forced PWM (SYNC/MODE high) so the frequency stays fixed over load, which keeps the switching spectrum predictable next to the GNSS receiver. Check efficiency at the 10 W typical load before keeping it.
+Switching frequency: 400 kHz, with the RT pin left open (the default; 99.6 kOhm gives the same nominal value). Run in forced PWM (SYNC/MODE high), with no spread spectrum, so the frequency stays fixed over load and the switching spectrum stays predictable next to the GNSS receiver (D-045). The BQ25798 charger runs at 1.5 MHz with PFM off. Check efficiency at the 10 W typical load.
 
 Inductor: 6.8 µH. Ripple is 1.1 A peak to peak at 12.6 V and 1.6 A at 33 V, which is 22 to 31 percent of 5 A. The saturation current must exceed the high-side current limit of 6.0 to 7.8 A, so select 8 A or higher (the earlier 6 A figure is too low), with low DCR and a shielded body.
 
@@ -280,7 +282,7 @@ PCB: 138 x 67 mm working target (D-026). Enclosure concept: rectangular aluminum
 - CM5: central and upper anchor. Working envelope X about 31 to 86 mm, Y about 24 to 64 mm. Approximate hole references for that placement: (34.5, 27.5), (82.5, 27.5), (34.5, 60.5), (82.5, 60.5). These are not frozen.
 - HaLow: upper left RF region, MMCX toward the RF enclosure wall
 - Wi-Fi: its own column right of the CM5, antenna end and IPEX connectors toward the top RF enclosure wall
-- GNSS: quiet lower right region, in its own column at the right edge, farthest from HaLow
+- GNSS: quiet lower right region, in its own column at the right edge, farthest from HaLow. The GNSS antenna connector sits in the right-hand wall level with the GNSS block, not on the top RF wall ([v1-rf-coexistence.md](v1-rf-coexistence.md) §2.5); a two-piece shield frame surrounds the GNSS receiver, SAW, bias tee and feed, with the lid fitted on half of the first build (D-045). [GHO-7](https://linear.app/ghostnet-labs/issue/GHO-7) owns the wall position and the latch check
 - Power: lower and middle, about a 45 x 25 mm working region
 - USB hub: lower central area or bottom side
 - Ethernet: left board edge for the magnetics, with the connector receptacle in the enclosure wall

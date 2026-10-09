@@ -273,6 +273,8 @@ The buffer also removes the TIMEPULSE back-feed into an unpowered CM5 (TIMEPULSE
 
 **Proposed part:** TI TLV62568DBVR, 1 A synchronous buck, SOT-23-5, VIN 2.5 to 5.5 V, 1.5 MHz, power-save mode at light load, VFB 0.6 V (0.588 to 0.612 V), 700 µs soft start for the DBV, UVLO 2.3 to 2.45 V falling ([SLVSD89B](https://www.ti.com/lit/ds/symlink/tlv62568.pdf)).
 
+At the hub's 98 mA active load the TLV62568 is in power-save mode (DCM below about 111 mA with 2.2 µH), so its frequency varies with load. If C7 in [v1-rf-coexistence.md](v1-rf-coexistence.md) shows its harmonics in the GNSS band, the forced-PWM TPS62A01A (2.4 MHz, SLUSEG9E) is the alternative; it is not pin-compatible.
+
 | Pin or part | Proposed |
 |---|---|
 | VIN | CM5_3V3, 10 µF local |

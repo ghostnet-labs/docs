@@ -136,7 +136,7 @@ Interface rules for hardware backup mode (data sheet §3 Table 11 note, manual �
    - a working voltage above the antenna bias (above 3.3 V, or above 5 V for a 5 V antenna), bidirectional preferred, and leakage small next to the antenna current;
    - linearity: no harmonic or intermodulation generation from the HaLow fundamental at the antenna port (+28.5 dBm transmitter, [v1-thermal-rf-plan.md](v1-thermal-rf-plan.md) §3).
    No RF ESD MPN is proposed here. Infineon's ESD0P2RF family is a candidate class to evaluate; its datasheet could not be fetched, so it is **Unverified**.
-3. **Out-of-band:** keep a 0 Ω footprint for an external SAW filter between the bias tee and RF_IN, behind a 47 pF DC block (manual §C.2 C18). The MAX-M10S immunity is −17 dBm at 915 MHz and −18 dBm at 2440 MHz (manual Table 43). Whether to populate the SAW is set by the T9 and T11 tests in v1-thermal-rf-plan.md.
+3. **Out-of-band:** keep a 0 Ω footprint for an external SAW filter between the bias tee and RF_IN, behind a 47 pF DC block (manual §C.2 C18). The MAX-M10S immunity is −17 dBm at 915 MHz and −18 dBm at 2440 MHz (manual Table 43). Populate the SAW by default ([v1-rf-coexistence.md](v1-rf-coexistence.md) §2.6, D-045); the 0 Ω option exists only for the C4 A/B test.
 
 ### 2.5 Related item outside this scope
 
