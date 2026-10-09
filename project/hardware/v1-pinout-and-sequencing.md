@@ -23,16 +23,19 @@ These are CM5 connector pin numbers, not BCM GPIO numbers.
 | PCIe REFCLK P/N | 110 / 112 |
 | PCIe RX P/N | 116 / 118 |
 | PCIe TX P/N | 122 / 124 |
-| USB2 D-/D+ | 103 / 105 |
+| USB2 D-/D+ (B-07 service port, device role; rpiboot) | 103 / 105 |
+| USB3-0 USB 2.0 pair DP/DM (TUSB4041I upstream) | 134 / 136 |
 | GPIO_VREF | 78 |
 | CM5 3.3 V | 84 / 86 |
 | PMIC_Enable / nRPIBOOT | 99 / 93 |
 | Ethernet_SYNC_OUT (dedicated PHY timing pin) | 18 |
 | SCL0 GPIO39 / SDA0 GPIO38 | 80 / 82 |
 
+USB_OTG_ID (101) is left unconnected (internal pull-up, device role) with a DNP 0 Ω to GND (D-044).
+
 GPIO signal ownership and physical CM5 connector pin numbers are maintained together in the allocation table below (D-024).
 
-CM5 is Gen2 x1. The CM5 TX path already has AC coupling; the peripheral TX path needs the documented 220 nF series capacitors. CM5 nWAKE is not supported in software.
+CM5 is Gen2 x1. The CM5 TX path already has AC coupling; Raspberry Pi's own M.2 socket (CM5 IO datasheet Figure 6) has no carrier capacitors on the card TX path, because add-in cards couple their own transmitters. V1 lays out 0 Ω links in capacitor footprints (D-046). PCIE_PWR_EN (pin 106) goes to a test pad only. CM5 nWAKE is not supported in software.
 
 ## CM5 GPIO mux facts
 
@@ -48,23 +51,23 @@ Allocation decision D-024: GNSS uses UART0 on GPIO14/15; system I2C1 uses GPIO2/
 | 3 | 56 | SYS_I2C_SCL | System I2C1; physical pin verified |
 | 4 | 54 | HALOW_PWR_EN | TPS22975 ON, active-high output; chip polarity verified; carrier bias/boot timing open |
 | 5 | 34 | WIFI_PWR_EN | TPS22975 ON, active-high output; chip polarity verified; carrier bias/boot timing open |
-| 6 | 30 | HALOW_FAULT_N | Planned input; source unselected: TPS22975 has no fault output; do not report as implemented |
-| 7 | 37 | WIFI_FAULT_N | Planned input; source unselected: TPS22975 has no fault output; do not report as implemented |
+| 6 | 30 | HALOW_FAULT_N | Planned input from TPS3780D OUT2: low when HALOW_3V3 is below about 2.92 V. 10 kΩ pull-up to CM5_3V3. Low while HALOW_PWR_EN is low is the normal off state, not a fault. Candidate (D-046); bench verification open |
+| 7 | 37 | WIFI_FAULT_N | Planned input from TPS3780D OUT1: low when WIFI_3V3 is below about 2.92 V. 10 kΩ pull-up to CM5_3V3. Low while WIFI_PWR_EN is low is the normal off state, not a fault. Candidate (D-046); bench verification open |
 | 8 | 39 | GNSS_RESET_N | GNSS reset; physical pin verified; boot/electrical verification open |
 | 9 | 40 | GNSS_PPS | GNSS timing; physical pin verified; boot/electrical verification open |
 | 10 | 44 | SUPERVISOR_WDI | TPS386000 WDI input, either-edge heartbeat; carrier boot/arming open |
-| 11 | 38 | SUPERVISOR_WDO | TPS386000 WDO, active-low open-drain input to CM5; pull-up/boot recovery open |
+| 11 | 38 | SUPERVISOR_ARM | TPS386000 MR watchdog arm, active-high output; 10 kΩ pull-down keeps it disarmed while the CM5 is off or in reset (D-044); carrier bias Unverified |
 | 12 | 31 | POWER_GOOD | Planned input; eFuse PGOOD active-high open-drain; battery-domain pull-up needs translation |
 | 13 | 28 | EFUSE_FAULT | TPS26633 FLT active-low open-drain input; CM5-domain pull-up/connectivity open |
 | 14 | 55 | GNSS_UART_TX | GNSS UART0 TX; physical pin verified |
 | 15 | 51 | GNSS_UART_RX | GNSS UART0 RX; physical pin verified |
-| 16 | 29 | Reserved | Freed: was BT_USB_FAULT_N, and V1 has no Bluetooth (D-026). Unassigned spare |
+| 16 | 29 | Reserved | Freed: was BT_USB_FAULT_N, and V1 has no Bluetooth (D-026). Unassigned spare. Preferred pin for a future simple digital input such as BRIDGE_ACTIVE_N or PACK_PRESENT (GHO-13). No carrier connection until allocated (D-046) |
 | 17 | 50 | Reserved | Unassigned spare (D-033); no connection to the dedicated PHY timing pin |
 | 18 | 49 | HALOW_RESET_N | HaLow reset; active-low open-drain, physical pin verified; boot/electrical verification open |
 | 19 | 26 | HALOW_WAKE_N | HaLow wake; active-low open-drain, optional; physical pin verified; boot/electrical verification open |
 | 20 | 27 | INA228_ALERT_N | Battery monitor alert; physical pin verified; boot/electrical verification open |
 | 21 | 25 | WIFI_WDIS1_N | Wi-Fi RF disable to AW7916-AED pin 56. Open-drain use: drive low to assert, input/high-Z to release, 10 kOhm pull-up to WIFI_3V3 on the carrier. Physical pin verified; boot/electrical verification open |
-| 22 | 46 | Reserved | Freed: was WIFI_WDIS2_N, and AW7916-AED pin 54 (W_DISABLE2#) is not connected on the card. Unassigned spare; firmware leaves it unconfigured |
+| 22 | 46 | Reserved | Freed: was WIFI_WDIS2_N, and AW7916-AED pin 54 (W_DISABLE2#) is not connected on the card. Unassigned spare. Preferred pin for a future simple digital input such as BRIDGE_ACTIVE_N or PACK_PRESENT (GHO-13). No carrier connection until allocated (D-046). Cannot form an I2C bus: its I2C3_SCL partner, GPIO23, is USB_HUB_RESET_N |
 | 23 | 47 | USB_HUB_RESET_N | USB hub reset; physical pin verified |
 | 24 | 45 | HALOW_USB_FAULT_N | HaLow USB fault; physical pin verified |
 | 25 | 41 | VLM_USB_FAULT_N | OpenVLM port-3 VBUS switch / downstream overcurrent fault; physical pin verified |
@@ -84,15 +87,15 @@ Source: AsiaRF's [AW7916-AED pin-out drawing](https://asiarf.com/wp-content/uplo
 | M.2 pin | Card signal | Carrier connection |
 |---:|---|---|
 | 2, 4, 72, 74 | 3.3 V | WIFI_3V3 (see [v1-3v3-rail.md](v1-3v3-rail.md) for the 0.5 A per contact risk) |
-| 1, 7, 18, 33, 39, 45, 51, 57 and others marked GND | GND | GND |
+| 1, 7, 18, 33, 39, 45, 51, 57, 63, 69, 75 and others marked GND | GND | GND. Pin 69 is labelled 'GNDX' in the drawing; it is wired to GND (D-046) |
 | 3, 5 | not connected (no USB) | leave open; hub port 2 is spare |
 | 35 / 37 | PCIe lane 0 receive pair (labelled PERp0 / PERn0 from the card's side) | CM5 PCIe TX P/N, pins 122 / 124 (CM5 already AC-couples this direction) |
-| 41 / 43 | PCIe lane 0 transmit pair (labelled PETp0 / PETn0) | CM5 PCIe RX P/N, pins 116 / 118, through 220 nF series capacitors |
+| 41 / 43 | PCIe lane 0 transmit pair (labelled PETp0 / PETn0) | CM5 PCIe RX P/N, pins 116 / 118, through 0 Ω links in capacitor footprints (220 nF fitted only if the bench shows the card has no TX AC coupling; D-046) |
 | 47 / 49 | REFCLKp0 / REFCLKn0 | CM5 REFCLK P/N, pins 110 / 112 |
 | 52 | PERST0# | CM5 PCIe nRST, pin 109 |
 | 53 | CLKREQ0# | CM5 PCIe CLK_nREQ, pin 102 |
 | 55 | PEWAKE0# | not used by the CM5 (nWAKE unsupported): 10 kOhm pull-up to WIFI_3V3 and a test pad |
-| 56 | W_DISABLE1# | GPIO21 WIFI_WDIS1_N, open-drain, 10 kOhm pull-up to WIFI_3V3 |
+| 56 | W_DISABLE1# | GPIO21 WIFI_WDIS1_N, open-drain, 10 kOhm pull-up to WIFI_3V3. Card behaviour (RF kill, reset or ignored) is undocumented; Unverified |
 | 54 | not connected (W_DISABLE2#) | leave open; GPIO22 freed |
 | 6 / 16 | LED1 / LED2 | test pads only (sealed enclosure) |
 | all other pins | not connected | leave open |
@@ -110,15 +113,15 @@ Checked 2026-10-04 against the TI authorities above. Manufacturer pin behavior i
 | Signal | Device pin / source | Interface evidence |
 |---|---|---|
 | HALOW_PWR_EN / WIFI_PWR_EN | TPS22975 ON, pin 3 | Active high; ON must not float. External bias must hold the intended state before firmware runs |
-| HALOW_FAULT_N / WIFI_FAULT_N | No source selected | TPS22975 has no fault or power-good output. Thermal shutdown is internal, not GPIO telemetry |
-| SUPERVISOR_WDI / SUPERVISOR_WDO | TPS386000 WDI 20 / WDO 19 | WDI accepts either edge; WDO is active-low open-drain. Carrier pull-up and reset path remain open |
+| HALOW_FAULT_N / WIFI_FAULT_N | TPS3780D dual voltage detector (D-046) | SENSE1 from WIFI_3V3 and SENSE2 from HALOW_3V3 through 147 kΩ / 100 kΩ, VDD from +3V3_RADIO, open-drain outputs. The TPS22975 itself has no fault output; its thermal shutdown and any rail short show up as a collapsed rail |
+| SUPERVISOR_WDI / SUPERVISOR_ARM | TPS386000 WDI 20 / MR 1 | WDI accepts either edge. MR arms the watchdog when high; 10 kΩ to GND holds it low. WDO 19 is not a CM5 input: it pulls the SENSE4L tap (D-044) |
 | POWER_GOOD | TPS26633RGER PGOOD 16 is a candidate source | Active-high open-drain. The reference circuit pulls it to OUT for buck enables; that node cannot connect directly to CM5 GPIO |
 | EFUSE_FAULT | TPS26633RGER FLT 14 | Active-low open-drain; provide a CM5-compatible pull-up, with power-off leakage checked |
 | HALOW_USB_FAULT_N / VLM_USB_FAULT_N | Downstream VBUS switch / hub overcurrent path | Exact switch outputs, hub wiring, pull-ups and polarity still require GHO-11/GHO-13 closure |
 
-The [supervisor section](v1-reference.md#supervisor-and-watchdog-ti-tps386000rgpr) owns watchdog timing and latch-clear behavior. GHO-10 owns its startup/arming/reset topology; this audit does not select that circuit or add an arming GPIO.
+The [supervisor section](v1-reference.md#supervisor-and-watchdog-ti-tps386000rgpr) owns watchdog timing and latch-clear behavior. The startup, arming and reset topology is the D-044 working default, with GPIO11 as the arming output.
 
-Firmware source inspection is separate from physical validation. [Firmware PR #23](https://github.com/ghostnet-labs/firmware/pull/23), inspected at `37f8e8d2bdda03327942e419a69bd68bdf64f4cc`, contains:
+Firmware source inspection is separate from physical validation. [Firmware PR #23](https://github.com/ghostnet-labs/firmware/pull/23), inspected at `c77cd924` (the GPIO lines are unchanged from `37f8e8d2`), contains:
 
 | Boot configuration | Requested state / role |
 |---|---|
@@ -130,6 +133,8 @@ Firmware source inspection is separate from physical validation. [Firmware PR #2
 
 [Official GPIO configuration semantics](https://www.raspberrypi.com/documentation/computers/config_txt.html#gpio) verify `op,dh` means output high and `ip,pn` means input without pulls. These directives apply during firmware configuration and can be overridden by kernel pinctrl; they do not guarantee reset-time levels, rail-ready ordering or daemon handoff. The listed file does not explicitly configure the fault inputs, supervisor pins or reserved GPIO17. GHO-9/GHO-19 retain full boot/device-tree validation, including GPIO23/24/25.
 
+RP1 GPIO reset state: function NULL, output disabled, input disabled; per-pin pull Unverified (RP1 peripherals §3.1.4). `gpio=` directives apply a few seconds after power-up. The bring-up image adds the boot lines in [v1-gpio-and-m2-audit.md](v1-gpio-and-m2-audit.md) §5.2 (D-046, GHO-19); firmware PR #23 does not carry them yet.
+
 ## Working sequence and recovery
 
 This is the intended hardware-controlled order, not evidence that the bring-up firmware implements it. GHO-9/GHO-10/GHO-19 must reconcile firmware release of enables/reset with rail-ready interlocks before carrier freeze.
@@ -137,9 +142,9 @@ This is the intended hardware-controlled order, not evidence that the bring-up f
 1. While supplies are absent, software establishes no GPIO state. Hardware bias/interlocks must keep radio enables and USB VBUS off, hold hub reset asserted until its supply/clock are valid, avoid backfeed through radio controls, and meet PCIe PERST# requirements.
 2. Bring up CM5 3.3 V and supervisor; keep USB VBUS switching separate from radio 3.3 V switches.
 3. Enable the selected radio 3.3 V rail after supervisor-good.
-4. Release HaLow reset/WAKE by high-Z GPIO18/19, then enable its USB VBUS and enumerate.
+4. Release HaLow reset/WAKE by high-Z GPIO18/19, then let it enumerate. An M.2 card takes no VBUS; its USB runs from HALOW_3V3.
 5. Enable WIFI_3V3 with GPIO21 released; the CM5 holds PERST# (pin 109 to card pin 52) until clock/reset timing is valid, then releases it. CLKREQ# runs from card pin 53 to CM5 pin 102.
-6. Deassert TUSB4041I reset only after 3.3 V and 24 MHz are stable.
+6. Deassert TUSB4041I reset only after CM5_3V3, HUB_1V1 and 24 MHz are stable (at least 3 ms after both supplies, SLLSEK3F §5.6); the 2.2 kΩ pull-down holds it until then.
 7. Recovery: reset USB device → reset hub → power-cycle radio → supervisor/watchdog → CM5 PMIC_Enable (pin 99).
 
 ## Open gates
@@ -149,5 +154,6 @@ This is the intended hardware-controlled order, not evidence that the bring-up f
 - Confirm the AW7916-AED pin numbers above against a bench card (the AsiaRF drawing has no numbers), and whether the card holds W_DISABLE1# or PEWAKE# internally. GPIO16 and GPIO22 are freed (D-026).
 - Confirm TE 2199119-6 footprint, hub VBUS/ESD/straps, and eight-contact battery allocation.
 - Bench-validate PCIe/USB enumeration, sequencing, and PMIC_Enable recovery.
+- Allocate BRIDGE_ACTIVE_N (B-24 bridge), PACK_PRESENT and the pack I2C bus; none has a GPIO yet ([GHO-13](https://linear.app/ghostnet-labs/issue/GHO-13)). Spares: GPIO16, 17, 22, 26 and 27.
 
 **Acceptance status:** CM5 PCIe/USB/power pins, CM5 mux facts, Gateworks control behavior, and a D-024 logical allocation (GNSS on GPIO14/15; hub reset on GPIO23; HaLow/VLM USB faults on GPIO24/25) are recorded. GPIO0–27 physical connector mappings are verified from the manufacturer table. Device-tree defaults, schematic implementation, and bench evidence remain open.

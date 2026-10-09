@@ -44,7 +44,7 @@ Each source reaches ambient through one of three paths:
 | Bucks, switch, eFuse | Copper pours and thermal vias to a chassis contact (§15) | Bottom side, X 30 to 66, Y 3 to 17. |
 | Everything else | Board copper and internal air | Small. |
 
-**Enclosure assumptions (estimates).** Radio body 145 x 74 x 27 mm: footprint from M-01, and 27 mm is the upper-bound body height in v1-reference.md §18. The battery pack covers the bottom face, so only the top and four sides shed heat: about 0.0226 m². Natural convection h_c = 5 to 10 W/m²K. Radiation h_r = 4εσT³ is about 6.9 W/m²K for an anodized or painted finish (ε = 0.85, mean surface about 330 K) and under 1 W/m²K for bare aluminum (ε about 0.1). Combined h is 12 to 17 W/m²K anodized, 6 to 11 bare. **Finish the enclosure anodized or painted; bare aluminum roughly halves the heat it can shed.**
+**Enclosure assumptions (estimates).** Stale since D-048: the bridge tray adds 23.0 mm of radio-body depth, which changes the area and height inputs below; the model has not been re-run ([GHO-12](https://linear.app/ghostnet-labs/issue/GHO-12), [GHO-7](https://linear.app/ghostnet-labs/issue/GHO-7)). Radio body 145 x 74 x 27 mm: footprint from M-01, and 27 mm is the upper-bound body height in v1-reference.md §18. The battery pack covers the bottom face, so only the top and four sides shed heat: about 0.0226 m². Natural convection h_c = 5 to 10 W/m²K. Radiation h_r = 4εσT³ is about 6.9 W/m²K for an anodized or painted finish (ε = 0.85, mean surface about 330 K) and under 1 W/m²K for bare aluminum (ε about 0.1). Combined h is 12 to 17 W/m²K anodized, 6 to 11 bare. **Finish the enclosure anodized or painted; bare aluminum roughly halves the heat it can shed.**
 
 | Case | h (W/m²K) | Area (m²) | R case to ambient (K/W) |
 |---|---:|---:|---:|
@@ -96,11 +96,11 @@ The MAX-M10S tracks GPS L1 at 1575.42 MHz and, by default, Galileo E1 and BeiDou
 
 | Mechanism | Frequencies | Risk | Mitigation in the design | What to check |
 |---|---|---|---|---|
-| HaLow fundamental blocking | 902 to 928 MHz at up to +28.5 dBm | High | GNSS in the far corner, about 116 mm from the HaLow card; external antennas | D-020 estimate: about 21 dB isolation is clean to about 15 dBm, so +28.5 dBm needs about 35 dB (estimate). Measure antenna isolation and C/N0. |
+| HaLow fundamental blocking | 902 to 928 MHz at up to +28.5 dBm | High | GNSS in the far corner, about 116 mm from the HaLow card; external antennas | D-020 estimate: about 21 dB isolation is clean to about 15 dBm, so +28.5 dBm needs about 35 dB (estimate). Budget in [v1-rf-coexistence.md](v1-rf-coexistence.md) §2.2: with a filtered active antenna and the external SAW, about 20 dB of HaLow-to-GNSS isolation leaves 21.5 dB of margin; without the SAW it needs about 38.5 dB. Measure isolation (C2) and C/N0. |
 | HaLow harmonics | 2nd 1804 to 1856 MHz, 3rd 2706 to 2784 MHz | Medium | Module filtering; 2nd is about 230 MHz above L1 | Blocking only, not in band. Check with HaLow at max power. |
 | Wi-Fi blocking | 2.4, 5, 6 GHz at up to 23 dBm (11b, AsiaRF) | Medium | External antennas; 2.4 GHz is in the 0 dBm immunity range | C/N0 per band at max power. |
 | Wi-Fi card near-field noise | Broadband digital and PA noise | High | None yet; card is 2.5 mm edge to edge from GNSS | Near-field probe scan; consider a shield fence or moving GNSS. |
-| Intermod: f(2.4 GHz) minus f(HaLow) | 1472 to 1571 MHz (US channels 1 to 11) | Medium | Antenna separation | Lands on BeiDou B1I and near L1. Test HaLow plus 2.4 GHz channels 6 to 11 together. |
+| Intermod: f(2.4 GHz) minus f(HaLow) | 1472 to 1571 MHz (US channels 1 to 11) | Medium | Antenna separation; GNSS tracks B1C, not B1I (D-045) | Lands on BeiDou B1I only when 2.4 GHz channels 9 to 11 run with HaLow's lower edge below 913 MHz (v1-rf-coexistence.md §1.4). Test HaLow plus 2.4 GHz channels 6 to 11 together. |
 | Intermod: f(6 GHz) minus 2 × f(2.4 GHz) | about 980 to 2325 MHz | Low to medium | Same | DBDC can run both bands at once. Test 6 GHz plus 2.4 GHz together. |
 | Buck switching harmonics | n × 400 kHz; orders about 3936 to 3941 fall in the C/A main lobe | Low to medium | Forced PWM, fixed frequency; SYNC can lock both bucks; bucks about 81 mm away; no inductor under RF; power at least 15 mm from GNSS | Exact spur positions shift with oscillator tolerance. Scan 1559 to 1610 MHz with each buck on and off. |
 | USB hub 24 MHz crystal | 65 × 24 = 1560 MHz, 66 × 24 = 1584 MHz | Medium | Hub in lower centre, away from GNSS | 1560 MHz is 1.1 MHz from B1I. Scan with the hub active. |
@@ -174,7 +174,9 @@ Common equipment: K-type thermocouples (at least 12 channels) with a logger; IR 
 **T11. Antenna isolation.**
 - Equipment: VNA.
 - Procedure: measure S21 from the HaLow port and each Wi-Fi port to the GNSS antenna port, with final antennas mounted.
-- Pass: HaLow to GNSS at least 35 dB (estimate from D-020; confirm against T9).
+- Pass: each pair meets the isolation assumed in [v1-rf-coexistence.md](v1-rf-coexistence.md) §2.1 (A5, A6), or the §2.2 budget recomputed with the measured values keeps a margin of 0 dB or more.
+
+C1 to C12 in [v1-rf-coexistence.md](v1-rf-coexistence.md) §4 size and extend T8 to T11.
 
 **T12. Hot GNSS.**
 - Procedure: log C/N0, fix and PPS during T4.
@@ -192,6 +194,6 @@ Common equipment: K-type thermocouples (at least 12 channels) with a logger; IR 
 ## Links
 
 - [GHO-12](https://linear.app/ghostnet-labs/issue/GHO-12): this work.
-- [GHO-23](https://linear.app/ghostnet-labs/issue/GHO-23): V1 validation, where tests T1 to T12 run.
+- [GHO-23](https://linear.app/ghostnet-labs/issue/GHO-23): V1 validation, where tests T1 to T12 run alongside [v1-validation-procedures.md](v1-validation-procedures.md).
 - [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10): 3.3 V rail and power path; uses T0 and T1 results.
 - [GHO-30](https://linear.app/ghostnet-labs/issue/GHO-30) and [GHO-31](https://linear.app/ghostnet-labs/issue/GHO-31): Track A power, thermal and GPS coexistence, which feed T0.

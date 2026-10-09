@@ -12,7 +12,7 @@ Every number marked **(est.)** is an estimate. Track A figures are also estimate
 | Item | Recommendation |
 |---|---|
 | Architecture | Analog Devices LTC3350 supercapacitor backup controller between the eFuse output and the regulators, creating a held-up bus (+VBUS_HOLD) |
-| Evaluated population (not frozen) | 4 x 50 F 2.7 V supercapacitors in series, run at 2.0 V per cell (8.0 V stack) |
+| Evaluated population (not frozen) | Working default 3S2P SCCV60B107SRB at 6.525 V (D-047); see [v1-bridge-selection.md](v1-bridge-selection.md). |
 | What it must cover | D-027 at the measured full-node load, with no swap-mode performance reduction; a shutdown reserve is additional (estimate below) |
 | Smaller population | Not a compliant fallback if it requires radios off; alternatives must still satisfy D-027 |
 | Detection | LTC3350 PFO plus the pack's PACK_PRESENT contact to CM5 GPIOs; INA228 bus undervoltage alert as a backup |
@@ -96,7 +96,7 @@ The stack must be rated above 12.6 V, so 5 cells of 2.7 V (13.5 V) with balancin
 
 The LTC3350 (VIN 4.5 to 35 V, 1 to 4 series cells, step-down CC/CV charging, step-up backup, input and output ideal-diode controllers, PFI/PFO power-fail comparator, internal balancers, 14-bit ADC with capacitance and ESR measurement over I2C, 38-lead 5 x 7 mm QFN; [datasheet Rev. D](https://www.analog.com/media/en/technical-documentation/data-sheets/ltc3350.pdf)) charges the stack from the eFuse output and boosts it back onto +VBUS_HOLD when the input fails.
 
-Charge voltage: the charger is step-down only, and its output ideal diode turns on whenever +VBUS_HOLD falls 65 mV below the stack. If the stack sat above the lowest pack voltage (8.4 V), it would discharge into the load whenever the pack ran low. So the stack is held at **8.0 V, 2.0 V per cell** with the VCAP DAC. That is well under the 2.7 V cell rating, which helps life in a warm sealed enclosure, and the datasheet suggests raising the DAC as cells age to keep stored energy constant (up to about 2.1 V per cell here).
+Charge voltage: the charger is step-down only, and its output ideal diode turns on whenever +VBUS_HOLD falls 65 mV below the stack. If the stack sat above the lowest pack voltage (8.4 V), it would discharge into the load whenever the pack ran low. So the stack is held at **6.525 V, 2.175 V per cell, three cells** with the VCAP DAC ([v1-bridge-selection.md](v1-bridge-selection.md) §1). That is well under the 2.7 V cell rating, which helps life in a warm sealed enclosure, and the datasheet suggests raising the DAC as cells age to keep stored energy constant (code 13, 6.75 V, at end of life; D-047).
 
 ### Source-grounded cell/controller comparison (2026-10-04)
 
@@ -181,9 +181,9 @@ Power path with S2: pack pogo contacts → BQ25798 (BAT to SYS) → TVS, Q1 and 
 | eFuse reverse blocking | When the pack is pulled, the TPS26633 and Q1 block reverse current, and the LTC3350 input ideal diode (fast-off at 30 mV reverse) also blocks, so the stack never backfeeds the pogo contacts or the charger. Two blocking stages; keep both. |
 | eFuse UVLO (7.95 V rising, 7.43 V falling) | The eFuse turns off when the pack goes; that is now harmless. On a near-empty pack (8.4 V) the rising threshold, up to 8.3 V across tolerance, leaves little margin, so a refitted near-empty pack may not start. Existing issue, worth a bench check. |
 | Inrush on reinsertion through C_dVdT | The eFuse sees only its own output bulk (47 to 100 µF), not the regulators' input capacitance and never the stack, so the existing 22 nF C_dVdT ramp (5.8 ms, about 55 mA per 25 µF) is unchanged. Load moves back to the input when the eFuse output rises above +VBUS_HOLD. The stack then recharges at the programmed rate. |
-| Stack recharge | RSNSC = 32 mV / 3.2 A = 10 mOhm (est.). Recharge timing depends on the selected bank, input budget and minimum charge level; characterize it with the candidate comparison above. RSNSI = 32 mV / 5.0 A = 6.4 mOhm sets total input current below the eFuse's 5.17 A minimum limit; the LTC3350 trims charge current to fit (est., check against D-019). A second swap within that time gets a partly charged bridge. |
-| **Buck EN (change)** | Today both bucks' EN come from the eFuse PGOOD. On pack removal PGOOD falls at 6.59 V and would switch the bucks off while the bridge is still full. EN must come from a divider on +VBUS_HOLD (or PGOOD OR'd with the LTC3350 CAPGD); eFuse PGOOD goes to GPIO 12 POWER_GOOD only. |
-| **Supervisor SVS4 (change)** | SVS4 monitors VBAT_PROTECTED and its fault can pull SYS_PMIC_EN low, which would reset the CM5 on every swap. Move SVS4 to +VBUS_HOLD, or mask it while PFO is low. |
+| Stack recharge | RSNSC 6 mΩ (5.33 A charge, 7.94 A backup ceiling). RSNSI 7.5 mΩ limits total input to 4.44 A worst case, under the eFuse's 5.17 A minimum (D-047). A second swap within about 40 s gets a partly charged bridge. |
+| **Buck EN (change)** | Today both bucks' EN come from the eFuse PGOOD. On pack removal PGOOD falls at 6.59 V and would switch the bucks off while the bridge is still full. EN must come from a divider on +VBUS_HOLD (or PGOOD OR'd with the LTC3350 CAPGD); eFuse PGOOD reaches GPIO12 POWER_GOOD only through the logic-level translation the [pinout ledger](v1-pinout-and-sequencing.md) requires; the battery-domain node never connects to the CM5 directly. |
+| **Supervisor SVS4 (change)** | SVS4 senses +VBUS_HOLD with a threshold below the backup regulation point (proposal: 6.0 V), so a swap does not reset the CM5 (D-044). |
 | Backup regulation point | Set LTC3350 OUTFB so +VBUS_HOLD holds about 7.0 V in backup (est.): above what the 5 V buck needs and the new EN threshold, below any normal pack voltage. |
 | INA228 | Sits before the bridge, so it sees pack current only and its energy and charge counters stay pack-only. Its bus undervoltage alert on GPIO 20 is a backup removal signal. Stack charge current appears as extra pack load after a swap, and software should not read it as a fault. |
 | BQ25798 | With USB-C power present the charger keeps SYS up with no pack, so a swap while charging needs no bridge. Confirm the BQ25798 battery-absent behavior on its datasheet. |
@@ -207,14 +207,14 @@ Software policy (proposal): on PFO low with PACK_PRESENT gone, enter swap mode; 
 
 | Part | Qty | Notes |
 |---|---:|---|
-| Analog Devices LTC3350EUHF#PBF | 1 | Backup controller, 5 x 7 mm QFN |
-| Supercapacitor population | Open | Exact candidate MPNs and 4S/4S2P tradeoffs are compared above; match and qualify cells |
-| N-MOSFET, 30 V class, low RDS(on) | 4 | Input and output ideal diodes, synchronous top and bottom |
-| Inductor | 1 | Nominal 3.3 µH used only for screening; saturation/current/thermal selection must cover the chosen sense threshold, tolerance and ripple |
-| Sense resistors 10 mOhm (RSNSC) and 6.4 mOhm (RSNSI) | 2 | Values est. |
+| Analog Devices LTC3350IUHF#PBF | 1 | Backup controller, 5 x 7 mm QFN; I grade for the D-028 cold limit |
+| Supercapacitors 6 × SCCV60B107SRB | 6 | 3S2P, matched ±5 % per group; bank fuse fitted |
+| N-MOSFET 40 V: 2 × CSD18514Q5A switches, 2 × CSD18512Q5B ideal diodes | 4 | 40 V because the eFuse output can reach its 32.8 V clamp |
+| Inductor Bourns SRP1265A-4R7M | 1 | 4.7 µH |
+| RSNSC 6 mΩ, RSNSI 7.5 mΩ, WSL2512 ±1 % | 2 | Exact value availability unverified |
 | Dividers for PFI, OUTFB, buck EN; INTVCC and DRVCC caps | about 10 | |
 
-Power-electronics placement remains unverified. Use the cell envelopes above for GHO-7 assembly review; any off-board or upright placement needs checked retention, interconnects, clearance and thermal paths.
+Placement: the bank goes in a tray under the carrier and the power stage on the top side (D-047, D-048; [v1-bridge-selection.md](v1-bridge-selection.md) §3).
 
 ### Bench tests
 
