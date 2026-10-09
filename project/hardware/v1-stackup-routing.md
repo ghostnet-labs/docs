@@ -54,7 +54,7 @@ Eight layers, as v1-reference.md section 20 assumed. The reasons, now that the i
 | | Core | 0.20 | 4.36 | |
 | L7 | Copper 0.5 oz | 0.0152 | | Solid GND |
 | | Prepreg 3313 x1 | 0.0994 | 4.10 | |
-| L8 bottom | Copper 1 oz | 0.035 | | Bucks, eFuse, charger, LTC3350, supervisor; power pours; low-speed |
+| L8 bottom | Copper 1 oz | 0.035 | | Bucks, eFuse, charger, supervisor; power pours; low-speed. The LTC3350 power stage is on the top side (D-047) |
 
 Copper plus dielectric is 1.546 mm, the same convention as JLCPCB's 1.538 mm "1.6 mm" six-layer build. The build is symmetric about the L4 to L5 core, which keeps warp down. L3 sits midway between L2 and L4 (b = 0.408 mm, thickness-weighted Dk 4.21). L6 is the mirror image, so it sees L5 power and L7 ground equally.
 
@@ -142,7 +142,7 @@ Temperature rise 10 C above the local board, chosen because the sealed enclosure
 |---|---|---:|---:|---:|---:|---:|
 | VBAT path: contacts, TVS, FET, eFuse, shunt, VBAT_PROTECTED | eFuse 5.56 A (5.94 A at tolerance); 11.1 A for 25 ms | 6 A | 3.6 mm | 8.2 mm | 2.3 mm | 1.6 |
 | +VBUS_HOLD (LTC3350 output to both bucks) | Same input current; backup at about 7 V, 35 W stress is 5 A | 6 A | 3.6 mm | 8.2 mm | 2.3 mm | 1.6 |
-| LTC3350 stack, inductor and FET path | 9.4 A average screening ceiling at 5 mOhm RSNSC, 13.1 A peak | 10 A | 7.2 mm | 16.6 mm | 4.7 mm | 0.8 |
+| LTC3350 stack, inductor and FET path | 7.94 A average ceiling at 6 mΩ RSNSC, 10.94 A peak | 10 A | 7.2 mm | 16.6 mm | 4.7 mm | 0.8 |
 | +3V3_RADIO | 4.5 A allocation, 5 A ceiling | 5 A | 2.8 mm | 6.4 mm | 1.8 mm | 2.1 |
 | WIFI_3V3 (switch to M.2 socket) | 3.03 A peak | 3.5 A | 1.7 mm | 3.9 mm | 1.1 mm | 3.4 |
 | +5V_SYS | 2.5 A allocation (CM5 datasheet maximum) | 3 A | 1.4 mm | 3.2 mm | 0.9 mm | 4.2 |
