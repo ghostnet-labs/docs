@@ -8,6 +8,9 @@ This folder holds the engineering records for the ghostnet-labs OpenMANET field 
 - Track A is an off-the-shelf proof of concept, tracked in the Linear project [OpenMANET POC](https://linear.app/ghostnet-labs/project/openmanet-poc-66239aa64a35).
 - Track B is the custom V1 carrier and battery pack, tracked in [OpenMANET V1](https://linear.app/ghostnet-labs/project/openmanet-v1-1c6a34ebffa2).
 
+The node's web interface work (one primary OpenMANET UI with LuCI behind Advanced, D-036) is tracked separately in [OpenMANET Unified UI](https://linear.app/ghostnet-labs/project/openmanet-unified-ui-937d7bff9664).
+The current UI parity, configuration-ownership and proxy-path audit is [software/unified-ui-audit.md](software/unified-ui-audit.md) (GHO-67).
+
 Data flows one way: Track A produces measurements and Track B consumes them. Track B must not lock any decision that Track A can settle.
 
 ## Expanded Maer capability contract
@@ -32,6 +35,7 @@ Every fact has exactly one owner. Everywhere else refers to it by ID or link and
 | Track B CM5 physical pins, GPIO signal ownership, mux facts, and sequencing | [hardware/v1-pinout-and-sequencing.md](hardware/v1-pinout-and-sequencing.md) (canonical; GHO-9) |
 | Track B engineering detail: calculations, interfaces, placement, and validation plan | [hardware/v1-reference.md](hardware/v1-reference.md) (supporting; the registers above win; it links to the canonical pin/GPIO record) |
 | CAD floorplan model and clearance check | firmware [`docs/hardware/v1-mechanical/`](https://github.com/ghostnet-labs/firmware/tree/24.10/docs/hardware/v1-mechanical) (a script, so it lives with code) |
+| Unified UI origin, routing, sign-in behavior, recovery route and navigation (D-037) | [software/unified-ui-design.md](software/unified-ui-design.md) |
 | Firmware source, board target, CI and build evidence | [ghostnet-labs/firmware](https://github.com/ghostnet-labs/firmware) and its PRs |
 | History of the 2026-09-29 Track A options | [poc/history-2026-09-29.md](poc/history-2026-09-29.md) (historical, never authoritative) |
 
