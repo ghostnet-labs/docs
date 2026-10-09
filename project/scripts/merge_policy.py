@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fail-closed Manet CI gate and protected auto-merge, using only GitHub metadata."""
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -13,7 +14,6 @@ AUTOMATION = "Handle passing PRs"
 
 
 def matches(path, pattern):
-    # GitHub path filters: * excludes slash, ** includes it, ? matches one char.
     pieces = []
     i = 0
     while i < len(pattern):
@@ -35,6 +35,13 @@ def matches(path, pattern):
     return re.fullmatch("".join(pieces), path) is not None
 
 
+def needs_external_build(profile, files):
+    return bool(profile.get("externalBuild")) and any(
+        not (f.endswith(".md") or f.startswith(".github/") or f == ".gitignore")
+        for f in files
+    )
+
+
 def evaluate(profile, files, runs, sha, number):
     """Return blockers; missing/old/queued/failed/cancelled CI can never pass."""
     required = {w["path"] for w in profile["workflows"]
@@ -46,7 +53,6 @@ def evaluate(profile, files, runs, sha, number):
         if number not in [p["number"] for p in run.get("pull_requests", [])]:
             continue
         path = run["path"].split("@")[0]
-        # Include additional PR workflows (e.g. label-triggered builds) that ran.
         if path.endswith("manet-merge-gate.yml"):
             continue
         previous = latest.get(path)
@@ -59,7 +65,7 @@ def evaluate(profile, files, runs, sha, number):
             blockers.append(f"Missing applicable workflow: {path}")
         elif run["status"] != "completed" or run["conclusion"] != "success":
             blockers.append(f"{path}: {run['status']}/{run.get('conclusion')}")
-    if profile.get("externalBuild") and any(not (f.endswith(".md") or f.startswith(".github/") or f == ".gitignore") for f in files):
+    if needs_external_build(profile, files):
         blockers.append("Package changes need a current-head integration build; this feed has no build CI yet")
     return blockers
 
@@ -89,6 +95,53 @@ class API:
             page += 1
 
 
+def _external_evidence(body):
+    urls = re.findall(r"(?im)^External-Integration-PR:\s*(https://github\.com/[\w.-]+/[\w.-]+/pull/\d+)\s*$", body or "")
+    commits = re.findall(r"(?im)^External-Integration-Commit:\s*([0-9a-f]{40})\s*$", body or "")
+    if len(urls) != 1 or len(commits) != 1:
+        return None
+    return urls[0], commits[0]
+
+
+def external_build_blockers(api, repo, pr, files, profile):
+    if not needs_external_build(profile, files):
+        return []
+    evidence = _external_evidence(pr.get("body"))
+    if not evidence:
+        return ["External integration evidence is missing or ambiguous"]
+    url, integration_commit = evidence
+    owner, name, _, number = url.removeprefix("https://github.com/").split("/")
+    integration_repo = f"{owner}/{name}"
+    expected_repo = profile.get("externalBuildRepo")
+    if expected_repo and integration_repo != expected_repo:
+        return [f"External integration PR must be in {expected_repo}"]
+
+    comparison = api.call(f"repos/{repo}/compare/{pr['head']['sha']}...{integration_commit}")
+    if comparison.get("status") not in {"ahead", "identical"}:
+        return ["External integration commit does not contain the current package PR head"]
+
+    integration_pr = api.call(f"repos/{integration_repo}/pulls/{number}")
+    if integration_pr.get("draft"):
+        return ["External integration PR is still a draft"]
+    integration_sha = integration_pr["head"]["sha"]
+    pin_path = profile.get("externalBuildPinPath")
+    if pin_path:
+        pinned = api.call(f"repos/{integration_repo}/contents/{pin_path}?ref={integration_sha}")
+        text = base64.b64decode(pinned["content"]).decode()
+        if not re.search(rf"\^{re.escape(integration_commit)}(?:\s|$)", text, re.MULTILINE):
+            return [f"External integration PR current head does not pin {integration_commit}"]
+
+    checks = api.pages(f"repos/{integration_repo}/commits/{integration_sha}/check-runs", "check_runs")
+    blockers = ["External integration: " + b for b in check_blockers(checks)]
+    gates = [c for c in checks if c["name"] == GATE and c["app"]["id"] == 15368]
+    if not gates or max(gates, key=lambda c: c["id"])["conclusion"] != "success":
+        blockers.append("External integration: current-head Manet merge gate has not passed")
+    status = api.call(f"repos/{integration_repo}/commits/{integration_sha}/status")
+    if status["statuses"] and status["state"] != "success":
+        blockers.append("External integration: commit status has not passed")
+    return blockers
+
+
 def snapshot(api, repo, number, profile):
     pr = api.call(f"repos/{repo}/pulls/{number}")
     records = api.pages(f"repos/{repo}/pulls/{number}/files")
@@ -96,6 +149,9 @@ def snapshot(api, repo, number, profile):
     files.extend(f["previous_filename"] for f in records if "previous_filename" in f)
     runs = api.pages(f"repos/{repo}/actions/runs?head_sha={pr['head']['sha']}&event=pull_request", "workflow_runs")
     blockers = evaluate(profile, files, runs, pr["head"]["sha"], number)
+    if needs_external_build(profile, files):
+        blockers = [b for b in blockers if not b.startswith("Package changes need a current-head integration build")]
+        blockers.extend(external_build_blockers(api, repo, pr, files, profile))
     if len(records) != pr["changed_files"]:
         blockers.append("Incomplete changed-file inventory; cannot establish applicable tests")
     checks = api.pages(f"repos/{repo}/commits/{pr['head']['sha']}/check-runs", "check_runs")
@@ -124,7 +180,6 @@ def check_blockers(checks):
             latest[key] = check
     blockers = []
     for check in latest.values():
-        # Explicitly non-test utility jobs skipped by the firmware workflow.
         allowed_skip = "Upload ccache cache to s3" in check["name"] or "Check packages for ${{ inputs.target }}/${{ inputs.subtarget }}" in check["name"]
         if check["status"] != "completed" or (check["conclusion"] != "success" and not (check["conclusion"] == "skipped" and allowed_skip)):
             blockers.append(f"Check {check['name']}: {check['status']}/{check.get('conclusion')}")
@@ -132,7 +187,6 @@ def check_blockers(checks):
 
 
 def protection_ready(rules):
-    types = {r["type"] for r in rules}
     checks = [r for r in rules if r["type"] == "required_status_checks"]
     pull_requests = [r for r in rules if r["type"] == "pull_request"]
     return any(r["parameters"].get("required_review_thread_resolution") for r in pull_requests) and any(
@@ -150,7 +204,6 @@ def handle(api, repo, number, profile):
         return
     if any(l["name"].lower() in {"hold", "do-not-merge", "blocked"} for l in pr["labels"]):
         blockers.append("Explicit merge hold")
-    # Machine-readable dependencies, one URL per line; never guess from prose.
     for dependency in re.findall(r"(?im)^Depends-on:\s*(https://github\.com/[\w.-]+/[\w.-]+/pull/\d+)\s*$", pr.get("body") or ""):
         owner, name, _, n = dependency.removeprefix("https://github.com/").split("/")
         if not api.call(f"repos/{owner}/{name}/pulls/{n}")["merged"]:
@@ -173,8 +226,6 @@ def handle(api, repo, number, profile):
     if blockers:
         print(f"PR {number}: " + "; ".join(blockers))
         return
-    # Use a protected SHA-pinned merge once everything is green. GitHub rejects
-    # auto-merge for an already-clean PR, and its merge endpoint still enforces rules.
     result = api.call(f"repos/{repo}/pulls/{number}/merge", {
         "sha": pr["head"]["sha"], "merge_method": "merge"}, method="PUT")
     if not result.get("merged"):
@@ -183,9 +234,7 @@ def handle(api, repo, number, profile):
 
 
 def terminal_blocker(blocker):
-    # CodeQL may publish a neutral aggregate while its analysis is still running.
-    # Keep waiting for success; neutral never satisfies the gate.
-    return "Package changes" in blocker or any(
+    return blocker.startswith("External integration") or any(
         "completed/" + outcome in blocker
         for outcome in ("failure", "cancelled", "timed_out", "action_required", "skipped", "startup_failure", "stale"))
 
@@ -201,8 +250,6 @@ def main():
     profile = json.loads(Path(__file__).with_name("merge_profiles.json").read_text())[args.repo.split("/")[1]]
     api = API(os.environ["GH_TOKEN"])
     if args.mode == "merge":
-        # workflow_run events sometimes lack pull_requests (e.g. fork/label runs).
-        # Reconcile open PR metadata; no PR checkout, artifacts or caches are used.
         for pr in api.pages(f"repos/{args.repo}/pulls?state=open"):
             handle(api, args.repo, pr["number"], profile)
         return
@@ -215,7 +262,6 @@ def main():
             print("All applicable workflows completed successfully on the current PR head")
             return
         print("\n".join(blockers), flush=True)
-        # Fail terminal errors promptly; missing workflows may still be registering.
         if any(terminal_blocker(b) for b in blockers) or time.monotonic() >= deadline:
             raise SystemExit(1)
         time.sleep(30)
