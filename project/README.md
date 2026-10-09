@@ -33,9 +33,11 @@ Every fact has exactly one owner. Everywhere else refers to it by ID or link and
 | Track B selections (B-nn) and their status, power tree, PCB approach, Track A vs. B comparison (the Linear "BOM Baseline" doc only points here; BOM completion is [GHO-26](https://linear.app/ghostnet-labs/issue/GHO-26)) | [hardware/v1-selections.md](hardware/v1-selections.md) |
 | Battery pack geometry (M-nn), design rules, CAD review gates | [hardware/v1-battery-pack.md](hardware/v1-battery-pack.md) |
 | Track B CM5 physical pins, GPIO signal ownership, mux facts, and sequencing | [hardware/v1-pinout-and-sequencing.md](hardware/v1-pinout-and-sequencing.md) (canonical; GHO-9) |
+| V1 carrier first-power procedure: inspection, resistance checks, bench current limits, sequence probes, boot capture, revision record and pass criteria (results stay on GHO-21) | [hardware/v1-first-power.md](hardware/v1-first-power.md) |
 | Track B engineering detail: calculations, interfaces, placement, and validation plan | [hardware/v1-reference.md](hardware/v1-reference.md) (supporting; the registers above win; it links to the canonical pin/GPIO record) |
 | V1 radio and dual-radio mesh validation procedure: radio capture, per-band mesh tests, reset and power-cycle loops, supported vs. unproven behavior (results stay on GHO-22) | [hardware/v1-radio-validation.md](hardware/v1-radio-validation.md) and its script `hardware/v1-radio-validate.sh` |
 | CAD floorplan model and clearance check | firmware [`docs/hardware/v1-mechanical/`](https://github.com/ghostnet-labs/firmware/tree/24.10/docs/hardware/v1-mechanical) (a script, so it lives with code) |
+| Unified UI origin, routing, sign-in behavior, recovery route and navigation (D-037) | [software/unified-ui-design.md](software/unified-ui-design.md) |
 | Firmware source, board target, CI and build evidence | [ghostnet-labs/firmware](https://github.com/ghostnet-labs/firmware) and its PRs |
 | History of the 2026-09-29 Track A options | [poc/history-2026-09-29.md](poc/history-2026-09-29.md) (historical, never authoritative) |
 

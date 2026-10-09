@@ -15,6 +15,8 @@ PAIR = re.compile(
     r"(?:[A-Za-z0-9_/-]+\s+){0,2}GPIO\s*(\d+)\b"
 )
 
+SCRIPT_CHECK = re.compile(r"^\s*gpio_check\s+(\d+)\s+([A-Za-z][A-Za-z0-9_]*)\b")
+
 
 def fail(message: str) -> None:
     print(f"GPIO allocation check: ERROR: {message}", file=sys.stderr)
@@ -78,6 +80,19 @@ def main() -> None:
                         f"{path.relative_to(ROOT)}:{lineno}: {signal} explicitly mapped to "
                         f"GPIO{gpio_text}; canonical ledger assigns GPIO{signal_to_gpio[signal]}"
                     )
+    # Bench scripts encode the ledger as `gpio_check <GPIO> <SIGNAL> ...` lines
+    # (poc/bench-check-v1.sh); they must name the ledger's signal exactly.
+    for path in project_root.rglob("*.sh"):
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            match = SCRIPT_CHECK.match(line)
+            if not match:
+                continue
+            gpio, signal = int(match.group(1)), match.group(2)
+            if allocations.get(gpio) != signal:
+                errors.append(
+                    f"{path.relative_to(ROOT)}:{lineno}: gpio_check names GPIO{gpio} {signal}; "
+                    f"canonical ledger assigns {allocations.get(gpio, 'nothing')}"
+                )
     if errors:
         for error in errors:
             print(f"GPIO allocation check: ERROR: {error}", file=sys.stderr)
@@ -85,7 +100,7 @@ def main() -> None:
 
     print(
         "GPIO allocation check: OK — GPIO0–27 are allocated/reserved exactly once; "
-        "explicit project-document mappings agree with the canonical ledger."
+        "explicit project-document and bench-script mappings agree with the canonical ledger."
     )
 
 
