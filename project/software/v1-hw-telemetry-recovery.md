@@ -37,8 +37,8 @@ No GPIO power, fault, watchdog or recovery code exists in openmanetd today.
 | 2/3 | SYS_I2C_SDA/SCL | `/dev/i2c-1`, kernel `ina238` driver | n/a | n/a | kernel | INA228 only; userspace reads hwmon, never raw I2C |
 | 4 | HALOW_PWR_EN | libgpiod line by name | out | high | hwmgr | TPS22975 U303 ON pin |
 | 5 | WIFI_PWR_EN | libgpiod line by name | out | high | hwmgr | TPS22975 U302 ON pin |
-| 6 | HALOW_FAULT_N | libgpiod, both-edge events | in | low | hwmgr | Source not recorded: the TPS22975 has no fault pin |
-| 7 | WIFI_FAULT_N | libgpiod, both-edge events | in | low | hwmgr | Same question as GPIO6 |
+| 6 | HALOW_FAULT_N | libgpiod, both-edge events | in | low | hwmgr | TPS3780D rail detector (D-046); a fault only when PWR_EN is high and the line stays low after the settle time |
+| 7 | WIFI_FAULT_N | libgpiod, both-edge events | in | low | hwmgr | TPS3780D rail detector (D-046); a fault only when PWR_EN is high and the line stays low after the settle time |
 | 8 | GNSS_RESET_N | libgpiod | out (open-drain use) | low | hwmgr | Drive low to reset, input to release. gpsd keeps the UART |
 | 9 | GNSS_PPS | `pps-gpio` overlay, `/dev/pps0` | in | rising | kernel, read by gpsd/chrony | hwmgr never requests it |
 | 10 | SUPERVISOR_WDI | kernel `gpio-wdt` (`linux,wdt-gpio`) | out | toggle | kernel, armed by hwmgr | See section 7 |
@@ -99,13 +99,12 @@ Proposed timings (all to bench-confirm in GHO-21):
 |---|---|---|
 | Before enable | Assert HALOW_RESET_N low, WAKE_N released | WIFI_WDIS1_N released; PCIe device removed from sysfs if present |
 | Rail rise and settle | 20 ms after enable (switch rise about 1 ms) | 100 ms after enable (PCIe power-stable to PERST# release minimum) |
-| Release | Release HALOW_RESET_N (high-Z) | `echo 1 > /sys/bus/pci/rescan`; kernel drives PERST# |
+| Release | Release HALOW_RESET_N (high-Z) | Release PERST# and retrain the link: method to be chosen by bench test (rescan, host-controller unbind/bind, or reboot) |
 | Enumeration timeout | 10 s for the USB device, 30 s for the netdev after driver firmware load | 5 s for the PCI function, 20 s for the netdev |
 | Power off | Unbind driver, assert reset, enable low | Remove PCI device, enable low |
 | Minimum off time | 2 s (rail discharge) | 2 s |
 | Cooldown backoff | 10 s, 30 s, 2 min, 10 min, then 10 min cap | Same |
 
-The pinout record also lists a HaLow USB VBUS enable between reset release and enumeration. No GPIO is allocated for it, so whether it is a hub port-power control or a separate switch is open (GHO-9).
 
 ## 5. Fault-recovery ladder
 

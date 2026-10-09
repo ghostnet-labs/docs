@@ -57,7 +57,7 @@ These names are not in any record. They follow the ledger's style (upper case, `
 | Hub port 1 to HaLow card | USB_HALOW_DP, USB_HALOW_DM |
 | Hub port 3 to OpenVLM host port | USB_VLM_DP, USB_VLM_DM (hub side), USB_VLM_C_DP, USB_VLM_C_DM (connector side of the ESD part), VLM_VBUS, VLM_CC1, VLM_CC2, HUB_PWRCTL3 |
 | Hub support | HUB_1V1, HUB_3V3, HUB_XI, HUB_XO, HUB_VBUS_DET |
-| PCIe | PCIE_TX_P, PCIE_TX_N, PCIE_RX_P, PCIE_RX_N (CM5 side of the 220 nF capacitors), PCIE_RX_C_P, PCIE_RX_C_N (card side), PCIE_REFCLK_P, PCIE_REFCLK_N, PCIE_RST_N, PCIE_CLKREQ_N, WIFI_PEWAKE_N, WIFI_LED1, WIFI_LED2 |
+| PCIe | PCIE_TX_P, PCIE_TX_N, PCIE_RX_P, PCIE_RX_N (CM5 side of the 220 nF footprints), PCIE_RX_C_P, PCIE_RX_C_N (card side), PCIE_REFCLK_P, PCIE_REFCLK_N, PCIE_RST_N, PCIE_CLKREQ_N, WIFI_PEWAKE_N, WIFI_LED1, WIFI_LED2 |
 | Ethernet | ETH_TRD0_P/N to ETH_TRD3_P/N (CM5 to magnetics, PHY side), ETH_MDI0_P/N to ETH_MDI3_P/N (magnetics to header, line side), ETH_CT_PHY, ETH_CT_LINE |
 | GNSS | GNSS_RF_IN, GNSS_ANT_FEED, GNSS_ANT_BIAS, GNSS_LNA_EN, GNSS_V_BCKP, GNSS_SAFEBOOT_N, GNSS_EXTINT, GNSS_SDA, GNSS_SCL |
 | Battery and charge | VBAT_PACK (pack BAT+ contacts), PACK_SDA, PACK_SCL, PACK_SPARE, VBUS_SVC, SVC_CC1, SVC_CC2, SVC_DP, SVC_DM, VSYS_CHG, EFUSE_OUT, EFUSE_PGOOD, EFUSE_BGATE, EFUSE_DRV, BUCK_EN |
@@ -94,7 +94,7 @@ Each row is one hierarchical port. "Fixed" means a record fixes the connection, 
 | USB_HUB_RESET_N | 01_CM5 | 03 (TUSB4041I GRSTz) | Record: ledger |
 | VLM_USB_FAULT_N | 03 | 01_CM5 | Record: ledger |
 | HALOW_USB_FAULT_N | none | 01_CM5 | Record: ledger. No source (K-4) |
-| HALOW_FAULT_N, WIFI_FAULT_N | none | 01_CM5 | Record: ledger says source unselected |
+| HALOW_FAULT_N, WIFI_FAULT_N | 07 (TPS3780D) | 01_CM5 | Record: ledger (D-046) |
 | SUPERVISOR_WDI, SUPERVISOR_ARM | 01 / 07 | 07 | Record: ledger (D-044) |
 | SYS_PMIC_EN | 07 (recovery path, open) | 01_CM5 pin 99 | Record: §13 |
 | POWER_GOOD | 06 via a translator in 07 (open) | 01_CM5 | Record: ledger |
@@ -144,7 +144,7 @@ The remaining pins, from CM5 datasheet Table 4:
 | 102 | PCIe_CLK_nREQ | PCIE_CLKREQ_N (must be connected) | Record: ledger; Datasheet §2.3.2 |
 | 103 / 105 | USB_N / USB_P | USB_UP_DM / USB_UP_DP, port to 03 | Record: ledger |
 | 104 | PCIE_nWAKE | No connect (unsupported in software) | Record: §6 |
-| 106 | PCIE_PWR_EN | No connect, optional TP. Wi-Fi power uses WIFI_PWR_EN instead | Proposed; GHO-9 to confirm |
+| 106 | PCIE_PWR_EN | Test pad only. Wi-Fi power uses WIFI_PWR_EN instead | Record (D-046) |
 | 109 | PCIe_nRST | PCIE_RST_N | Record: ledger |
 | 110 / 112 | PCIe_CLK_P / _N | PCIE_REFCLK_P / _N | Record: ledger |
 | 111 | VBUS_EN | No connect (USB 3.0 unused) | Proposed |
@@ -158,7 +158,7 @@ The remaining pins, from CM5 datasheet Table 4:
 - RP1 internal pulls are 37 to 86 kΩ (up) and 35 to 98 kΩ (down) at 3.3 V (datasheet §4.3). The default pull of each GPIO at reset is not in the CM5 datasheet: **Unverified**, owned by GHO-9/GHO-19. Every carrier default below is set by an external resistor so it holds before firmware runs.
 - SYS_I2C has 1.8 kΩ pull-ups on the CM5 (datasheet §2.9). Proposed: no extra carrier pull-ups on SYS_I2C_SDA/SCL.
 - The CM5 must see no external voltage on any pin while it is powered down (datasheet §4.2.1). Every port from an always-on domain into this sheet needs a check against that rule (K-7).
-- USB 2.0 needs `dtoverlay=dwc2,dr_mode=host` (datasheet §2.4.2). This is a firmware item for GHO-19, recorded here because capture of USB_OTG_ID depends on it.
+- B-07 on pins 103/105 needs dwc2 in peripheral or OTG mode for the USB gadget console (GHO-19, D-044). Firmware PR #23's `dwc2,dr_mode=host` predates D-044.
 
 ### Test pads
 
@@ -168,9 +168,9 @@ TP_PWR_BUTTON, TP_NBOOT (Record). Proposed: TP on +5V_CM5, CM5_3V3, SYS_PMIC_EN,
 
 ## 02_PCIE_WIFI
 
-**Scope (§17, D-026):** AW7916-AED, M.2 socket, PCIe Gen2 x1, 100 MHz REFCLK, PERST#, CLKREQ#, 220 nF capacitors on the card TX, Wi-Fi switch sized for at least 3 A, three IPEX.
+**Scope (§17, D-026):** AW7916-AED, M.2 socket, PCIe Gen2 x1, 100 MHz REFCLK, PERST#, CLKREQ#, 0 Ω links in 220 nF footprints on the card TX, Wi-Fi switch sized for at least 3 A, three IPEX.
 
-**Parts:** B-03 (AsiaRF AW7916-AED, M.2 3052 A+E), TE 2199119-6 socket (no B-ID; mechanical reference only, not a released Wi-Fi power connector, [v1-3v3-rail.md](v1-3v3-rail.md)), 2 x 220 nF (0201 or 0402, [v1-stackup-routing.md](v1-stackup-routing.md) §4), WIFI_3V3 bulk: 2 x 22 µF X7R plus 100 µF low-ESR polymer at the socket (Record, [v1-3v3-rail.md](v1-3v3-rail.md)). B-21 Wi-Fi antennas are three IPEX on the card; the carrier has no RF trace for them (§19).
+**Parts:** B-03 (AsiaRF AW7916-AED, M.2 3052 A+E), TE 2199119-6 socket (no B-ID; mechanical reference only, not a released Wi-Fi power connector, [v1-3v3-rail.md](v1-3v3-rail.md)), 2 x 220 nF footprints fitted with 0 Ω links (D-046; 0201 or 0402, [v1-stackup-routing.md](v1-stackup-routing.md) §4), WIFI_3V3 bulk: 2 x 22 µF X7R plus 100 µF low-ESR polymer at the socket (Record, [v1-3v3-rail.md](v1-3v3-rail.md)). B-21 Wi-Fi antennas are three IPEX on the card; the carrier has no RF trace for them (§19).
 
 The Wi-Fi TPS22975 is drawn on 06_POWER in this plan, with WIFI_3V3 as a port. §17 lists it on both sheets (K-2).
 
@@ -183,7 +183,7 @@ Pin numbers come from the ledger's [AW7916-AED table](v1-pinout-and-sequencing.m
 | 2, 4, 72, 74 | 3.3 V | WIFI_3V3 | Off while WIFI_PWR_EN is low |
 | 1, 7, 18, 33, 39, 45, 51, 57 and every other GND pin | GND | GND | |
 | 35 / 37 | PERp0 / PERn0 (host TX) | PCIE_TX_P / _N | |
-| 41 / 43 | PETp0 / PETn0 (host RX) | PCIE_RX_C_P / _N, then 220 nF in series to PCIE_RX_P / _N | Capacitors next to the socket |
+| 41 / 43 | PETp0 / PETn0 (host RX) | PCIE_RX_C_P / _N, then 0 Ω links in 220 nF footprints to PCIE_RX_P / _N | Footprints next to the socket (D-046) |
 | 47 / 49 | REFCLKp0 / REFCLKn0 | PCIE_REFCLK_P / _N | |
 | 52 | PERST0# | PCIE_RST_N | CM5 holds it low until clock and reset timing is valid (ledger sequence step 5) |
 | 53 | CLKREQ0# | PCIE_CLKREQ_N | CM5 has an internal pull-up |
@@ -454,7 +454,7 @@ The 3.3 V buck allocation is 4.5 A at 3.39 V (B-18, D-026), which covers the 3 A
 | Pin | Name | Wi-Fi switch (U302, §13) | HaLow switch (U303) |
 |---:|---|---|---|
 | 1, 2 | VIN | +3V3_RADIO | +3V3_RADIO |
-| 3 | ON | WIFI_PWR_EN. Proposed: pull-down to GND (ON must not float; off while the CM5 is absent) | HALOW_PWR_EN, same pull-down |
+| 3 | ON | WIFI_PWR_EN. 4.7 kΩ pull-down to GND (holds ON under its 0.5 V VIL against a 35 kΩ RP1 pull-up at reset; D-046) | HALOW_PWR_EN, same pull-down |
 | 4 | VBIAS | Open: 2.5 to 5.7 V source not recorded (+5V_SYS or +3V3_RADIO) | Same |
 | 5 | GND | GND | GND |
 | 6 | CT | Capacitor for about 1 ms rise ([v1-3v3-rail.md](v1-3v3-rail.md)); value from the datasheet table, open | Open |
@@ -485,7 +485,7 @@ Proposed: TP on VBAT_PACK, IN_SYS, EFUSE_OUT, VBAT_PROTECTED, +VBUS_HOLD, +5V_SY
 
 **Scope (§17):** apply the canonical GPIO allocation, plus the supervisor, watchdog, PMIC_Enable recovery, radio power and fault, GNSS reset and PPS, USB hub reset and fault, and Ethernet timing.
 
-**Parts:** B-20 (TI TPS386000RGPR). Open: POWER_GOOD level translator, recovery logic into SYS_PMIC_EN.
+**Parts:** B-20 (TI TPS386000RGPR), TI TPS3780D dual voltage detector for the radio fault inputs (candidate, D-046). Open: POWER_GOOD level translator, recovery logic into SYS_PMIC_EN.
 
 ### TPS386000RGPR (datasheet SBVS105F; rails Record §13)
 
@@ -515,7 +515,7 @@ These are the carrier-side defaults that must hold before firmware runs. Signal 
 
 | Ledger signal | Carrier default | Status |
 |---|---|---|
-| HALOW_PWR_EN, WIFI_PWR_EN | Pull-down at the TPS22975 ON pin: radios off while the CM5 is absent or in reset | Proposed; ledger says carrier bias open |
+| HALOW_PWR_EN, WIFI_PWR_EN | 4.7 kΩ pull-down at the TPS22975 ON pin: radios off while the CM5 is absent or in reset | Record (D-046) |
 | HALOW_RESET_N, HALOW_WAKE_N | No carrier resistor (the card has its own pull-ups to HALOW_3V3). Open drain only | Record |
 | WIFI_WDIS1_N | 10 kΩ pull-up to WIFI_3V3. Open drain only | Record |
 | GNSS_RESET_N | No carrier resistor (MAX-M10S internal pull-up) | Proposed; back-feed K-7 |
@@ -525,7 +525,7 @@ These are the carrier-side defaults that must hold before firmware runs. Signal 
 | USB_HUB_RESET_N | Pull-down at GRSTz: hub held in reset until released | Proposed (ledger sequence step 1) |
 | VLM_USB_FAULT_N | One pull-up shared with OVERCUR3z | Domain open |
 | HALOW_USB_FAULT_N | Pull-up only (reads "no fault"); no source exists | K-4 |
-| HALOW_FAULT_N, WIFI_FAULT_N | Pull-up to CM5_3V3 only; no source exists | Ledger: source unselected |
+| HALOW_FAULT_N, WIFI_FAULT_N | 10 kΩ pull-up to CM5_3V3; source TPS3780D (option A) | Record (D-046) |
 | SUPERVISOR_WDI | Weak pull-down so WDI does not float during boot | Proposed; arming GHO-10 |
 | SUPERVISOR_ARM | 10 kΩ pull-down | Record (D-044) |
 | POWER_GOOD | Through a translator from EFUSE_PGOOD (battery domain) | Open, GHO-9/GHO-10/GHO-13 |
@@ -622,7 +622,7 @@ Proposed text for the records owner. README rule 6 asks for a Linear issue per c
 
 **K-7. CM5 reverse-voltage rule against always-on domains.** "The CM5 datasheet §4.2.1 forbids external voltage on any pin while the CM5 is powered down. The recovery hierarchy (§22, step 5) powers the CM5 down through PMIC_Enable while +3V3_RADIO, +3V3_GNSS, the supervisor, the eFuse and the charger stay up. The MAX-M10S drives TXD and TIMEPULSE and pulls RESET_N, SDA and SCL up to its own rail; I2C devices on other rails share SYS_I2C. No record addresses isolation. Add a rule and the parts (series resistors, buffers or switched pull-ups) under GHO-9/GHO-10."
 
-**K-8. GNSS TIMEPULSE and SAFEBOOT_N.** "MAX-M10S data sheet R08 Table 10, note 15: SAFEBOOT_N is joined to TIMEPULSE inside the module through 1 kΩ, and the receiver enters safeboot if it is low at start-up. TIMEPULSE is GNSS_PPS to a CM5 input. If the CM5 pin is pulled down, or the CM5 is unpowered when the GNSS starts, the GNSS can boot into safeboot. v1-reference.md §9 treats SAFEBOOT_N as a test pad only. Define the PPS input bias and any series isolation." Settled for capture by D-044 (V1 working default).
+**K-8. GNSS TIMEPULSE and SAFEBOOT_N.** "MAX-M10S data sheet R08 Table 10, note 15: SAFEBOOT_N is joined to TIMEPULSE inside the module through 1 kΩ, and the receiver enters safeboot if it is low at start-up. TIMEPULSE is GNSS_PPS to a CM5 input. If the CM5 pin is pulled down, or the CM5 is unpowered when the GNSS starts, the GNSS can boot into safeboot. v1-reference.md §9 treats SAFEBOOT_N as a test pad only. Define the PPS input bias and any series isolation." Settled for capture by D-044 (V1 working default). RP1 pads are fault-tolerant to 3.63 V with IOVDD at 0 V (RP1 peripherals §3.1.3), so the clamp-to-ground reasoning is weaker than stated; the B-27 buffer stays because of the CM5 rule that no voltage may be applied to unpowered GPIO (CM5 datasheet §4.2.1).
 
 **K-9. No 1.1 V rail for the hub.** "TUSB4041I needs a 1.1 V core supply on seven VDD pins (0.99 to 1.26 V, SLLSEK3F Table 4-1 and §5.3). No record lists a 1.1 V regulator or the hub's 3.3 V source; §17 03_USB_HALOW_AUDIO lists only the crystal. Add the rail to the power tree and the BOM." Settled for capture by D-044 (V1 working default).
 
