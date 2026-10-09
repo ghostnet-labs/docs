@@ -25,7 +25,7 @@ Expose selected path, reason, alternatives, stale/unavailable metrics, schedulin
 
 ## 3. Channel migration and returning-node recovery
 
-[GHO-52](https://linear.app/ghostnet-labs/issue/GHO-52) owns implementation; [GHO-31](https://linear.app/ghostnet-labs/issue/GHO-31) owns mesh evidence.
+[GHO-52](https://linear.app/ghostnet-labs/issue/GHO-52) owns implementation; [GHO-31](https://linear.app/ghostnet-labs/issue/GHO-31) owns mesh evidence. The protocol design, recovery bound and default timers are in [channel-migration.md](../software/channel-migration.md).
 
 Peers coordinate authenticated, versioned band/channel/width plans and activation timing over working paths. Establish and verify an alternate path before abandoning the old one where hardware permits. Resolve competing decisions from separated partitions. Do not let independent retuning strand the mesh.
 
