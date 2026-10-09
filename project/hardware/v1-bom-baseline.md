@@ -127,9 +127,9 @@ These figures come from the 2026-10-09 lookups and are not verified orders.
 - **B-12 contacts.** The DigiKey listing shows no price, with a 4-week lead time.
 - **Long lead times** (DigiKey standard lead time): MAX-M10S-00B 18 weeks, TPS386000RGPR 18 weeks, Molex Pico-Lock parts 19 weeks, CM5 connector 16 weeks, LTW feed-through and cap 15 weeks, supercapacitors 15 weeks.
 - **Temperature ratings below the thermal estimates.** These are not lifecycle risks, but they could force a part change:
-  - The TE 2199119-6 socket is rated -40 to 80 °C at DigiKey. The thermal plan estimates the Wi-Fi card at 87 to 124 °C at 16 W (flat-shell model with a pad, before the D-035 fins are sized).
+  - The TE 2199119-6 socket is rated -40 to 80 °C at DigiKey. The tray thermal model estimates the Wi-Fi card at 89 to 97 °C at 18.5 W and the 43.3 °C hot endpoint (finned lid, pad at 2.5 K/W, [v1-thermal-update-tray.md](v1-thermal-update-tray.md)).
   - The AW7916-AED's published operating range (-10 to +70 °C) does not cover D-028's -17.8 °C cold endpoint. This is already recorded in the thermal plan.
-  - The SCC supercapacitors are rated to 65 °C at 2.7 V. The enclosure interior is estimated at about 60 °C.
+  - The SCC supercapacitors are rated to 65 °C at 2.7 V and 85 °C at 2.3 V or less. The hottest bank cells are estimated at 75 to 82 °C at the D-028 hot endpoint ([v1-thermal-update-tray.md](v1-thermal-update-tray.md)).
 
 ## Conflicts
 
