@@ -338,7 +338,7 @@ Common equipment: scope, lab supply, and `logread -f` captured to a file.
 - Steps:
   1. Run `echo c > /proc/sysrq-trigger`.
   2. Separately, `kill -STOP` hwmgr.
-  3. Scope SUPERVISOR_WDI and SUPERVISOR_WDO.
+  3. Scope SUPERVISOR_WDI, SUPERVISOR_ARM and the TPS386000 WDO pin (19).
 - Pass:
   - With the watchdog armed, WDO asserts within the interval in v1-reference §13, measured from the last WDI edge.
   - With hwmgr stopped, the userspace timeout in telemetry §7 elapses before WDI stops.

@@ -42,7 +42,7 @@ The 138 x 67 mm PCB target is important but not sacred. Do not compromise RF, th
 ## 3. System architecture
 
 - PCIe: CM5 PCIe Gen2 x1 to the AsiaRF AW7916-AED Wi-Fi 6E module (three IPEX antenna connectors)
-- USB: CM5 USB2 to the four-port TI TUSB4041I hub; port 1 to the GW16170 HaLow module, port 2 spare (V1 has no Bluetooth, D-026), port 3 to a dedicated sealed USB-C host connector for external OpenVLM VLMKW0100, and port 4 is spare. B-07 remains the separate USB-C charge/service port.
+- USB: the USB 2.0 pair of CM5 USB3-0 (pins 134/136) to the four-port TI TUSB4041I hub; port 1 to the GW16170 HaLow module, port 2 spare (V1 has no Bluetooth, D-026), port 3 to a dedicated sealed USB-C host connector for external OpenVLM VLMKW0100, and port 4 is spare. B-07 remains the separate USB-C charge/service port; its data lines go only to the CM5's dedicated USB 2.0 port (pins 103/105), as a USB device (console and network gadget, rpiboot) (D-044).
 - Ethernet: CM5 integrated Gigabit PHY to discrete magnetics and the sealed Amphenol LTW Ethernet connector
 - GNSS: CM5 UART, I2C, and PPS to the MAX-M10S, with an external active antenna
 - Power path: battery spring contacts, SMBJ33CA bidirectional TVS, CSD19533Q5A blocking FET, TPS26633 eFuse (where the TVS, blocking FET and eFuse sit now that charging is in the radio is under review, section 12), then the 10 mOhm Kelvin shunt (INA228 monitoring) and VBAT_PROTECTED
@@ -62,7 +62,7 @@ CM5 electrical decisions:
 - PWR_Button goes to internal test pad TP_PWR_BUTTON and nRPI_BOOT goes to TP_NBOOT; there are no physical buttons
 - PMIC_Enable is used for hardware recovery; nEXTRST is not used as the external reset mechanism
 - No user LEDs; Ethernet LED outputs and CM5 power/activity LEDs are unused
-- No external debug USB connector; debug uses internal test pads and an internal debug UART/test points
+- No external debug USB connector. The service console is a USB gadget on B-07. The CM5 debug UART is reachable only on the module's own TP35/TP36, on a bench carrier (D-044). Hardware rpiboot entry is TP_NBOOT with the enclosure open; a DNP DRV5032FC Hall footprint on nRPIBOOT is fitted only if Justin accepts a magnet service input under §30 rule 9. BOOT_ORDER keeps the standard retry loop, with no indefinite RPIBOOT fallback
 - RTC backup is not yet chosen. CM5 pin 76 VBAT takes 2.5 to 3.5 V and draws about 6 µA with the CM5 off ([CM5 datasheet](https://datasheets.raspberrypi.com/cm5/cm5-datasheet.pdf) Table 3 and §3.3); without a source the RTC loses time whenever the battery is out
 
 ## 5. Wi-Fi 6E: AsiaRF AW7916-AED
@@ -99,7 +99,7 @@ Control pin drive: the pull-ups return to the card's switched rail, so the CM5 G
 
 Decision (B-04, B-22, B-23, D-023): replace the two-port TI TUSB4020BI with the four-port TI TUSB4041IPAPRG4 USB 2.0 hub. The two-port selection was sized exactly for the HaLow and Bluetooth devices and cannot support node-side OpenVLM voice/PTT. V1 has since dropped Bluetooth (D-026), which leaves port 2 spare. The V1 voice endpoint is the external OpenMANET VLMKW0100 USB audio/PTT module; the carrier does not integrate a CM108B audio codec or analog speaker/microphone path.
 
-Topology: CM5 USB2 upstream to TUSB4041I; downstream port 1 to GW16170 HaLow; port 2 spare (no Bluetooth, D-026); port 3 to the dedicated sealed GCT USB4720-03-A receptacle for OpenVLM; port 4 reserved. Keep the existing B-07 USB-C DATA / CHARGE service port electrically separate. The OpenVLM port is a USB 2.0 host/DFP: implement USB-C source advertisement (Rp), switched and current-limited +5V VBUS, per-port overcurrent sensing, and USB data-line ESD. Validate signal integrity and hub strap/reset behavior against the TUSB4041I reference design before schematic release.
+Topology: CM5 USB3-0's USB 2.0 pair (pins 134/136) upstream to TUSB4041I (D-044); downstream port 1 to GW16170 HaLow; port 2 spare (no Bluetooth, D-026); port 3 to the dedicated sealed GCT USB4720-03-A receptacle for OpenVLM; port 4 reserved. Keep the existing B-07 USB-C DATA / CHARGE service port electrically separate: its data lines go only to CM5 pins 103/105, as a USB device. Hub core: HUB_1V1 from a TLV62568 buck on CM5_3V3 (B-26); HUB_3V3 = CM5_3V3. The OpenVLM port is a USB 2.0 host/DFP: implement USB-C source advertisement (Rp), switched and current-limited +5V VBUS, per-port overcurrent sensing, and USB data-line ESD. Validate signal integrity and hub strap/reset behavior against the TUSB4041I reference design before schematic release.
 
 The OpenVLM module presents CM108B USB audio and HID PTT controls, and its Kenwood accessory jack connects to the supported handset/PTT. It removes analog audio and physical PTT circuitry from the carrier. Do not route the external VLM into the B-07 charging/service port.
 
@@ -118,6 +118,8 @@ Power: +3V3_RADIO, filtered, to +3V3_GNSS. No dedicated GNSS power switch is pla
 Antenna: external active antenna. The bias source and its short-circuit protection are open under [GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11). [v1-eth-gnss-protection.md](v1-eth-gnss-protection.md) reports that a shorted antenna draws about 320 mA, above VCC_RF's 250 mA absolute maximum (MAX-M10S data sheet R08; not rechecked here), so the antenna must not run straight from VCC_RF without a current limit. That PR proposes a current-limited switch. The u-blox three-pin antenna supervisor reads open-antenna status on SDA and SCL, so choosing it would give up GNSS I2C.
 
 Placement: a quiet RF corner, away from buck converters, Ethernet magnetics, CM5 high-speed routing, Wi-Fi, and HaLow.
+
+PPS: TIMEPULSE shares SAFEBOOT_N through 1 kΩ inside the module, and a low at start-up forces safeboot (u-blox data sheet R08 Table 10; integration manual R05 §3.2.3.3). GNSS_PPS reaches the CM5 through an Ioff-rated buffer powered from CM5_3V3 (B-27, proposed), so the module pin sees no load at start-up whatever the CM5 state. The CM5 PPS input is configured as an input with no pull.
 
 Backup: V_BCKP is reserved; backup storage is not selected. Test pads: SAFEBOOT_N and EXTINT. EXTINT stays a test pad unless [GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11) uses it for antenna-short detection, as [v1-eth-gnss-protection.md](v1-eth-gnss-protection.md) proposes.
 
@@ -229,7 +231,7 @@ U302 is Wi-Fi and U303 is HaLow. 0.6 to 5.7 V, up to 6 A, about 16 mOhm typical,
 
 ### Supervisor and watchdog: TI TPS386000RGPR
 
-Multi-rail supervision plus watchdog. Rails: SVS1 = CM5_3V3, SVS2 = +5V_SYS, SVS3 = +3V3_RADIO, SVS4 = VBAT_PROTECTED; with the B-24 bridge fitted, SVS4 moves to +VBUS_HOLD or is masked while PFO is low, or it resets the CM5 on every swap ([v1-hot-swap-bridge.md](v1-hot-swap-bridge.md) section 4). SUPERVISOR_WDI comes from the CM5 and SUPERVISOR_WDO returns to it. Verified 2026-10-04 from [TI SBVS105F](https://www.ti.com/lit/ds/symlink/tps386000.pdf), §6.7: the watchdog interval is 450 ms minimum, 600 ms typical, 750 ms maximum. CT pins program reset-release delays, not this interval. §8.3.3 starts the timer at RESET1 release and latches timeout; WDI edges alone do not clear it. Clearing requires MR assertion, a SENSE1 reset event, or supervisor VDD power-down. A PMIC_Enable cycle must not be assumed to remove supervisor VDD. GHO-10 owns boot inhibition/arming, latch clear and reset-pulse design before WDO can participate in SYS_PMIC_EN recovery. Startup, release, watchdog timeout and recovery still require schematic and bench validation.
+Multi-rail supervision plus watchdog (D-044 working default). Rails: SVS1 = CM5_3V3, SVS2 = +5V_SYS, SVS3 = +3V3_RADIO, SVS4 = +VBUS_HOLD (VBAT_PROTECTED without B-24; [v1-hot-swap-bridge.md](v1-hot-swap-bridge.md) section 4). VDD = +3V3_RADIO, because WDI and MR use 0.7 x VDD thresholds that a 3.3 V GPIO meets only with a 3.3 V VDD. RESET2 and RESET4 drive SYS_PMIC_EN (open drain, wired-OR); RESET1 does not. MR is the watchdog arm: the CM5 drives SUPERVISOR_ARM high once its watchdog service runs, and a 10 kΩ pull-down disarms it whenever the CM5 is off or in reset. SUPERVISOR_WDI comes from the CM5. WDO pulls the SENSE4L tap, so a timeout asserts RESET4 and holds PMIC_Enable low for the CT4 delay (300 ms nominal). The latch clears when CM5_3V3 falls (SENSE1) or the arm drops (MR). Design detail: [v1-netplan-blocker-proposals.md](v1-netplan-blocker-proposals.md) K-6. Verified 2026-10-04 from [TI SBVS105F](https://www.ti.com/lit/ds/symlink/tps386000.pdf), §6.7: the watchdog interval is 450 ms minimum, 600 ms typical, 750 ms maximum. CT pins program reset-release delays, not this interval. §8.3.3 starts the timer at RESET1 release and latches timeout; WDI edges alone do not clear it. Clearing requires MR assertion, a SENSE1 reset event, or supervisor VDD power-down. A PMIC_Enable cycle must not be assumed to remove supervisor VDD. Startup, release, watchdog timeout and recovery still require schematic and bench validation.
 
 ## 14. Power budget
 
@@ -263,7 +265,7 @@ This file does not own or duplicate the GPIO allocation. The canonical CM5 physi
 
 - 01_CM5: CM5, two Amphenol connectors, +5V_CM5, GPIO_VREF, PCIe, USB2, Ethernet, UART, I2C, PPS, PMIC_Enable, internal test pads
 - 02_PCIE_WIFI: AW7916-AED, M.2 E-key socket, PCIe Gen2 x1, 100 MHz REFCLK, PERST#, CLKREQ#, 220 nF card TX capacitors, Wi-Fi TPS22975 sized for at least 3 A, three IPEX
-- 03_USB_HALOW_AUDIO: TUSB4041I, 24 MHz crystal, CM5 USB2 upstream, GW16170 on port 1, port 2 spare, external OpenVLM USB-C DFP on port 3, port 4 reserved, switched/current-limited VBUS, CC pull-up, USB ESD, hub reset, per-port overcurrent signals
+- 03_USB_HALOW_AUDIO: TUSB4041I, 24 MHz crystal, CM5 USB3-0 USB 2.0 pair upstream, HUB_1V1 buck (TLV62568) from CM5_3V3, HUB_3V3 = CM5_3V3, GRSTz held low by 2.2 kΩ until firmware release, GW16170 on port 1, port 2 spare, external OpenVLM USB-C DFP on port 3, port 4 reserved, switched/current-limited VBUS, CC pull-up, USB ESD, hub reset, per-port overcurrent signals
 - 04_ETHERNET: CM5 PHY interface, discrete 1000BASE-T magnetics, sealed Ethernet connector, four MDI differential pairs, Ethernet ESD, chassis and shield, ETH_SYNC_OUT
 - 05_GNSS: MAX-M10S-00B, UART, I2C, PPS, reset, VCC_RF, active antenna, optional RF protection and filter footprints, backup provision, test pads
 - 06_POWER: battery contacts, 10 mOhm shunt, INA228, SMBJ33CA, CSD19533Q5A, Q2 pulldown FET, TPS26633, LM76005 5 V, LM76005 3.3 V, HaLow TPS22975 (the Wi-Fi TPS22975 is on 02_PCIE_WIFI), USB-C charge input from the B-07 port, TPS25751A PD controller (B-08), BQ25798 charger and power path (B-09), pack-swap bridge (B-24, candidate), GNSS filtering, protection, fault, and telemetry
@@ -385,7 +387,7 @@ Still to define: radio power-management software, the hardware telemetry API, ha
 
 ## 25. Bill of materials and status
 
-Parts and their status are kept in the selections register ([v1-selections.md](v1-selections.md), B-01 to B-25). Open parts are listed in section 26.
+Parts and their status are kept in the selections register ([v1-selections.md](v1-selections.md), B-01 to B-27). Open parts are listed in section 26.
 
 Project status by area:
 
@@ -397,7 +399,7 @@ Project status by area:
 ## 26. Critical open items
 
 - Mechanical: import the pack contact and latch models, exact CM5, AW7916-AED, GW16170, TE M.2 socket, and Ethernet connector CAD; select the actual RF connectors; define enclosure wall thickness and bosses; freeze mounting holes; run 3D collision analysis; verify antenna cable bend radii, Ethernet connector enclosure intrusion, and battery latch and insertion and removal.
-- Electrical: verify every CM5 GPIO mux and pin; verify the exact AW7916-AED M.2 pin assignment and control pins (the GW16170 pins are verified in section 7); check the calculated TPS26633 and LM76005 component values in sections 12 and 13; verify the reverse-FET topology; validate the TVS against the actual battery and transients; finalize the LM76005 components; select USB VBUS switches, USB ESD, and Ethernet ESD; finalize GNSS backup, GNSS RF protection, and the chassis and shield strategy; finalize the supervisor recovery topology; verify PMIC_Enable behavior; verify startup and radio power sequencing; integrate the selected PD controller and charger (B-08, B-09) and review the power path with charging in the radio (section 11).
+- Electrical: verify every CM5 GPIO mux and pin; verify the exact AW7916-AED M.2 pin assignment and control pins (the GW16170 pins are verified in section 7); check the calculated TPS26633 and LM76005 component values in sections 12 and 13; verify the reverse-FET topology; validate the TVS against the actual battery and transients; finalize the LM76005 components; select USB VBUS switches, USB ESD, and Ethernet ESD; finalize GNSS backup, GNSS RF protection, and the chassis and shield strategy; bench-verify the D-044 supervisor recovery topology; verify PMIC_Enable behavior; verify startup and radio power sequencing; integrate the selected PD controller and charger (B-08, B-09) and review the power path with charging in the radio (section 11).
 - Software: validate CM5 PCIe Wi-Fi and the mt7915e path, the GW16170 on the CM5, and HaLow firmware; define radio power management, the hardware telemetry API, hardware-aware mesh metrics, the watchdog service, GNSS PPS handling, Ethernet timing handling, and the fault and recovery state machine.
 
 ## 27. Validation plan
