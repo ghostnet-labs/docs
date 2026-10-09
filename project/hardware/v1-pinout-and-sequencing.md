@@ -23,12 +23,15 @@ These are CM5 connector pin numbers, not BCM GPIO numbers.
 | PCIe REFCLK P/N | 110 / 112 |
 | PCIe RX P/N | 116 / 118 |
 | PCIe TX P/N | 122 / 124 |
-| USB2 D-/D+ | 103 / 105 |
+| USB2 D-/D+ (B-07 service port, device role; rpiboot) | 103 / 105 |
+| USB3-0 USB 2.0 pair DP/DM (TUSB4041I upstream) | 134 / 136 |
 | GPIO_VREF | 78 |
 | CM5 3.3 V | 84 / 86 |
 | PMIC_Enable / nRPIBOOT | 99 / 93 |
 | Ethernet_SYNC_OUT (dedicated PHY timing pin) | 18 |
 | SCL0 GPIO39 / SDA0 GPIO38 | 80 / 82 |
+
+USB_OTG_ID (101) is left unconnected (internal pull-up, device role) with a DNP 0 Ω to GND (D-044).
 
 GPIO signal ownership and physical CM5 connector pin numbers are maintained together in the allocation table below (D-024).
 
@@ -53,7 +56,7 @@ Allocation decision D-024: GNSS uses UART0 on GPIO14/15; system I2C1 uses GPIO2/
 | 8 | 39 | GNSS_RESET_N | GNSS reset; physical pin verified; boot/electrical verification open |
 | 9 | 40 | GNSS_PPS | GNSS timing; physical pin verified; boot/electrical verification open |
 | 10 | 44 | SUPERVISOR_WDI | TPS386000 WDI input, either-edge heartbeat; carrier boot/arming open |
-| 11 | 38 | SUPERVISOR_WDO | TPS386000 WDO, active-low open-drain input to CM5; pull-up/boot recovery open |
+| 11 | 38 | SUPERVISOR_ARM | TPS386000 MR watchdog arm, active-high output; 10 kΩ pull-down keeps it disarmed while the CM5 is off or in reset (D-044); carrier bias Unverified |
 | 12 | 31 | POWER_GOOD | Planned input; eFuse PGOOD active-high open-drain; battery-domain pull-up needs translation |
 | 13 | 28 | EFUSE_FAULT | TPS26633 FLT active-low open-drain input; CM5-domain pull-up/connectivity open |
 | 14 | 55 | GNSS_UART_TX | GNSS UART0 TX; physical pin verified |
@@ -111,12 +114,12 @@ Checked 2026-10-04 against the TI authorities above. Manufacturer pin behavior i
 |---|---|---|
 | HALOW_PWR_EN / WIFI_PWR_EN | TPS22975 ON, pin 3 | Active high; ON must not float. External bias must hold the intended state before firmware runs |
 | HALOW_FAULT_N / WIFI_FAULT_N | No source selected | TPS22975 has no fault or power-good output. Thermal shutdown is internal, not GPIO telemetry |
-| SUPERVISOR_WDI / SUPERVISOR_WDO | TPS386000 WDI 20 / WDO 19 | WDI accepts either edge; WDO is active-low open-drain. Carrier pull-up and reset path remain open |
+| SUPERVISOR_WDI / SUPERVISOR_ARM | TPS386000 WDI 20 / MR 1 | WDI accepts either edge. MR arms the watchdog when high; 10 kΩ to GND holds it low. WDO 19 is not a CM5 input: it pulls the SENSE4L tap (D-044) |
 | POWER_GOOD | TPS26633RGER PGOOD 16 is a candidate source | Active-high open-drain. The reference circuit pulls it to OUT for buck enables; that node cannot connect directly to CM5 GPIO |
 | EFUSE_FAULT | TPS26633RGER FLT 14 | Active-low open-drain; provide a CM5-compatible pull-up, with power-off leakage checked |
 | HALOW_USB_FAULT_N / VLM_USB_FAULT_N | Downstream VBUS switch / hub overcurrent path | Exact switch outputs, hub wiring, pull-ups and polarity still require GHO-11/GHO-13 closure |
 
-The [supervisor section](v1-reference.md#supervisor-and-watchdog-ti-tps386000rgpr) owns watchdog timing and latch-clear behavior. GHO-10 owns its startup/arming/reset topology; this audit does not select that circuit or add an arming GPIO.
+The [supervisor section](v1-reference.md#supervisor-and-watchdog-ti-tps386000rgpr) owns watchdog timing and latch-clear behavior. The startup, arming and reset topology is the D-044 working default, with GPIO11 as the arming output.
 
 Firmware source inspection is separate from physical validation. [Firmware PR #23](https://github.com/ghostnet-labs/firmware/pull/23), inspected at `37f8e8d2bdda03327942e419a69bd68bdf64f4cc`, contains:
 
@@ -139,7 +142,7 @@ This is the intended hardware-controlled order, not evidence that the bring-up f
 3. Enable the selected radio 3.3 V rail after supervisor-good.
 4. Release HaLow reset/WAKE by high-Z GPIO18/19, then enable its USB VBUS and enumerate.
 5. Enable WIFI_3V3 with GPIO21 released; the CM5 holds PERST# (pin 109 to card pin 52) until clock/reset timing is valid, then releases it. CLKREQ# runs from card pin 53 to CM5 pin 102.
-6. Deassert TUSB4041I reset only after 3.3 V and 24 MHz are stable.
+6. Deassert TUSB4041I reset only after CM5_3V3, HUB_1V1 and 24 MHz are stable (at least 3 ms after both supplies, SLLSEK3F §5.6); the 2.2 kΩ pull-down holds it until then.
 7. Recovery: reset USB device → reset hub → power-cycle radio → supervisor/watchdog → CM5 PMIC_Enable (pin 99).
 
 ## Open gates
@@ -149,5 +152,6 @@ This is the intended hardware-controlled order, not evidence that the bring-up f
 - Confirm the AW7916-AED pin numbers above against a bench card (the AsiaRF drawing has no numbers), and whether the card holds W_DISABLE1# or PEWAKE# internally. GPIO16 and GPIO22 are freed (D-026).
 - Confirm TE 2199119-6 footprint, hub VBUS/ESD/straps, and eight-contact battery allocation.
 - Bench-validate PCIe/USB enumeration, sequencing, and PMIC_Enable recovery.
+- Allocate BRIDGE_ACTIVE_N (B-24 bridge), PACK_PRESENT and the pack I2C bus; none has a GPIO yet ([GHO-13](https://linear.app/ghostnet-labs/issue/GHO-13)). Spares: GPIO16, 17, 22, 26 and 27.
 
 **Acceptance status:** CM5 PCIe/USB/power pins, CM5 mux facts, Gateworks control behavior, and a D-024 logical allocation (GNSS on GPIO14/15; hub reset on GPIO23; HaLow/VLM USB faults on GPIO24/25) are recorded. GPIO0–27 physical connector mappings are verified from the manufacturer table. Device-tree defaults, schematic implementation, and bench evidence remain open.

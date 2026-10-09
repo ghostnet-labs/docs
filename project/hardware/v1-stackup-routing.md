@@ -18,8 +18,6 @@ This file proposes a manufacturing stackup for the 138 x 67 mm carrier and the t
 | 50 ohm single-ended | L1: 0.190 mm. L3: 0.175 mm |
 | Power copper (10 C rise) | VBAT and +VBUS_HOLD 6 A: 3.6 mm of 1 oz. +3V3_RADIO 5 A: 2.8 mm of 1 oz, but its 10 mOhm drop budget needs about 2.9 mm of 1 oz over 50 mm. Supercapacitor path 10 A: 7.2 mm of 1 oz |
 
-Two conflicts surfaced while doing this (for owners to settle, not changed here): the CM5 datasheet asks for **90 ohm** PCIe, not 85 ohm; and it says the CM5 can draw **5 V at up to 2.5 A**, above the 2 A +5V_SYS allocation in v1-reference.md section 14 (GHO-10).
-
 ## 1. Fabricator data used
 
 Fetched 2026-10-07:
@@ -97,7 +95,7 @@ Propagation delay: about 5.7 ps/mm on L1 (effective Dk 2.92) and 6.85 ps/mm on L
 |---|---|---|---|
 | PCIe TX, RX, REFCLK | 0.10 mm (about 0.7 ps on L3) | Not required | CM5 datasheet 2.3.1 |
 | USB 2.0 | 0.15 mm | Not required; no P/N swap | CM5 datasheet 2.4.2 |
-| MDI, CM5 to magnetics to header | 0.15 mm (tighter than the 1 mm in v1-reference.md section 10) | Under 50 mm | CM5 datasheet 2.2.1 |
+| MDI, CM5 to magnetics to header | 0.15 mm | Under 50 mm | CM5 datasheet 2.2.1 |
 
 Match at the end that has the mismatch, with small serpentine bumps (amplitude no more than twice the gap, segment length at least 3 x trace width), not at the far end. PCIe P and N may be swapped within a pair; USB 2.0 may not. Estimated PCIe run is 30 to 60 mm from the CM5 connector to the M.2 socket under the Wi-Fi card (floorplan estimate, not routed). Keep pairs at least 3 x trace width from other pairs and 5 x from clocks and switching nets.
 
@@ -147,7 +145,7 @@ Temperature rise 10 C above the local board, chosen because the sealed enclosure
 | LTC3350 stack, inductor and FET path | 9.4 A average screening ceiling at 5 mOhm RSNSC, 13.1 A peak | 10 A | 7.2 mm | 16.6 mm | 4.7 mm | 0.8 |
 | +3V3_RADIO | 4.5 A allocation, 5 A ceiling | 5 A | 2.8 mm | 6.4 mm | 1.8 mm | 2.1 |
 | WIFI_3V3 (switch to M.2 socket) | 3.03 A peak | 3.5 A | 1.7 mm | 3.9 mm | 1.1 mm | 3.4 |
-| +5V_SYS | 2 A allocation; CM5 datasheet up to 2.5 A | 3 A | 1.4 mm | 3.2 mm | 0.9 mm | 4.2 |
+| +5V_SYS | 2.5 A allocation (CM5 datasheet maximum) | 3 A | 1.4 mm | 3.2 mm | 0.9 mm | 4.2 |
 
 The 25 ms 11.1 A eFuse pulse is short enough to be adiabatic and does not set width.
 

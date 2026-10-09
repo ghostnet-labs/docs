@@ -42,7 +42,7 @@ No GPIO power, fault, watchdog or recovery code exists in openmanetd today.
 | 8 | GNSS_RESET_N | libgpiod | out (open-drain use) | low | hwmgr | Drive low to reset, input to release. gpsd keeps the UART |
 | 9 | GNSS_PPS | `pps-gpio` overlay, `/dev/pps0` | in | rising | kernel, read by gpsd/chrony | hwmgr never requests it |
 | 10 | SUPERVISOR_WDI | kernel `gpio-wdt` (`linux,wdt-gpio`) | out | toggle | kernel, armed by hwmgr | See section 7 |
-| 11 | SUPERVISOR_WDO | libgpiod, both-edge events | in | low | hwmgr | TPS386000 watchdog output, logged only |
+| 11 | SUPERVISOR_ARM | libgpiod | out | high | hwmgr | TPS386000 MR arm (D-044). Driven high only after WDI service runs; dropped before a deliberate poweroff |
 | 12 | POWER_GOOD | libgpiod, both-edge events | in | high | hwmgr | Source/translation Unverified; the reference PGOOD pull-up is battery-domain, not an intrinsic output-high voltage |
 | 13 | EFUSE_FAULT | libgpiod, both-edge events | in | low (TPS26633 FLT is open-drain low) | hwmgr | Chip active-low behavior verified; name retained; pull-up/connectivity open |
 | 14/15 | GNSS_UART_TX/RX | `/dev/ttyAMA0` | n/a | n/a | gpsd | Unchanged |
@@ -68,7 +68,7 @@ Add `gpio-line-names` to the RP1 GPIO controller (`&rp1_gpio`) in the V1 overlay
     gpio-line-names =
         "", "", "SYS_I2C_SDA", "SYS_I2C_SCL",                        /* 0-3 */
         "HALOW_PWR_EN", "WIFI_PWR_EN", "HALOW_FAULT_N", "WIFI_FAULT_N",  /* 4-7 */
-        "GNSS_RESET_N", "GNSS_PPS", "SUPERVISOR_WDI", "SUPERVISOR_WDO",  /* 8-11 */
+        "GNSS_RESET_N", "GNSS_PPS", "SUPERVISOR_WDI", "SUPERVISOR_ARM",  /* 8-11 */
         "POWER_GOOD", "EFUSE_FAULT", "GNSS_UART_TX", "GNSS_UART_RX",     /* 12-15 */
         "", "", "HALOW_RESET_N", "HALOW_WAKE_N",                          /* 16-19 */
         "INA228_ALERT_N", "WIFI_WDIS1_N", "", "USB_HUB_RESET_N",         /* 20-23 */
@@ -179,9 +179,9 @@ The proposed heartbeat target must meet the worst-case interval in reference §1
 
 hwmgr would pet the software watchdog every 10 s while its loops are healthy. A wedged hwmgr does not necessarily stop procd from petting the CM5 watchdog, so comparing the 30 s and 60 s settings alone does not guarantee a softer reset first. Select watchdogs by identity and verify procd's device choice. Linux [v6.6 gpio_wdt.c](https://github.com/torvalds/linux/blob/v6.6/drivers/watchdog/gpio_wdt.c) starts `always-running` at probe and retains hardware-running state on stop; magic-close support does not disable this external timer. Boot, restart and shutdown behavior require tests of the actual target kernel.
 
-Boot gap: no WDI service is guaranteed before gpio-wdt probe. GHO-10 must define boot inhibition/arming and timeout latch clearing before connecting WDO to PMIC_Enable. Masking only the reset action does not stop the supervisor timer or clear a timeout latched during boot. Validate shutdown and daemon restart as well as startup; the proposed userspace/kernel watchdog behavior is not implemented or qualified.
+Boot gap: no WDI service is guaranteed before gpio-wdt probe, so the watchdog is armed by software after boot (D-044). hwmgr starts WDI service first, then drives SUPERVISOR_ARM high. It must drop SUPERVISOR_ARM before a deliberate poweroff, or the watchdog power-cycles a node meant to stay off. The bootloader and `config.txt` must never drive GPIO11 high, or the node boot-loops. Validate shutdown and daemon restart as well as startup; the proposed userspace/kernel watchdog behavior is not implemented or qualified.
 
-SUPERVISOR_WDO is proposed as a logged input. An observed edge can assist diagnosis, but a stalled CPU cannot reliably log the event that resets it. Reset-cause attribution needs validated retained evidence; missing logs must be reported as unknown.
+TPS386000 WDO is not a CM5 input (D-044), so a watchdog trip is not logged directly. Reset-cause attribution needs validated retained evidence; missing logs must be reported as unknown.
 
 ## 8. Where it lives in openmanetd (proposal)
 
@@ -231,7 +231,7 @@ Enums use the `RADIO_HALOW` / `RADIO_WIFI` style with an `_UNSPECIFIED` zero val
 
 ## 9. Bench tests
 
-Run under [GHO-21](https://linear.app/ghostnet-labs/issue/GHO-21) (first power and boot) and [GHO-23](https://linear.app/ghostnet-labs/issue/GHO-23) (telemetry and recovery validation). Record the board and firmware revision with each result.
+Run under [GHO-21](https://linear.app/ghostnet-labs/issue/GHO-21) (first power and boot) and [GHO-23](https://linear.app/ghostnet-labs/issue/GHO-23) (telemetry and recovery validation). Record the board and firmware revision with each result. Each row is expanded into a full procedure (RC-n is Tn) in [../hardware/v1-validation-procedures.md](../hardware/v1-validation-procedures.md#watchdog-pmic-and-recovery).
 
 | # | Proves | Method | Pass |
 |---|---|---|---|

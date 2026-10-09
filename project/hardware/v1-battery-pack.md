@@ -35,9 +35,9 @@ Each row is the single owner of its value. Status is Locked, Target, or CAD-veri
 | M-09 | BMS PCB | Envelope about 32 x 48 mm, long axis along Y, in the lower portion of the bay. Keep the pack fuse and protection close to the BAT+ and BAT- pads and thermally separate from the cell ends. | Target. Z placement CAD-verify. |
 | M-10 | Contact array | Eight Mill-Max 7911-0-15-20-86-14-11-0 probes in a 4 x 2 grid on 4.0 mm pitch, centered at X = 117.0 mm and Y = 37.0 mm. Offsets from center: X = -6, -2, +2, +6 mm and Y = -2, +2 mm (a 12 x 4 mm center span). | Pitch Locked. Center Target. |
 | M-11 | Contact allocation | Two BAT+ in parallel, two BAT- in parallel, SDA, SCL, PACK_PRESENT/ID, and one spare or wake contact | Selected |
-| M-12 | Probe working height | About 6.79 mm recommended. Target 6.8 +/- 0.25 mm effective in the locked condition, with worst case between 6.10 and 7.49 mm and never bottoming. | Target. Tolerance study CAD-verify. |
+| M-12 | Probe working height | About 6.79 mm recommended. Target 6.8 +/- 0.25 mm effective in the locked condition, with worst case between 6.25 and 7.14 mm, which includes the probe's ±0.15 mm length tolerance and a 0.2 mm minimum preload. | Target. Tolerance study CAD-verify. |
 | M-13 | Pack-side target pads | Eight round or rounded hard-gold-over-nickel pads, at least 2.5 mm diameter, on the same 4.0 mm grid. Increase the size if the process allows without reducing creepage or short-circuit tolerance. | Target. Finish thickness, shape, and vendor capability CAD-verify. |
-| M-14 | Target PCB and pogo daughterboard | Each about 24 x 16 mm (the daughterboard plus mounting ears), separately replaceable on the radio side | Target. Mounting ears and fasteners CAD-verify. |
+| M-14 | Target PCB and pogo daughterboard | Each about 24 x 16 mm (the daughterboard plus mounting ears), separately replaceable on the radio side. Both PCBs are located by their contact faces against datum shoulders, so board thickness stays out of the probe stack. | Target. Mounting ears and fasteners CAD-verify. |
 | M-15 | Dry contact cavity | About 28 x 20 mm internal, centered on the contact array, with at least 5 mm of land between the outermost target pad and the gasket | Target |
 | M-16 | Secondary gasket | Replaceable solid silicone rectangular gasket or cord, a closed rounded rectangle around the contact cavity only (not the whole pack face). Centerline envelope about 34 x 26 mm centered at X = 117 mm and Y = 37 mm (X = 100 to 134 mm, Y = 24 to 50 mm). 2.0 mm cross-section at about 20 percent nominal axial compression, below about 30 percent worst case. | Target. Gland geometry CAD-verify. |
 | M-17 | Hard-stop lands | Four broad lands outside the gasket perimeter, two on each side in the Y margins (X about 109 and 125 mm, Y about 10 and 64 mm), coplanar with Datum A | Target. Positions CAD-verify. |
@@ -61,4 +61,4 @@ Create these bodies first: radio-bottom interface plate, pack outer shell, pack 
 
 Confirm the D-017 length budget in gate 1. The 145 mm frame adds 21 mm of spare length (M-22), which covers the earlier 128 mm fallback.
 
-Open design work and gate results are tracked in [GHO-8](https://linear.app/ghostnet-labs/issue/GHO-8).
+Open design work is tracked in [GHO-8](https://linear.app/ghostnet-labs/issue/GHO-8). Gate results: [v1-battery-pack-gates.md](v1-battery-pack-gates.md).
