@@ -300,7 +300,7 @@ if has pinctrl; then
 	gpio_check 8 GNSS_RESET_N any
 	gpio_check 9 GNSS_PPS input
 	gpio_check 10 SUPERVISOR_WDI any
-	gpio_check 11 SUPERVISOR_WDO idle_high
+	gpio_check 11 SUPERVISOR_ARM any
 	gpio_check 12 POWER_GOOD idle_high
 	gpio_check 13 EFUSE_FAULT idle_high
 	gpio_check 14 GNSS_UART_TX alt
