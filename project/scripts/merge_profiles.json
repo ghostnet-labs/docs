@@ -191,10 +191,6 @@
       {
         "path": ".github/workflows/build.yml",
         "paths": null
-      },
-      {
-        "path": ".github/workflows/formal.yml",
-        "paths": null
       }
     ]
   },

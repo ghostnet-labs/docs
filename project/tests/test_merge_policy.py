@@ -98,6 +98,14 @@ class GateTests(unittest.TestCase):
         runs = [dict(self.run, id=i, path=w["path"]) for i, w in enumerate(profile["workflows"])]
         self.assertEqual(evaluate(profile, ["frontend/src/App.jsx"], runs, "current", 7), [])
 
+    def test_luci_profile_builds_without_openwrt_formalities(self):
+        profiles = json.loads((Path(__file__).resolve().parents[1] / "scripts" / "merge_profiles.json").read_text())
+        paths = [w["path"] for w in profiles["luci"]["workflows"]]
+        self.assertIn(".github/workflows/build.yml", paths)
+        self.assertNotIn(".github/workflows/formal.yml", paths)
+        self.assertEqual(evaluate(profiles["luci"], ["applications/luci-app-x/Makefile"], [], "current", 7),
+                         ["Missing applicable workflow: .github/workflows/build.yml"])
+
     def test_requested_changes_and_dismissal(self):
         review = {"id": 1, "user": {"login": "reviewer"}, "state": "CHANGES_REQUESTED"}
         self.assertFalse(reviews_clear([review]))
