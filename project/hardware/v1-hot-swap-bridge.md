@@ -214,7 +214,7 @@ Software policy (proposal): on PFO low with PACK_PRESENT gone, enter swap mode; 
 | RSNSC 6 mΩ, RSNSI 7.5 mΩ, WSL2512 ±1 % | 2 | Exact value availability unverified |
 | Dividers for PFI, OUTFB, buck EN; INTVCC and DRVCC caps | about 10 | |
 
-Power-electronics placement remains unverified. Use the cell envelopes above for GHO-7 assembly review; any off-board or upright placement needs checked retention, interconnects, clearance and thermal paths.
+Placement: the bank goes in a tray under the carrier and the power stage on the top side (D-047, D-048; [v1-bridge-selection.md](v1-bridge-selection.md) §3).
 
 ### Bench tests
 
