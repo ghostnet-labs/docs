@@ -45,7 +45,7 @@ The 138 x 67 mm PCB target is important but not sacred. Do not compromise RF, th
 - USB: CM5 USB2 to the four-port TI TUSB4041I hub; port 1 to the GW16170 HaLow module, port 2 spare (V1 has no Bluetooth, D-026), port 3 to a dedicated sealed USB-C host connector for external OpenVLM VLMKW0100, and port 4 is spare. B-07 remains the separate USB-C charge/service port.
 - Ethernet: CM5 integrated Gigabit PHY to discrete magnetics and the sealed Amphenol LTW Ethernet connector
 - GNSS: CM5 UART, I2C, and PPS to the MAX-M10S, with an external active antenna
-- Power path: battery spring contacts, SMBJ33CA bidirectional TVS, CSD19533Q5A blocking FET, TPS26633 eFuse, then the 10 mOhm Kelvin shunt (INA228 monitoring) and VBAT_PROTECTED
+- Power path: battery spring contacts, SMBJ33CA bidirectional TVS, CSD19533Q5A blocking FET, TPS26633 eFuse (where the TVS, blocking FET and eFuse sit now that charging is in the radio is under review, section 12), then the 10 mOhm Kelvin shunt (INA228 monitoring) and VBAT_PROTECTED
 - Regulation: VBAT_PROTECTED feeds an LM76005 5 V buck (+5V_SYS to the CM5 and USB) and an LM76005 3.3 V buck (+3V3_RADIO). +3V3_RADIO feeds WIFI_3V3 and HALOW_3V3 through two TPS22975 switches, and a filtered +3V3_GNSS.
 
 ## 4. Compute
@@ -63,6 +63,7 @@ CM5 electrical decisions:
 - PMIC_Enable is used for hardware recovery; nEXTRST is not used as the external reset mechanism
 - No user LEDs; Ethernet LED outputs and CM5 power/activity LEDs are unused
 - No external debug USB connector; debug uses internal test pads and an internal debug UART/test points
+- RTC backup is not yet chosen. CM5 pin 76 VBAT takes 2.5 to 3.5 V and draws about 6 µA with the CM5 off ([CM5 datasheet](https://datasheets.raspberrypi.com/cm5/cm5-datasheet.pdf) Table 3 and §3.3); without a source the RTC loses time whenever the battery is out
 
 ## 5. Wi-Fi 6E: AsiaRF AW7916-AED
 
@@ -92,7 +93,7 @@ Power: +3V3_RADIO through a TPS22975 to HALOW_3V3, controlled by HALOW_PWR_EN. A
 
 M.2 pinout, from the Gateworks GW16167 and GW16170 wiki page (checked September 30, 2026): pins 2, 4, 72, and 74 carry 3.3 V; pin 3 is USB D+ and pin 5 is USB D-; pin 56 (W_DISABLE1#) is wired to the module RESET_N with a 200 kOhm pull-up to the card's own 3.3 V rail; pin 54 (W_DISABLE2#) is wired to the module WAKE with a 10 kOhm pull-up to the same rail. The card does not enumerate on USB while either pin is held low. The wiki lists no PCIe, PERST#, CLKREQ#, or PEWAKE# signals for this card, so V1 leaves those M.2 pins unconnected unless Gateworks documents otherwise.
 
-Control pin drive: the pull-ups return to the card's switched rail, so the CM5 GPIOs wired to pins 54 and 56 (GPIO 18 and 19 in section 16) must be driven open-drain: output low to assert, input to release, never driven high. That keeps the GPIO from back-feeding the card while HALOW_3V3 is off. Do not infer HaLow pin behavior from generic Morse Micro documentation or another Gateworks module. The Morse Micro Linux driver does not support two HaLow radios on one host, so the node carries one HaLow radio.
+Control pin drive: the pull-ups return to the card's switched rail, so the CM5 GPIOs wired to card pin 56 (RESET_N, GPIO18 HALOW_RESET_N) and card pin 54 (WAKE, GPIO19 HALOW_WAKE_N) in the [pinout ledger](v1-pinout-and-sequencing.md) must be driven open-drain: output low to assert, input to release, never driven high. That keeps the GPIO from back-feeding the card while HALOW_3V3 is off. Do not infer HaLow pin behavior from generic Morse Micro documentation or another Gateworks module. The Morse Micro Linux driver does not support two HaLow radios on one host, so the node carries one HaLow radio.
 
 ## 8. USB
 
@@ -114,32 +115,33 @@ About 9.7 x 10.1 x 2.5 mm, multi-constellation, UART, I2C, PPS/time pulse, reset
 
 Power: +3V3_RADIO, filtered, to +3V3_GNSS. No dedicated GNSS power switch is planned for V1, because independent GNSS power cycling is not currently required.
 
-Antenna: external active antenna; VCC_RF provides the antenna bias.
+Antenna: external active antenna. The bias source and its short-circuit protection are open under [GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11). [v1-eth-gnss-protection.md](v1-eth-gnss-protection.md) reports that a shorted antenna draws about 320 mA, above VCC_RF's 250 mA absolute maximum (MAX-M10S data sheet R08; not rechecked here), so the antenna must not run straight from VCC_RF without a current limit. That PR proposes a current-limited switch. The u-blox three-pin antenna supervisor reads open-antenna status on SDA and SCL, so choosing it would give up GNSS I2C.
 
 Placement: a quiet RF corner, away from buck converters, Ethernet magnetics, CM5 high-speed routing, Wi-Fi, and HaLow.
 
-Backup: V_BCKP is reserved; backup storage is not selected. Test pads: SAFEBOOT_N and EXTINT.
+Backup: V_BCKP is reserved; backup storage is not selected. Test pads: SAFEBOOT_N and EXTINT. EXTINT stays a test pad unless [GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11) uses it for antenna-short detection, as [v1-eth-gnss-protection.md](v1-eth-gnss-protection.md) proposes.
 
 RF protection: do not automatically populate a generic TVS on the GNSS RF line. Select protection for the 1.575 GHz path with its capacitance and insertion-loss limits.
 
 ## 10. Ethernet: sealed Gigabit connector
 
-Decision (B-06, D-022): the Ethernet port is the Amphenol LTW RCP-5SPFFH-SCU7001 sealed panel feed-through (IP67 with the port open or mated, shielded Cat5e, 13/16"-28 UNS thread, panel cut-out 20.8 mm with a 19.4 mm flat). A CAP-WACMSPC1 screw cap on a rubber strap covers the port when unused. The M12 X-coded option and the Glenair Series 80 Mighty Mouse candidate are retired (R-04), as are the Cat6A RCP-6APFFH-SCM7001 (R-15) and the Bel 1840888-4 as the wall connector (R-16). The feed-through ends in an RJ45 socket inside the wall. A short pigtail runs from an RJ45 plug in that socket to a Molex Pico-Lock 1.50 mm 8-circuit right-angle header on the carrier (D-025); there is no board-side RJ45. Header 504050-0891, housing 504051-0801, terminals 504052-0098 ([GHO-45](https://linear.app/ghostnet-labs/issue/GHO-45)). The pigtail is custom: Cat5e or Cat6 cable crimped to 504052 terminals, with a T568B plug at the feed-through end. Not yet chosen: the magnetics and the ESD and surge device. The maker's drawings and 3D model are in the project files under v1-cad/step/.
+Decision (B-06, D-022): the Ethernet port is the Amphenol LTW RCP-5SPFFH-SCU7001 sealed panel feed-through (IP67 with the port open or mated, shielded Cat5e, 13/16"-28 UNS thread, panel cut-out 20.8 mm with a 19.4 mm flat). A CAP-WACMSPC1 screw cap on a rubber strap covers the port when unused. The M12 X-coded option and the Glenair Series 80 Mighty Mouse candidate are retired (R-04), as are the Cat6A RCP-6APFFH-SCM7001 (R-15) and the Bel 1840888-4 as the wall connector (R-16). The feed-through ends in an RJ45 socket inside the wall. A short pigtail runs from an RJ45 plug in that socket to a Molex Pico-Lock 1.50 mm 8-circuit right-angle header on the carrier (D-025); there is no board-side RJ45. Header 504050-0891, housing 504051-0801, terminals 504052-0098 ([GHO-45](https://linear.app/ghostnet-labs/issue/GHO-45)). Options and sources: [v1-ethernet-header.md](v1-ethernet-header.md). The pigtail is custom: Cat5e or Cat6 cable crimped to 504052 terminals, with a T568B plug at the feed-through end. Not yet chosen: the magnetics and the ESD and surge device. The maker's drawings and 3D model are in the project files under v1-cad/step/.
 
 Consequences: the feed-through has no magnetics. The board carries a discrete four-channel 1000BASE-T magnetics module, plus a low-capacitance ESD and surge device. The CM5 already includes the BCM54210PE Gigabit PHY, so the design routes four 100 ohm differential MDI pairs from the CM5 through the magnetics to the 8-pin header, and no external PHY is used. The connector is sealed to the enclosure wall, and the shield follows the chassis rule below. Whether the connector offers any protection against shorting when submerged has not been reviewed. Header signal-integrity limits for 1000BASE-T:
 - Pins 1/2, 3/4, 5/6 and 7/8 carry MDI pairs 0 to 3.
 - No logic-ground pins. The header is on the MDI side of the 1500 Vrms isolation barrier, so any extra pins are chassis or shield only.
 - Untwist each pair 10 mm or less at the header and 13 mm or less at the plug.
 - Pair-to-pair skew is not critical (1000BASE-T allows 50 ns).
+- All eight header circuits carry MDI, so the header has no spare pin for a shield. Where the pigtail shield bonds is open ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)).
 - PCB routing is 100 ohm differential, with P and N in each pair length-matched within 0.15 mm ([CM5 datasheet](https://datasheets.raspberrypi.com/cm5/cm5-datasheet.pdf) §2.2). Matching between pairs is not needed while they differ by less than 50 mm.
 
 Magnetics part: not yet selected.
 
 Not selected: an external PHY (duplicates CM5 function and adds power, area, cost, and complexity), PoE (not required, adds power-path and thermal complexity), and Ethernet LEDs (status belongs in software and the EUD).
 
-ESD: a low-capacitance Gigabit Ethernet ESD device is required near the Ethernet connector. The part is open.
+ESD: a low-capacitance Gigabit Ethernet ESD device is required. The part and the surge level it must meet are open ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)).
 
-Chassis: CHASSIS_GND is reserved. Do not connect the Ethernet connector shield directly to digital ground without a deliberate strategy.
+Chassis: the bonding strategy is open ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)). The wall RF connectors and the D-035 thermal path already tie the board to the enclosure, so CHASSIS_GND cannot stay unconnected. Do not connect the Ethernet connector shield directly to digital ground without a deliberate strategy.
 
 Timing: the CM5 PHY supports IEEE 1588-2008 and exposes a dedicated 3.3 V sync interface. D-033 selects an internal test point only; no GPIO capture connection is selected and GNSS PPS stays independent. The physical pin, net and GPIO reservation are owned by [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md#ethernet-timing-interface).
 
@@ -179,7 +181,7 @@ Undervoltage lockout: a divider from IN_SYS to UVLO to GND with R_top = 464 kOhm
 
 Output ramp: C_dVdT = 22 nF gives t = 20.8 x 10^3 x V_IN x C_dVdT = 5.8 ms at 12.6 V (2,185 V/s), so charging about 25 µF of regulator input capacitance draws about 55 mA. The turn-on delay after UVLO is 742 µs + 49.5 µs per nF x 22 nF, about 1.8 ms.
 
-PGOOD and PGTH: a divider from OUT to PGTH, 243 kOhm over 49.9 kOhm, sets PGOOD rising at 7.04 V and falling at 6.59 V. PGOOD is open drain; pull it up to the eFuse output through 100 kOhm and use it to drive the EN pins of both LM76005 regulators, so they start only after the eFuse ramp completes. This battery-domain PGOOD node must not connect directly to the CM5 POWER_GOOD input; a separate logic-level sensing interface remains to be designed under GHO-9/GHO-10/GHO-13.
+PGOOD and PGTH: a divider from OUT to PGTH, 243 kOhm over 49.9 kOhm, sets PGOOD rising at 7.04 V and falling at 6.59 V. PGOOD is open drain; pull it up to the eFuse output through 100 kOhm and use it to drive the EN pins of both LM76005 regulators, so they start only after the eFuse ramp completes. With the B-24 pack-swap bridge fitted (D-027 needs one), EN must instead follow +VBUS_HOLD, or the bucks switch off at the start of every swap ([v1-hot-swap-bridge.md](v1-hot-swap-bridge.md) section 4). This battery-domain PGOOD node must not connect directly to the CM5 POWER_GOOD input; a separate logic-level sensing interface remains to be designed under GHO-9/GHO-10/GHO-13.
 
 Fault response: tie MODE to ground for auto-retry (retry delay about 670 ms), which suits a headless node. MODE open would latch off until SHDN, UVLO, or the input is cycled. Leave IMON unconnected, because the INA228 measures current (if used: 27.9 µA per A, and R_IMON must stay under 12.9 kOhm to keep 2 x I_OL below 4 V).
 
@@ -227,7 +229,7 @@ U302 is Wi-Fi and U303 is HaLow. 0.6 to 5.7 V, up to 6 A, about 16 mOhm typical,
 
 ### Supervisor and watchdog: TI TPS386000RGPR
 
-Multi-rail supervision plus watchdog. Rails: SVS1 = CM5_3V3, SVS2 = +5V_SYS, SVS3 = +3V3_RADIO, SVS4 = VBAT_PROTECTED. SUPERVISOR_WDI comes from the CM5 and SUPERVISOR_WDO returns to it. Verified 2026-10-04 from [TI SBVS105F](https://www.ti.com/lit/ds/symlink/tps386000.pdf), §6.7: the watchdog interval is 450 ms minimum, 600 ms typical, 750 ms maximum. CT pins program reset-release delays, not this interval. §8.3.3 starts the timer at RESET1 release and latches timeout; WDI edges alone do not clear it. Clearing requires MR assertion, a SENSE1 reset event, or supervisor VDD power-down. A PMIC_Enable cycle must not be assumed to remove supervisor VDD. GHO-10 owns boot inhibition/arming, latch clear and reset-pulse design before WDO can participate in SYS_PMIC_EN recovery. Startup, release, watchdog timeout and recovery still require schematic and bench validation.
+Multi-rail supervision plus watchdog. Rails: SVS1 = CM5_3V3, SVS2 = +5V_SYS, SVS3 = +3V3_RADIO, SVS4 = VBAT_PROTECTED; with the B-24 bridge fitted, SVS4 moves to +VBUS_HOLD or is masked while PFO is low, or it resets the CM5 on every swap ([v1-hot-swap-bridge.md](v1-hot-swap-bridge.md) section 4). SUPERVISOR_WDI comes from the CM5 and SUPERVISOR_WDO returns to it. Verified 2026-10-04 from [TI SBVS105F](https://www.ti.com/lit/ds/symlink/tps386000.pdf), §6.7: the watchdog interval is 450 ms minimum, 600 ms typical, 750 ms maximum. CT pins program reset-release delays, not this interval. §8.3.3 starts the timer at RESET1 release and latches timeout; WDI edges alone do not clear it. Clearing requires MR assertion, a SENSE1 reset event, or supervisor VDD power-down. A PMIC_Enable cycle must not be assumed to remove supervisor VDD. GHO-10 owns boot inhibition/arming, latch clear and reset-pulse design before WDO can participate in SYS_PMIC_EN recovery. Startup, release, watchdog timeout and recovery still require schematic and bench validation.
 
 ## 14. Power budget
 
@@ -264,7 +266,7 @@ This file does not own or duplicate the GPIO allocation. The canonical CM5 physi
 - 03_USB_HALOW_AUDIO: TUSB4041I, 24 MHz crystal, CM5 USB2 upstream, GW16170 on port 1, port 2 spare, external OpenVLM USB-C DFP on port 3, port 4 reserved, switched/current-limited VBUS, CC pull-up, USB ESD, hub reset, per-port overcurrent signals
 - 04_ETHERNET: CM5 PHY interface, discrete 1000BASE-T magnetics, sealed Ethernet connector, four MDI differential pairs, Ethernet ESD, chassis and shield, ETH_SYNC_OUT
 - 05_GNSS: MAX-M10S-00B, UART, I2C, PPS, reset, VCC_RF, active antenna, optional RF protection and filter footprints, backup provision, test pads
-- 06_POWER: battery contacts, 10 mOhm shunt, INA228, SMBJ33CA, CSD19533Q5A, Q2 pulldown FET, TPS26633, LM76005 5 V, LM76005 3.3 V, TPS22975 x 2, GNSS filtering, protection, fault, and telemetry
+- 06_POWER: battery contacts, 10 mOhm shunt, INA228, SMBJ33CA, CSD19533Q5A, Q2 pulldown FET, TPS26633, LM76005 5 V, LM76005 3.3 V, HaLow TPS22975 (the Wi-Fi TPS22975 is on 02_PCIE_WIFI), USB-C charge input from the B-07 port, TPS25751A PD controller (B-08), BQ25798 charger and power path (B-09), pack-swap bridge (B-24, candidate), GNSS filtering, protection, fault, and telemetry
 - 07_SYSTEM: apply the canonical GPIO allocation in [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md), plus supervisor, watchdog, PMIC_Enable recovery, radio power and fault, GNSS reset and PPS, USB hub reset and fault, and Ethernet timing
 
 ## 18. Mechanical architecture
@@ -287,7 +289,7 @@ PCB: 138 x 67 mm working target (D-026). Enclosure concept: rectangular aluminum
 
 Result (138 x 67 mm board, firmware [PR #24](https://github.com/ghostnet-labs/firmware/pull/24)): no overlaps on either side, with 65 percent of the top side and 13 percent of the bottom side occupied. Rules checked in the script: no switching part sits over or under an RF module on either side, and every power part is at least 15 mm from the GNSS receiver. Centre distances to the GNSS receiver: HaLow card about 116 mm, Wi-Fi card about 34 mm (2.5 mm edge to edge), Wi-Fi socket about 26 mm (6.5 mm edge to edge), bucks about 81 mm, Ethernet feed-through about 128 mm. The Wi-Fi card is now the GNSS receiver's nearest neighbour and the one to review against the coexistence results.
 
-Limits of this check: sizes are nominal, not manufacturer drawings. The magnetics module (14 x 9 mm) and the RJ45 plug and boot (16 x 16 mm) are placeholders until parts are chosen, the Pico-Lock header depth (7.5 mm) is assumed until Molex drawing SD-504050-001 is checked, and the feed-through axis height is assumed. The AW7916-AED has no published STEP, so it is a 30 x 52 x 2.4 mm box (thickness assumed). The antenna connector position on each M.2 card is assumed to be the end opposite the socket, which is unverified for the GW16170 and the AW7916-AED. Estimated stack height: the earlier figure of about 27 mm for the radio body (the pack now adds about 46 mm, master M-02) assumed a 13.4 mm standard jack and is now an upper bound. The tallest top-side part is likely the CM5 on its connectors (about 7.4 mm connector stack plus the module, unverified), and the 3D assembly must recompute it. This does not replace the STEP-based 3D collision check.
+Limits of this check: sizes are nominal, not manufacturer drawings. The magnetics module (14 x 9 mm, 3.5 mm tall or less under D-025) and the RJ45 plug and boot (16 x 16 mm) are placeholders until parts are chosen. Common gigabit magnetics are 6 to 9 mm tall (Würth 7490220122 is 8.8 mm); the one low-profile lead found, Pulse HX5120NL at about 2.1 mm, is unverified and its 16.5 x 9.1 mm body is 2.5 mm longer than the placeholder ([v1-eth-gnss-protection.md](v1-eth-gnss-protection.md)). In addition, the Pico-Lock header depth (7.5 mm) is assumed until Molex drawing SD-504050-001 is checked, and the feed-through axis height is assumed. The AW7916-AED has no published STEP, so it is a 30 x 52 x 2.4 mm box (thickness assumed). The antenna connector position on each M.2 card is assumed to be the end opposite the socket, which is unverified for the GW16170 and the AW7916-AED. Estimated stack height: the earlier figure of about 27 mm for the radio body (the pack now adds about 46 mm, master M-02) assumed a 13.4 mm standard jack and is now an upper bound. The tallest top-side part is likely the CM5 on its connectors (about 7.4 mm connector stack plus the module, unverified), and the 3D assembly must recompute it. This does not replace the STEP-based 3D collision check.
 
 The floorplan is conceptual only: HaLow module upper left, CM5 center, Wi-Fi module right of the CM5, GNSS lower right at the right edge, power and DC section lower middle, USB hub lower center, Ethernet connector lower left, battery contacts on the lower left edge. It must also reserve an enclosure-wall opening and internal cable path for the external OpenVLM USB-C host port, positioned for safe handset/PTT cable access and clear of the Ethernet feed-through and RF connectors. Do not freeze its wall face or coordinates until the actual USB4720-03-A model, shell CAD, cable bend, and access envelope are checked in GHO-7. Actual board/enclosure placement must use manufacturer STEP models.
 
@@ -329,7 +331,7 @@ Stackup: eight layers is the starting assumption. Conceptually: L1 components, c
 
 Top and bottom: the top side carries the CM5, M.2 modules, GNSS, Ethernet, and RF connectors. The bottom side can carry converters, the INA228, protection support, load switches, supervisors, small support ICs, and test pads. Do not automatically place switching power underneath RF modules; RF isolation and thermal paths drive the final decision.
 
-Power layout rules: the battery path runs battery contacts, TVS, blocking FET, and eFuse, then the shunt, then VBAT_PROTECTED (the shunt sits after the eFuse so the INA228 never sees reverse polarity). Keep high-current paths short, wide, low resistance, and thermally capable. Keep Kelvin sense traces isolated from switching current. Follow TI reference layouts for buck loops and keep switching nodes small.
+Power layout rules: the battery path runs battery contacts, TVS, blocking FET, and eFuse (placement under review, section 12), then the shunt, then VBAT_PROTECTED (the shunt sits after the eFuse so the INA228 never sees reverse polarity). Keep high-current paths short, wide, low resistance, and thermally capable. Keep Kelvin sense traces isolated from switching current. Follow TI reference layouts for buck loops and keep switching nodes small.
 
 The pack-swap operating requirement is D-027; B-24 and [v1-hot-swap-bridge.md](v1-hot-swap-bridge.md) own the bridge candidate and sizing study. The thermal operating requirement is D-028; [v1-thermal-rf-plan.md](v1-thermal-rf-plan.md) evaluates passive closure. Neither requirement is qualified yet.
 
@@ -383,35 +385,7 @@ Still to define: radio power-management software, the hardware telemetry API, ha
 
 ## 25. Bill of materials and status
 
-Current V1 parts and their status:
-
-| Function | Part | Status |
-|---|---|---|
-| Compute | Raspberry Pi CM5008032 | Selected |
-| CM5 connector | Amphenol 10164227-1004A1RLF | Selected |
-| Wi-Fi 6E | AsiaRF AW7916-AED (MT7916, M.2 3052) | Selected (D-026) |
-| HaLow | Gateworks GW16170 / MM8108-M20 | Selected |
-| GNSS | u-blox MAX-M10S-00B | Selected |
-| Ethernet | Amphenol LTW RCP-5SPFFH-SCU7001 sealed feed-through, CAP-WACMSPC1 cap, pigtail to a Molex Pico-Lock 504050-0891 header (magnetics TBD) | Selected |
-| M.2 socket | TE Connectivity 2199119-6 | Mechanical reference; Wi-Fi current qualification required (GHO-10/GHO-26, v1-3v3-rail.md) |
-| Battery connector | Eight Mill-Max 7911 spring contacts (B-12) | Selected for V0; geometry CAD-verify |
-| Shunt | Vishay WFK0612R0100FE66 | Selected |
-| Battery monitor | TI INA228AIDGSR | Selected |
-| Input eFuse | TI TPS26633RGER | Selected |
-| Reverse FET | TI CSD19533Q5A | Candidate |
-| Reverse FET pulldown (Q2) | BSS138 or equivalent | Candidate |
-| TVS | Diodes Inc. SMBJ33CA | Initial candidate |
-| 5 V buck | TI LM76005 | Selected |
-| 3.3 V buck | TI LM76005 | Selected |
-| Radio switches | TI TPS22975DSGT x 2 | Selected |
-| Supervisor / watchdog | TI TPS386000RGPR | Selected |
-| USB hub | TI TUSB4041IPAPRG4, four-port USB 2.0 hub | Selected (D-023) |
-| USB VBUS switch | TBD | Open |
-| USB ESD | TBD | Open |
-| Ethernet ESD | TBD | Open |
-| GNSS backup | TBD | Open |
-| GNSS RF protection | TBD | Open |
-| Enclosure | TBD | Open |
+Parts and their status are kept in the selections register ([v1-selections.md](v1-selections.md), B-01 to B-25). Open parts are listed in section 26.
 
 Project status by area:
 
@@ -423,7 +397,7 @@ Project status by area:
 ## 26. Critical open items
 
 - Mechanical: import the pack contact and latch models, exact CM5, AW7916-AED, GW16170, TE M.2 socket, and Ethernet connector CAD; select the actual RF connectors; define enclosure wall thickness and bosses; freeze mounting holes; run 3D collision analysis; verify antenna cable bend radii, Ethernet connector enclosure intrusion, and battery latch and insertion and removal.
-- Electrical: verify every CM5 GPIO mux and pin; verify the exact AW7916-AED M.2 pin assignment and control pins (the GW16170 pins are verified in section 7); check the calculated TPS26633 and LM76005 component values in sections 12 and 13; verify the reverse-FET topology; validate the TVS against the actual battery and transients; finalize the LM76005 components; select USB VBUS switches, USB ESD, and Ethernet ESD; finalize GNSS backup, GNSS RF protection, and the chassis and shield strategy; finalize the supervisor recovery topology; verify PMIC_Enable behavior; verify startup and radio power sequencing; select the USB-C PD controller and charger, and review the power path with charging in the radio (section 11).
+- Electrical: verify every CM5 GPIO mux and pin; verify the exact AW7916-AED M.2 pin assignment and control pins (the GW16170 pins are verified in section 7); check the calculated TPS26633 and LM76005 component values in sections 12 and 13; verify the reverse-FET topology; validate the TVS against the actual battery and transients; finalize the LM76005 components; select USB VBUS switches, USB ESD, and Ethernet ESD; finalize GNSS backup, GNSS RF protection, and the chassis and shield strategy; finalize the supervisor recovery topology; verify PMIC_Enable behavior; verify startup and radio power sequencing; integrate the selected PD controller and charger (B-08, B-09) and review the power path with charging in the radio (section 11).
 - Software: validate CM5 PCIe Wi-Fi and the mt7915e path, the GW16170 on the CM5, and HaLow firmware; define radio power management, the hardware telemetry API, hardware-aware mesh metrics, the watchdog service, GNSS PPS handling, Ethernet timing handling, and the fault and recovery state machine.
 
 ## 27. Validation plan
