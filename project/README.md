@@ -26,6 +26,7 @@ Every fact has exactly one owner. Everywhere else refers to it by ID or link and
 | Status, priority, who is doing what, next steps, blockers, open questions | Linear issues and project status updates |
 | POC order quantities, vendors, prices, buy links, cart and delivery status | Linear doc [OpenMANET POC — Purchase BOM](https://linear.app/ghostnet-labs/document/openmanet-poc-purchase-bom-ff58aa264535) and [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36) |
 | Expanded networking/controller, channel recovery, monitoring and coexistence requirements | [requirements/maer-capabilities.md](requirements/maer-capabilities.md) |
+| Channel migration protocol: plan message, authentication, staged switch, rediscovery, merge rule, recovery bound and default timers | [software/channel-migration.md](software/channel-migration.md) (requirements stay in maer-capabilities.md) |
 | Decisions (D-nnn) and retired or rejected items (R-nn) | [decisions.md](decisions.md) |
 | Track A part selections and rationale (A-nn), mounting, selection risks | [poc/track-a.md](poc/track-a.md) |
 | POC bench wiring, firmware revision, safety rules, arrival checks | [poc/bench-bom-and-topology.md](poc/bench-bom-and-topology.md) |
