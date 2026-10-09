@@ -116,7 +116,7 @@ Harmonic order n = 1575.42 / f_sw. A C/A main lobe is 2.046 MHz wide, so any swi
 |---|---|---|---|---|---|
 | LM76005, 5 V and 3.3 V (B-18) | 400 kHz typical, 350 to 450 kHz with RT open; 200 to 500 kHz settable (SNVSBK5A §6.5 fOSC, §7.1) | 3938.55 | 3938 → 1575.2, 3939 → 1575.6 | 5 or 6. Over the tolerance the order runs 3501 to 4501, which moves a given harmonic by about ± 197 MHz | 3903 → 1561.2 |
 | BQ25798 charger (B-09) | 1.5 MHz or 750 kHz typical, set by PROG strap or PWM_FREQ; no min/max given (SLUSDV2C §6.5, Table 7-1, REG0x18) | 1050.28 (1.5 MHz), 2100.56 (750 kHz) | 1575.0, 1576.5 (1.5 MHz); 1575.0, 1575.75 (750 kHz) | 1 (1.5 MHz), 2 (750 kHz) | 1041 → 1561.5; 2081 → 1560.75 |
-| LTC3350 bridge (B-24, candidate) | 490 kHz minimum at RT = 107 kΩ (v1-hot-swap-bridge.md, from datasheet Rev. D; datasheet not re-fetched here, nominal not recorded) | 3215.1 at 490 kHz | 1575.35, 1575.84 | 4 | 3186 → 1561.14 |
+| LTC3350 bridge (B-24, candidate) | 500 kHz nominal, 490 to 510 kHz over temperature (LTC3350 Rev. D p4, [v1-bridge-selection.md](v1-bridge-selection.md)) | 3215.1 at 490 kHz | 1575.35, 1575.84 | 4 | 3186 → 1561.14 |
 | TLV62568 hub 1.1 V buck (GHO-10 proposal) | 1.5 MHz typical in PWM; power-save mode below DCM, with lower, load-dependent frequency (SLVSD89B §6.5, §7.3.1) | 1050.28 | 1575.0, 1576.5 | 1 in PWM; wanders in PSM | 1561.5 |
 | TPS62A01A (forced-PWM alternative, section 3.3) | 2.4 MHz FPWM (SLUSEG9E §6.5) | 656.43 | 1574.4, 1576.8 | 1 (at the lobe edge) | 1560.0 |
 | TPS26633 eFuse (B-15) | Not a switching regulator: a pass FET with gate drive, no inductor. SLVSE94G gives no internal charge-pump frequency | – | – | – | – |
@@ -270,7 +270,7 @@ Results:
 
 | Part | Proposed keepout |
 |---|---|
-| LTC3350 switching stage: IC, inductor, FETs, sense resistors (B-24 candidate) | Bottom side inside the power band X 30 to 86, Y 0 to 26 (the free strip X 30 to 66, Y 17 to 26, between the bucks and the charger, fits the 5 x 7 mm QFN and its inductor). Not in the XY shadow of the HaLow card and socket (X 7 to 29, Y 30.1 to 64) or of the Wi-Fi card and socket (X 88 to 118, Y 7 to 62.9). At least 15 mm from the GNSS block. The supercapacitor stack is not a switch node and may go elsewhere, but the 10 A path ([v1-stackup-routing.md](v1-stackup-routing.md) §5) favours keeping it close |
+| LTC3350 switching stage: IC, inductor, FETs, sense resistors (B-24 candidate) | Top side at board X 55 to 85, Y 1.5 to 23 (D-047, [v1-bridge-selection.md](v1-bridge-selection.md) §3.5), which meets the same rules. Bottom-side alternative: inside the power band X 30 to 86, Y 0 to 26 (the free strip X 30 to 66, Y 17 to 26, between the bucks and the charger, fits the 5 x 7 mm QFN and its inductor). Not in the XY shadow of the HaLow card and socket (X 7 to 29, Y 30.1 to 64) or of the Wi-Fi card and socket (X 88 to 118, Y 7 to 62.9). At least 15 mm from the GNSS block. The supercapacitor stack is not a switch node and may go elsewhere, but the 10 A path ([v1-stackup-routing.md](v1-stackup-routing.md) §5) favours keeping it close |
 | Hub 1.1 V buck (TLV62568 or alternative, GHO-10 proposal) | Beside the hub (X 39 to 53, Y 10 to 24), at least the hub-to-crystal distance from XI/XO and the USB pairs (TUSB4041I §7.4.1.1), not under the CM5 (top side), at least 9 mm from the HaLow socket (keep Y < 28 or X > 31) |
 | TPS22975 load switches (blocked in the floorplan) | Not switchers. Keep the WIFI_3V3 burst loop (switch to socket bulk capacitors) on the socket side away from the GNSS column |
 | Any future switcher | Same rules: not in the XY shadow of an RF module on either side, at least 15 mm from GNSS, switch node and input loop on L8 with L7 solid above |
@@ -352,7 +352,7 @@ Not applied here. Each item names the record and the text the owner can apply if
 - AW7916-AED: 6 GHz power (A-band figure used), port-to-chain map, out-of-band emission, receiver blocking, and whether the card has RF shielding. AsiaRF publishes a one-page datasheet and a product page only.
 - MAX-M10S immunity above 3300 MHz (−18 dBm assumed) and in bypass LNA mode (Table 43 is low-gain mode, typical, room temperature).
 - Every assumption A1 to A9, in particular the antenna's pre-filter rejection, linearity and noise figure, and all isolation figures. The free-space values are orientation only.
-- The LTC3350 switching frequency (490 kHz minimum is from the bridge record; the datasheet download failed in this pass) and its spread-spectrum capability.
+- The LTC3350 spread-spectrum capability (its 500 kHz nominal frequency is now recorded from Rev. D).
 - BQ25798 switching-frequency tolerance (typical values only in SLUSDV2C).
 - Whether the CM5 has 25 MHz or 54 MHz references, its SoC and LPDDR clock plan, and whether its PCIe REFCLK uses spread spectrum.
 - The 2 ns switch-node edge in the amplitude example and the 61 dB coupling it implies.
