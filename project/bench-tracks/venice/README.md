@@ -70,7 +70,6 @@ This uses the same six columns as the screen's finalist table. Each cell gives i
 - [firmware #52](https://github.com/ghostnet-labs/firmware/pull/52) on `bench/venice`:
   - GW82xx-2x added to `SUPPORTED_DEVICES`;
   - 8MP GW72xx/GW73xx and GW7902 LAN/WAN split fixed;
-  - gpsd init takes several devices;
   - openmanet feed pin moved;
   - `pps-tools` added.
-- [packages #21](https://github.com/ghostnet-labs/packages/pull/21): bsp-venice feeds `/dev/pps0` to gpsd, ntpd prefers PPS, and the same board.d compatibles are fixed.
+- [packages #21](https://github.com/ghostnet-labs/packages/pull/21): bsp-venice feeds `/dev/pps0` to gpsd, ntpd prefers PPS, the same board.d compatibles are fixed, and the feed's gpsd builds in the package CI.
