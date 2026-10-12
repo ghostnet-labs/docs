@@ -96,7 +96,7 @@ The MAX-M10S tracks GPS L1 at 1575.42 MHz and, by default, Galileo E1 and BeiDou
 
 | Mechanism | Frequencies | Risk | Mitigation in the design | What to check |
 |---|---|---|---|---|
-| HaLow fundamental blocking | 902 to 928 MHz at up to +28.5 dBm | High | GNSS in the far corner, about 116 mm from the HaLow card; external antennas | D-020 estimate: about 21 dB isolation is clean to about 15 dBm, so +28.5 dBm needs about 35 dB (estimate). Budget in [v1-rf-coexistence.md](v1-rf-coexistence.md) §2.2: with a filtered active antenna and the external SAW, about 20 dB of HaLow-to-GNSS isolation leaves 21.5 dB of margin; without the SAW it needs about 38.5 dB. Measure isolation (C2) and C/N0. |
+| HaLow fundamental blocking | 902 to 928 MHz at up to +28.5 dBm | High | GNSS in the far corner, about 116 mm from the HaLow card; external antennas | D-020 estimate: about 17.3 dB of free-space isolation at 190 mm is clean to about 11 dBm, so +28.5 dBm needs about 34.5 dB (estimate). Budget in [v1-rf-coexistence.md](v1-rf-coexistence.md) §2.2: with a filtered active antenna and the external SAW, about 20 dB of HaLow-to-GNSS isolation leaves 21.5 dB of margin; without the SAW it needs about 38.5 dB. Measure isolation (C2) and C/N0. |
 | HaLow harmonics | 2nd 1804 to 1856 MHz, 3rd 2706 to 2784 MHz | Medium | Module filtering; 2nd is about 230 MHz above L1 | Blocking only, not in band. Check with HaLow at max power. |
 | Wi-Fi blocking | 2.4, 5, 6 GHz at up to 23 dBm (11b, AsiaRF) | Medium | External antennas; 2.4 GHz is in the 0 dBm immunity range | C/N0 per band at max power. |
 | Wi-Fi card near-field noise | Broadband digital and PA noise | High | None yet; card is 2.5 mm edge to edge from GNSS | Near-field probe scan; consider a shield fence or moving GNSS. |
