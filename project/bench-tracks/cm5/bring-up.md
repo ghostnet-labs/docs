@@ -2,7 +2,7 @@
 
 Do these steps in order. Each step names what it proves and its evidence level once done. Record every result, and any reading that disagrees with the docs, in [GHO-28](https://linear.app/ghostnet-labs/issue/GHO-28).
 
-The image is the CI-built `ekh-bcm2712` factory image (device `bcm2712_mm8108-usb`) from [ghostnet-labs/firmware](https://github.com/ghostnet-labs/firmware) 24.10. It needs [firmware#53](https://github.com/ghostnet-labs/firmware/pull/53) (dwc2 host, INA228 driver, gpsd fix) and the feeds pin bump that brings in [packages#22](https://github.com/ghostnet-labs/packages/pull/22).
+The image is the CI-built `ekh-bcm2712` factory image (device `bcm2712_mm8108-usb`) from [ghostnet-labs/firmware](https://github.com/ghostnet-labs/firmware) 24.10. It needs [firmware#53](https://github.com/ghostnet-labs/firmware/pull/53) (dwc2 host, INA228 driver) including its feeds pin bump, which brings in [packages#22](https://github.com/ghostnet-labs/packages/pull/22) and the feed's gpsd init fix.
 
 ## 1. Inspect (no power)
 
