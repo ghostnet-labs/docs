@@ -45,9 +45,10 @@ class BuildStateTest(unittest.TestCase):
         self.assertIn("Offline runners: studio-build-2", [a["text"] for a in st["alerts"]])
 
     def test_dev_mac_appears_once_its_runner_exists(self):
-        raw = {"runners": [runner(1, "macbook-dev-1")]}
+        raw = {"runners": [runner(1, "macbook-pro-build-1")]}
         st = rs.build_state(raw, self.cfg, NOW)
-        self.assertIn("Mac (dev)", [m["name"] for m in st["machines"]])
+        pro = next(m for m in st["machines"] if m["name"] == "MacBook Pro")
+        self.assertEqual(pro["runners"][0]["name"], "macbook-pro-build-1")
         self.assertNotIn("R620", [m["name"] for m in st["machines"]])
 
     def test_hosted_stall_and_queue_alerts(self):
@@ -220,6 +221,79 @@ class PollerTest(unittest.TestCase):
             poller.fetch(lambda r: published.append(r))
         self.assertEqual(published, [])
         self.assertFalse(any(c.endswith("/workflows") for c in gh.calls[before:]))
+
+
+class PushTest(unittest.TestCase):
+    def setUp(self):
+        self.cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        self.cfg["machines"][0]["agent"] = ""
+        self.poller = rs.Poller(self.cfg, None, demo=True)
+        self.poller.poll_once()
+        self.handle = rs.push_receiver(self.poller)
+
+    def post(self, data, key=None):
+        headers = {"X-Push-Key": key} if key else {}
+        return self.handle("/api/push", headers, json.dumps(data).encode())
+
+    def test_push_shows_stats_and_sanitizes(self):
+        from unittest import mock
+        stats = {"cores": 12, "load": [1.0, 2.0, 3.0, 4.0], "evil": "<script>",
+                 "memory": {"total": 100, "used": 50, "x": 1},
+                 "disks": [{"path": "/", "total": 10, "used": 5, "free": 5, "junk": 1}],
+                 "vms": [{"name": "gh-build", "status": "Running", "cpus": "6"}]}
+        with mock.patch.object(rs, "read_push_key", return_value="k"):
+            self.assertEqual(self.post({"name": "MacBook Pro", "stats": stats}, "k"), (200, "ok"))
+        pro = next(m for m in self.poller.snapshot()["machines"] if m["name"] == "MacBook Pro")
+        self.assertEqual(pro["stats"]["memory"], {"total": 100, "used": 50, "compressed": None})
+        self.assertEqual(pro["stats"]["load"], [1.0, 2.0, 3.0])
+        self.assertNotIn("evil", pro["stats"])
+        self.assertEqual(pro["stats"]["disks"][0], {"path": "/", "total": 10, "used": 5, "free": 5})
+        self.assertIsNone(pro["stats"]["vms"][0]["cpus"])
+        self.assertEqual(self.poller.fetch_agents([])["MacBook Pro"]["cores"], 12)
+
+    def test_push_rejections(self):
+        from unittest import mock
+        with mock.patch.object(rs, "read_push_key", return_value=None):
+            code, text = self.post({"name": "MacBook Pro", "stats": {}}, "anything")
+            self.assertEqual(code, 403)
+            self.assertIn("push disabled", text)
+        with mock.patch.object(rs, "read_push_key", return_value="sekrit"):
+            self.assertEqual(self.post({"name": "MacBook Pro", "stats": {}})[0], 403)
+            self.assertEqual(self.post({"name": "MacBook Pro", "stats": {}}, "nope")[0], 403)
+            self.assertEqual(self.post({"name": "MacBook Pro", "stats": {}}, "sekrit")[0], 200)
+            self.assertEqual(self.post({"name": "Mac Studio", "stats": {}}, "sekrit")[0], 403)
+            self.assertEqual(self.handle("/api/push", {"X-Push-Key": "sekrit"}, b"{")[0], 400)
+            self.assertEqual(self.post({"name": "MacBook Pro"}, "sekrit")[0], 400)
+            self.assertEqual(self.handle("/other", {}, b"{}")[0], 404)
+
+    def test_missing_and_stale_push(self):
+        from unittest import mock
+        self.assertIn("no stats pushed yet", self.poller.fetch_agents([])["MacBook Pro"]["error"])
+        self.poller.pushed["MacBook Pro"] = ({"cores": 1}, 0.0)
+        self.assertIn("no stats pushed for", self.poller.fetch_agents([])["MacBook Pro"]["error"])
+        st = rs.build_state({"machine_stats": self.poller.fetch_agents([])}, self.cfg, NOW)
+        self.assertTrue(any("MacBook Pro stats missing" in a["text"] for a in st["alerts"]))
+
+    def test_push_endpoint_over_http_and_size_limit(self):
+        srv = rs.ThreadingHTTPServer(("127.0.0.1", 0),
+                                     rs.make_handler(lambda p: (None, ""), self.handle))
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        self.addCleanup(t.join)
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        url = f"http://127.0.0.1:{srv.server_port}/api/push"
+        from unittest import mock
+        with mock.patch.object(rs, "read_push_key", return_value="k"):
+            body = json.dumps({"name": "MacBook Pro", "stats": {"cores": 2}}).encode()
+            req = urllib.request.Request(url, data=body, method="POST", headers={"X-Push-Key": "k"})
+            with opener.open(req) as r:
+                self.assertEqual(r.read(), b"ok")
+            big = b"x" * (rs.PUSH_MAX_BYTES + 1)
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                opener.open(urllib.request.Request(url, data=big, method="POST"))
+            self.assertEqual(ctx.exception.code, 413)
 
 
 class ParserTest(unittest.TestCase):

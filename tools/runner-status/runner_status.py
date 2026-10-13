@@ -39,12 +39,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 API = "https://api.github.com"
 DEFAULT_ORG = "ghostnet-labs"
 TOKEN_FILE = os.path.expanduser("~/.config/runner-status/token")
+PUSH_KEY_FILE = os.path.expanduser("~/.config/runner-status/push-key")
+PUSH_MAX_BYTES = 64 * 1024
+PUSH_STALE_SECONDS = 180  # a pushing Mac counts as silent after this long
 CONFIG_FILE = os.path.expanduser("~/.config/runner-status/config.json")
 
 # Machines shown on the page. A runner belongs to the first machine whose
 # pattern matches its name; anything unmatched is listed under "Other runners"
-# so nothing is hidden. "agent" is "local" (stats read in-process) or a URL of
-# an agent started with `runner_status.py agent`.
+# so nothing is hidden. "agent" is "local" (stats read in-process), "push"
+# (that Mac runs `runner_status.py push` and sends its stats here, so it needs
+# no listener of its own), or a URL of an agent started with
+# `runner_status.py agent`.
 DEFAULT_CONFIG = {
     "org": DEFAULT_ORG,
     "poll_seconds": 60,
@@ -54,7 +59,7 @@ DEFAULT_CONFIG = {
     "machines": [
         {"name": "Mac Studio", "agent": "local",
          "runner_pattern": r"(?i)studio|gh-ubuntu|gh-build"},
-        {"name": "Mac (dev)", "agent": "",
+        {"name": "MacBook Pro", "agent": "push",
          "runner_pattern": r"(?i)macbook|mac-dev|\bdev\b"},
         {"name": "R620", "agent": "", "runner_pattern": r"(?i)r620"},
     ],
@@ -119,6 +124,45 @@ def read_token() -> tuple[str | None, str]:
     if os.environ.get("GITHUB_TOKEN", "").strip():
         return os.environ["GITHUB_TOKEN"].strip(), "GITHUB_TOKEN"
     return None, f"{TOKEN_FILE} (missing)"
+
+
+def read_push_key() -> str | None:
+    """Shared key for pushed stats. The dashboard refuses pushes without it."""
+    if os.path.exists(PUSH_KEY_FILE):
+        with open(PUSH_KEY_FILE, encoding="utf-8") as fh:
+            return fh.read().strip() or None
+    return None
+
+
+def _num(value) -> float | None:
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _text(value, limit: int = 128) -> str | None:
+    return str(value)[:limit] if isinstance(value, (str, int, float)) else None
+
+
+def sanitize_stats(data: dict) -> dict:
+    """Keep only the known stats fields, typed and size-bounded, from a push."""
+    mem = data.get("memory") if isinstance(data.get("memory"), dict) else {}
+    load = data.get("load") if isinstance(data.get("load"), list) else None
+    out = {
+        "host": _text(data.get("host")), "os": _text(data.get("os")),
+        "cores": _num(data.get("cores")), "collected_at": _text(data.get("collected_at")),
+        "uptime_s": _num(data.get("uptime_s")),
+        "runner_processes": _num(data.get("runner_processes")),
+        "load": [_num(x) or 0.0 for x in load[:3]] if load else None,
+        "memory": {k: _num(mem.get(k)) for k in ("total", "used", "compressed")},
+        "disks": [{"path": _text(d.get("path")), **{k: _num(d.get(k)) or 0
+                                                     for k in ("total", "used", "free")}}
+                  for d in (data.get("disks") or [])[:8] if isinstance(d, dict)],
+        "vms": None,
+    }
+    if isinstance(data.get("vms"), list):
+        out["vms"] = [{"name": _text(v.get("name")), "status": _text(v.get("status")),
+                       **{k: _num(v.get(k)) for k in ("cpus", "memory", "disk")}}
+                      for v in data["vms"][:16] if isinstance(v, dict)]
+    return out
 
 
 def token_kind(token: str) -> str:
@@ -313,6 +357,8 @@ class Poller:
         self.slow: dict = {}
         self.slow_at = 0.0
         self.last: dict = {}
+        self.pushed: dict = {}  # name -> (stats, received unix time); guarded by mu
+        self.last_raw: dict | None = None  # guarded by mu
 
     def snapshot(self) -> dict:
         with self.mu:
@@ -329,6 +375,19 @@ class Poller:
         state = build_state(raw, self.cfg, utcnow())
         with self.mu:
             self.state = state
+            self.last_raw = raw
+
+    def accept_push(self, name: str, stats: dict) -> None:
+        """Store stats pushed by a Mac and show them right away."""
+        with self.mu:
+            self.pushed[name] = (stats, time.time())
+            raw = dict(self.last_raw) if self.last_raw else None
+        if raw is not None:
+            raw["machine_stats"] = {**raw.get("machine_stats", {}), name: stats}
+            self.publish(raw)
+
+    def push_names(self) -> set[str]:
+        return {m["name"] for m in self.cfg["machines"] if m.get("agent") == "push"}
 
     def fetch(self, publish=lambda raw: None) -> dict:
         org = self.cfg["org"]
@@ -462,6 +521,17 @@ class Poller:
             if agent == "local":
                 stats[m["name"]] = collect_stats(self.cfg["disk_paths"])
                 continue
+            if agent == "push":
+                with self.mu:
+                    got = self.pushed.get(m["name"])
+                if got is None:
+                    stats[m["name"]] = {"error": "no stats pushed yet (runner_status.py push "
+                                                 "not running on that Mac?)"}
+                elif time.time() - got[1] > PUSH_STALE_SECONDS:
+                    stats[m["name"]] = {"error": f"no stats pushed for {int(time.time() - got[1])}s"}
+                else:
+                    stats[m["name"]] = got[0]
+                continue
             try:
                 with urllib.request.urlopen(agent.rstrip("/") + "/stats", timeout=5) as resp:
                     stats[m["name"]] = json.loads(resp.read().decode())
@@ -537,7 +607,7 @@ def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
     for m in shown:
         st = m.get("stats") or {}
         if st.get("error"):
-            alerts.append({"level": "warn", "text": f"{m['name']} agent unreachable: {st['error']}"})
+            alerts.append({"level": "warn", "text": f"{m['name']} stats missing: {st['error']}"})
         for d in st.get("disks", []) or []:
             if d["total"] and d["free"] / d["total"] < 0.10:
                 alerts.append({"level": "warn", "text":
@@ -603,7 +673,7 @@ function machine(m){
   const c=m.counts,st=m.stats||{};let h=`<div class="card"><h2>${esc(m.name)}</h2><div class="pills">
   <span class="pill idle">${c.idle} idle</span><span class="pill busy">${c.busy} busy</span>
   <span class="pill offline">${c.offline} offline</span></div>`;
-  if(st.error)h+=`<p class="offline">Agent unreachable</p>`;
+  if(st.error)h+=`<p class="offline">Stats missing: ${esc(st.error)}</p>`;
   if(st.memory&&st.memory.total)h+=`<div class="stat"><span>RAM</span>${bar(st.memory.used,st.memory.total)}<span>${bytes(st.memory.used)} / ${bytes(st.memory.total)}</span></div>`;
   if(st.load&&st.cores)h+=`<div class="stat"><span>CPU load</span>${bar(st.load[0],st.cores)}<span>${st.load[0].toFixed(1)} / ${st.cores} cores</span></div>`;
   for(const d of st.disks||[])h+=`<div class="stat"><span>Disk ${esc(d.path)}</span>${bar(d.used,d.total)}<span>${bytes(d.free)} free</span></div>`;
@@ -630,8 +700,27 @@ tick();setInterval(tick,15000);
 """
 
 
-def make_handler(get_body):
+def make_handler(get_body, post_body=None):
     class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802 (stdlib name)
+            if post_body is None:
+                self.send_error(404)
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                length = -1
+            if length < 0 or length > PUSH_MAX_BYTES:
+                self.send_error(413)
+                return
+            code, text = post_body(self.path.split("?")[0], self.headers, self.rfile.read(length))
+            data = text.encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
         def do_GET(self):  # noqa: N802 (stdlib name)
             path = self.path.split("?")[0]
             body, ctype = get_body(path)
@@ -669,6 +758,65 @@ class Notifier:
         self.seen = current  # bounded: only alerts that are active right now
 
 
+def push_receiver(poller: "Poller"):
+    """POST /api/push handler: accepts stats only with the shared push key,
+    only for machines configured as "push", and only known fields."""
+    import hmac
+
+    def handle(path: str, headers, body: bytes) -> tuple[int, str]:
+        if path != "/api/push":
+            return 404, "not found"
+        key = read_push_key()
+        if not key:  # fail closed: no key on the dashboard means pushes are off
+            return 403, f"push disabled: no push key in {PUSH_KEY_FILE} on the dashboard"
+        if not hmac.compare_digest(headers.get("X-Push-Key", "").encode(), key.encode()):
+            return 403, "wrong or missing push key"
+        try:
+            data = json.loads(body.decode())
+        except (UnicodeDecodeError, ValueError):
+            return 400, "body must be JSON"
+        name = data.get("name") if isinstance(data, dict) else None
+        if name not in poller.push_names():
+            return 403, f"machine {name!r} is not configured with \"agent\": \"push\""
+        if not isinstance(data.get("stats"), dict):
+            return 400, "missing stats"
+        poller.accept_push(name, sanitize_stats(data["stats"]))
+        return 200, "ok"
+
+    return handle
+
+
+def push(args) -> None:
+    """Send this Mac's stats to the dashboard every --interval seconds.
+    Outbound only: nothing listens on this machine."""
+    cfg = load_config(args.config)
+    url = args.to.rstrip("/") + "/api/push"
+    stop = threading.Event()
+    print(f"Pushing stats as {args.name!r} to {url} every {args.interval}s", flush=True)
+    while not stop.is_set():
+        payload = json.dumps({"name": args.name,
+                              "stats": collect_stats(cfg["disk_paths"])}).encode()
+        headers = {"Content-Type": "application/json"}
+        key = read_push_key()
+        if key:
+            headers["X-Push-Key"] = key
+        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                resp.read()
+        except urllib.error.HTTPError as exc:
+            print(f"push rejected: {exc.code} {exc.read().decode(errors='replace')}", flush=True)
+        except (urllib.error.URLError, OSError) as exc:
+            print(f"push failed: cannot reach the Studio page at {url} ({exc}). The page "
+                  "must listen on the network (serve --bind 0.0.0.0, the default), not "
+                  "only on 127.0.0.1, and the Studio must be awake and on the same LAN.",
+                  flush=True)
+        try:
+            stop.wait(args.interval)
+        except KeyboardInterrupt:
+            break
+
+
 def serve(args) -> None:
     cfg = load_config(args.config)
     token, source = (None, "") if args.demo else read_token()
@@ -694,7 +842,8 @@ def serve(args) -> None:
             return json.dumps(poller.snapshot()), "application/json"
         return None, ""
 
-    srv = ThreadingHTTPServer((args.bind, args.port), make_handler(body))
+    srv = ThreadingHTTPServer((args.bind, args.port),
+                              make_handler(body, push_receiver(poller)))
     print(f"Runner status page on http://{args.bind}:{args.port}/", flush=True)
     try:
         srv.serve_forever()
@@ -767,7 +916,8 @@ def demo_raw() -> dict:
     runners = [runner(i, f"studio-mac-{i}", "online", i < 3, mac) for i in range(1, 6)]
     runners += [runner(10 + i, f"gh-ubuntu-{i}", "online", i == 1, lin) for i in range(1, 6)]
     runners += [runner(20, "studio-build-1", "online", True, bld),
-                runner(21, "studio-build-2", "offline", False, bld)]
+                runner(21, "studio-build-2", "offline", False, bld),
+                runner(30, "macbook-pro-build-1", "online", False, bld)]
     jobs = [
         {"repo": "firmware", "workflow": "Build firmware (Mac pilot)", "name": "build (bcm27xx)",
          "status": "in_progress", "labels": bld, "runner_name": "studio-build-1",
@@ -792,7 +942,14 @@ def demo_raw() -> dict:
         "vms": [{"name": "gh-ubuntu", "status": "Running", "cpus": 6, "memory": 6 * gib, "disk": 100 * gib},
                 {"name": "gh-build", "status": "Running", "cpus": 6, "memory": 9 * gib, "disk": 60 * gib},
                 {"name": "gh-build-2", "status": "Stopped", "cpus": 6, "memory": 9 * gib, "disk": 60 * gib}],
-        "runner_processes": 12}}
+        "runner_processes": 12},
+        "MacBook Pro": {
+            "cores": 12, "load": [1.2, 1.5, 1.4],
+            "memory": {"total": 36 * gib, "used": 19.0 * gib, "compressed": 1 * gib},
+            "disks": [{"path": "/", "total": 994 * gib, "used": 610 * gib, "free": 384 * gib}],
+            "vms": [{"name": "gh-build", "status": "Running", "cpus": 6, "memory": 9 * gib,
+                     "disk": 60 * gib}],
+            "runner_processes": 1}}
     return {"runners": runners, "jobs": jobs, "machine_stats": stats, "errors": [],
             "groups": {r["id"]: "Default" for r in runners}, "disabled_workflows": [],
             "billing": None, "rate_remaining": 4710}
@@ -811,13 +968,18 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("--port", type=int, default=8091)
     a.add_argument("--bind", default="0.0.0.0")
     a.add_argument("--config")
+    pu = sub.add_parser("push", help="send this Mac's stats to the dashboard")
+    pu.add_argument("--to", required=True, help="dashboard URL, e.g. http://studio.local:8090")
+    pu.add_argument("--name", default="MacBook Pro", help="machine name in the dashboard config")
+    pu.add_argument("--interval", type=int, default=30)
+    pu.add_argument("--config")
     lp = sub.add_parser("launchd", help="print a LaunchAgent plist")
-    lp.add_argument("mode", choices=["serve", "agent"])
+    lp.add_argument("mode", choices=["serve", "agent", "push"])
     args, extra = p.parse_known_args(argv)
     if extra and args.cmd != "launchd":
         p.error(f"unrecognized arguments: {' '.join(extra)}")
     args.extra = extra  # launchd passes these through, e.g. --notify
-    {"serve": serve, "agent": agent, "launchd": launchd}[args.cmd](args)
+    {"serve": serve, "agent": agent, "push": push, "launchd": launchd}[args.cmd](args)
 
 
 if __name__ == "__main__":
