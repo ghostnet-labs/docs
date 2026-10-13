@@ -103,10 +103,25 @@ Log: `~/Library/Logs/runner-status-push.log`. "push failed: cannot reach the
 Studio page" means the prerequisite above is not met or the Studio is asleep;
 the MacBook Pro card on the page then says "stats missing".
 
-Optional shared key, so nothing else on the LAN can post stats: put the same
-random string in `~/.config/runner-status/push-key` on both Macs
-(`openssl rand -hex 24`). Once the Studio has the file, pushes without the
-matching key are refused.
+**Push key (required).** The Studio refuses pushed stats unless they carry a
+shared key, so nothing else on the LAN can post fake numbers. Make it on the
+Studio and copy it to the clipboard:
+
+```sh
+mkdir -p ~/.config/runner-status
+openssl rand -hex 24 | tee ~/.config/runner-status/push-key | pbcopy
+chmod 600 ~/.config/runner-status/push-key
+```
+
+Then on the Pro (Universal Clipboard carries it across, or paste it by hand):
+
+```sh
+mkdir -p ~/.config/runner-status
+pbpaste > ~/.config/runner-status/push-key
+chmod 600 ~/.config/runner-status/push-key
+```
+
+Both sides re-read the file, so no restart is needed after it changes.
 
 To give a machine a different name or runner pattern, create
 `~/.config/runner-status/config.json` on the Studio:

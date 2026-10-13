@@ -127,8 +127,7 @@ def read_token() -> tuple[str | None, str]:
 
 
 def read_push_key() -> str | None:
-    """Optional shared key for pushed stats; when the dashboard has one,
-    pushes must carry the same key."""
+    """Shared key for pushed stats. The dashboard refuses pushes without it."""
     if os.path.exists(PUSH_KEY_FILE):
         with open(PUSH_KEY_FILE, encoding="utf-8") as fh:
             return fh.read().strip() or None
@@ -760,15 +759,17 @@ class Notifier:
 
 
 def push_receiver(poller: "Poller"):
-    """POST /api/push handler: accepts stats only for machines configured as
-    "push", only with the push key when one is set, only known fields."""
+    """POST /api/push handler: accepts stats only with the shared push key,
+    only for machines configured as "push", and only known fields."""
     import hmac
 
     def handle(path: str, headers, body: bytes) -> tuple[int, str]:
         if path != "/api/push":
             return 404, "not found"
         key = read_push_key()
-        if key and not hmac.compare_digest(headers.get("X-Push-Key", ""), key):
+        if not key:  # fail closed: no key on the dashboard means pushes are off
+            return 403, f"push disabled: no push key in {PUSH_KEY_FILE} on the dashboard"
+        if not hmac.compare_digest(headers.get("X-Push-Key", "").encode(), key.encode()):
             return 403, "wrong or missing push key"
         try:
             data = json.loads(body.decode())

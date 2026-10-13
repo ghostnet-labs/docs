@@ -241,8 +241,8 @@ class PushTest(unittest.TestCase):
                  "memory": {"total": 100, "used": 50, "x": 1},
                  "disks": [{"path": "/", "total": 10, "used": 5, "free": 5, "junk": 1}],
                  "vms": [{"name": "gh-build", "status": "Running", "cpus": "6"}]}
-        with mock.patch.object(rs, "read_push_key", return_value=None):
-            self.assertEqual(self.post({"name": "MacBook Pro", "stats": stats}), (200, "ok"))
+        with mock.patch.object(rs, "read_push_key", return_value="k"):
+            self.assertEqual(self.post({"name": "MacBook Pro", "stats": stats}, "k"), (200, "ok"))
         pro = next(m for m in self.poller.snapshot()["machines"] if m["name"] == "MacBook Pro")
         self.assertEqual(pro["stats"]["memory"], {"total": 100, "used": 50, "compressed": None})
         self.assertEqual(pro["stats"]["load"], [1.0, 2.0, 3.0])
@@ -253,6 +253,10 @@ class PushTest(unittest.TestCase):
 
     def test_push_rejections(self):
         from unittest import mock
+        with mock.patch.object(rs, "read_push_key", return_value=None):
+            code, text = self.post({"name": "MacBook Pro", "stats": {}}, "anything")
+            self.assertEqual(code, 403)
+            self.assertIn("push disabled", text)
         with mock.patch.object(rs, "read_push_key", return_value="sekrit"):
             self.assertEqual(self.post({"name": "MacBook Pro", "stats": {}})[0], 403)
             self.assertEqual(self.post({"name": "MacBook Pro", "stats": {}}, "nope")[0], 403)
@@ -281,9 +285,10 @@ class PushTest(unittest.TestCase):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         url = f"http://127.0.0.1:{srv.server_port}/api/push"
         from unittest import mock
-        with mock.patch.object(rs, "read_push_key", return_value=None):
+        with mock.patch.object(rs, "read_push_key", return_value="k"):
             body = json.dumps({"name": "MacBook Pro", "stats": {"cores": 2}}).encode()
-            with opener.open(urllib.request.Request(url, data=body, method="POST")) as r:
+            req = urllib.request.Request(url, data=body, method="POST", headers={"X-Push-Key": "k"})
+            with opener.open(req) as r:
                 self.assertEqual(r.read(), b"ok")
             big = b"x" * (rs.PUSH_MAX_BYTES + 1)
             with self.assertRaises(urllib.error.HTTPError) as ctx:
