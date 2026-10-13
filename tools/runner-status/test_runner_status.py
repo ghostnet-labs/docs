@@ -219,8 +219,9 @@ class FakeGitHub:
         raise rs.GitHubError("not available")
 
     def usage(self):
-        return {"remaining": self.rate_remaining, "limit": 5000, "reset": None,
-                "used_by_page_last_hour": len(self.calls), "free_304s": 0}
+        with self.mu:  # like GitHub.usage(), which holds its non-reentrant lock
+            return {"remaining": self.rate_remaining, "limit": 5000, "reset": None,
+                    "used_by_page_last_hour": len(self.calls), "free_304s": 0}
 
 
 class PollerTest(unittest.TestCase):
@@ -255,6 +256,22 @@ class PollerTest(unittest.TestCase):
             poller.fetch(lambda r: published.append(r))
         self.assertEqual(published, [])
         self.assertFalse(any(c.endswith("/workflows") for c in gh.calls[before:]))
+
+
+    def test_sweep_finishes_while_usage_takes_the_client_lock(self):
+        from unittest import mock
+        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        cfg["org"] = "o"
+        cfg["machines"][0]["agent"] = ""
+        gh = FakeGitHub()
+        poller = rs.Poller(cfg, gh)
+        out = []
+        with mock.patch.object(rs, "read_token", return_value=(gh.token, "test")):
+            t = threading.Thread(target=lambda: out.append(poller.fetch()), daemon=True)
+            t.start()
+            t.join(10)
+        self.assertFalse(t.is_alive(), "fetch() deadlocked on the GitHub client lock")
+        self.assertEqual(out[0]["rate"]["remaining"], 4999)
 
 
 class PushTest(unittest.TestCase):

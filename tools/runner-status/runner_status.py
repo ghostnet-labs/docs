@@ -491,8 +491,7 @@ class Poller:
             self.slow.update(self.fetch_workflows_billing(gh, org, raw.get("repos", [])))
             self.slow_at = time.time()
             raw.update(self.slow)
-        with gh.mu:
-            raw["rate"] = gh.usage()
+        raw["rate"] = gh.usage()  # usage() takes gh.mu itself
         return raw
 
     @staticmethod
