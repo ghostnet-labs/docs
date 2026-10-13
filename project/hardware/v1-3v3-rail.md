@@ -66,7 +66,7 @@ The TPS22975 carries up to 6 A and dissipates about 0.15 W at 3.03 A (0.2 W hot)
 
 ## Losses and heat
 
-At 4.5 A and about 88 % efficiency from 12 V the buck loses about 2.0 W, about 0.3 W of it in the inductor. With the LM76005 WQFN at 29.6 C/W (JEDEC, [datasheet](https://www.ti.com/lit/ds/symlink/lm76005.pdf)) the die rises about 50 C over its surroundings; on a well poured board it will be less. At a 60 C internal enclosure temperature that is about 110 C, under the 125 C limit. This is the peak case; at the typical 3 A the loss is about 1.2 W. The card itself (8 W average) is the larger heat source and belongs to the thermal plan ([GHO-12](https://linear.app/ghostnet-labs/issue/GHO-12)).
+At 4.5 A and about 88 % efficiency from 12 V the buck loses about 2.0 W, about 0.3 W of it in the inductor. With the LM76005 WQFN at 29.6 C/W (JEDEC, [datasheet](https://www.ti.com/lit/ds/symlink/lm76005.pdf)) the die rises about 50 C over its surroundings; on a well poured board it will be less. At the 77 to 87 C internal air of [v1-thermal-update-tray.md](v1-thermal-update-tray.md) (D-028 hot endpoint, 18.5 W) that is about 120 to 131 C at the 1.47 W typical-case loss, so the die margin is marginal on the JEDEC figure and the pour has to carry it. This is the peak case; at the typical 3 A the loss is about 1.2 W. The card itself (8 W average, 10 W maximum) is the larger heat source and belongs to the thermal plan ([GHO-12](https://linear.app/ghostnet-labs/issue/GHO-12)).
 
 ## Input side
 
