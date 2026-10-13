@@ -85,6 +85,78 @@ class BuildStateTest(unittest.TestCase):
         self.assertTrue(st["machines"][0]["runners"])
 
 
+class TokenErrorTest(unittest.TestCase):
+    def test_explanations(self):
+        cases = [
+            (401, "Bad credentials", "/orgs/x/actions/runners", "token rejected"),
+            (403, "Resource not accessible by personal access token", "/orgs/x/actions/runners",
+             "Self-hosted runners: Read-only"),
+            (403, "Resource not accessible by personal access token", "/repos/x/y/actions/runs",
+             "Actions: Read-only"),
+            (403, "The 'ghostnet-labs' organization forbids access via a fine-grained personal "
+                  "access tokens if the token's lifetime is greater than 366 days.",
+             "/orgs/x/repos", "does not allow fine-grained"),
+            (403, "API rate limit exceeded", "/orgs/x/repos", "rate limit"),
+            (500, "boom", "/orgs/x/repos", "HTTP 500: boom"),
+        ]
+        for code, msg, path, want in cases:
+            with self.subTest(code=code, msg=msg):
+                self.assertIn(want, rs.explain_http_error(code, msg, path, "file", "kind"))
+
+    def test_token_kind_never_shows_token(self):
+        self.assertEqual(rs.token_kind("github_pat_abc"), "fine-grained personal token")
+        self.assertEqual(rs.token_kind("ghs_abc"), "GitHub Actions or app token (short-lived)")
+        self.assertNotIn("xyz", rs.token_kind("xyz"))
+
+    def test_token_file_beats_stray_github_token(self):
+        import tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "token")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("github_pat_file\n")
+            env = {"GITHUB_TOKEN": "ghs_runner"}
+            with mock.patch.object(rs, "TOKEN_FILE", path), mock.patch.dict(os.environ, env, clear=True):
+                self.assertEqual(rs.read_token(), ("github_pat_file", path))
+            with mock.patch.object(rs, "TOKEN_FILE", os.path.join(d, "none")), \
+                    mock.patch.dict(os.environ, {}, clear=True):
+                token, source = rs.read_token()
+                self.assertIsNone(token)
+                self.assertIn("missing", source)
+
+    def test_401_from_api_becomes_plain_error_and_alert(self):
+        from http.server import BaseHTTPRequestHandler
+
+        class H(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                body = b'{"message": "Bad credentials"}'
+                self.send_response(401)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+
+        srv = rs.ThreadingHTTPServer(("127.0.0.1", 0), H)
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        self.addCleanup(t.join)
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        gh = rs.GitHub("github_pat_x", "~/.config/runner-status/token")
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"}):
+            with self.assertRaises(rs.GitHubError) as ctx:
+                gh.get(f"http://127.0.0.1:{srv.server_port}/orgs/x/actions/runners")
+        self.assertIn("token rejected", str(ctx.exception))
+        self.assertIn("fine-grained personal token", str(ctx.exception))
+        st = rs.build_state({"errors": [f"Runners: {ctx.exception}"] * 2},
+                            json.loads(json.dumps(rs.DEFAULT_CONFIG)), NOW)
+        self.assertEqual(len(st["errors"]), 1)
+        self.assertEqual(st["alerts"][0]["level"], "crit")
+
+
 class ParserTest(unittest.TestCase):
     def test_vm_stat(self):
         text = ('Mach Virtual Memory Statistics: (page size of 16384 bytes)\n'
