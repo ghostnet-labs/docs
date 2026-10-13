@@ -75,6 +75,7 @@ ERROR_RETRY_SECONDS = 15  # retry sooner while GitHub can't be read at all (e.g.
 ETAG_CACHE_MAX = 500  # cached responses kept for conditional requests
 LOW_QUOTA_FRACTION = 0.2  # below this share of the hourly limit, poll slowly
 LOW_QUOTA_POLL_SECONDS = 300
+PULLS_RETRY_SECONDS = 600  # after a refused PR list, wait this long before asking again
 
 HOSTED_LABELS = re.compile(r"^(ubuntu|windows|macos)-", re.I)
 
@@ -331,6 +332,7 @@ class GitHub:
         self.etags: OrderedDict[str, tuple[str, object]] = OrderedDict()  # url -> (etag, body)
         self.billed: deque[float] = deque(maxlen=20000)  # times of calls that counted
         self.free = 0  # 304 answers since start
+        self.pulls_denied: dict[str, float] = {}  # repo -> time its PR list was refused
 
     def _note_rate(self, headers) -> None:
         with self.mu:
@@ -491,7 +493,7 @@ class Poller:
             self.slow.update(self.fetch_workflows_billing(gh, org, raw.get("repos", [])))
             self.slow_at = time.time()
             raw.update(self.slow)
-        raw["rate"] = gh.usage()  # usage() takes gh.mu itself
+        raw["rate"] = gh.usage()  # takes gh.mu itself; never call it holding gh.mu
         return raw
 
     @staticmethod
@@ -571,9 +573,15 @@ class Poller:
         def pulls_for(repo):
             # The runs list often leaves pull_requests empty, so match open PRs
             # by head repo and branch. ETag caching makes unchanged lists free.
+            with gh.mu:
+                denied_at = gh.pulls_denied.get(repo, 0)
+            if time.time() - denied_at < PULLS_RETRY_SECONDS:
+                return {}  # token lacks "Pull requests: Read"; don't pay for a 403 every poll
             try:
                 pulls = gh.get(f"/repos/{org}/{repo}/pulls", {"state": "open", "per_page": 100})
             except (urllib.error.URLError, OSError, ValueError):
+                with gh.mu:
+                    gh.pulls_denied[repo] = time.time()
                 return {}
             found: dict = {}
             for pr in pulls if isinstance(pulls, list) else []:
