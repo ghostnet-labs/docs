@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 470" width="860" height="470" font-family="Helvetica, Arial, sans-serif">
+  <title>Venice bench node topology</title>
+  <rect width="860" height="470" fill="#ffffff"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+
+  <!-- power chain -->
+  <rect x="20" y="40" width="130" height="62" fill="#fbf0d6" stroke="#9a6a00"/>
+  <text x="85" y="66" text-anchor="middle" font-size="14" font-weight="bold">3S pack</text>
+  <text x="85" y="86" text-anchor="middle" font-size="12">9.0 to 12.6 V</text>
+  <rect x="185" y="40" width="130" height="62" fill="#fbf0d6" stroke="#9a6a00"/>
+  <text x="250" y="66" text-anchor="middle" font-size="14" font-weight="bold">LM74700</text>
+  <text x="250" y="86" text-anchor="middle" font-size="12">ideal diode</text>
+  <rect x="350" y="40" width="130" height="62" fill="#fbf0d6" stroke="#9a6a00"/>
+  <text x="415" y="66" text-anchor="middle" font-size="14" font-weight="bold">INA228</text>
+  <text x="415" y="86" text-anchor="middle" font-size="12">15 mΩ, I2C to i2c3</text>
+  <line x1="150" y1="71" x2="183" y2="71" stroke="#444" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="315" y1="71" x2="348" y2="71" stroke="#444" stroke-width="2" marker-end="url(#a)"/>
+  <path d="M480,71 H560 V150" fill="none" stroke="#444" stroke-width="2" marker-end="url(#a)"/>
+  <text x="566" y="118" font-size="12">DC jack, 8 to 60 V</text>
+
+  <!-- board -->
+  <rect x="300" y="152" width="540" height="290" fill="#e3efe7" stroke="#2f6b4a" stroke-width="2"/>
+  <text x="318" y="176" font-size="15" font-weight="bold">GW7201-01 (i.MX8M Mini, 4 GB, 64 GB eMMC)</text>
+
+  <rect x="318" y="194" width="235" height="96" fill="#fff" stroke="#2f6b4a"/>
+  <text x="330" y="216" font-size="13" font-weight="bold">PCIe Gen2 switch</text>
+  <text x="330" y="236" font-size="12">socket A: AW7916-NPD (PCIe)</text>
+  <text x="330" y="254" font-size="12">J10: GW16151 + GW16167 (USB 2)</text>
+  <text x="330" y="272" font-size="12">LAN7430 = eth1 (LAN)</text>
+
+  <rect x="573" y="194" width="250" height="96" fill="#fff" stroke="#2f6b4a"/>
+  <text x="585" y="216" font-size="13" font-weight="bold">On-board u-blox GNSS</text>
+  <text x="585" y="236" font-size="12">NMEA: uart1 = /dev/ttymxc0</text>
+  <text x="585" y="254" font-size="12">PPS: GPIO1_15 = /dev/pps0</text>
+  <text x="585" y="272" font-size="12">MMCX, 3.3 V antenna bias</text>
+
+  <rect x="318" y="306" width="235" height="118" fill="#fff" stroke="#2f6b4a"/>
+  <text x="330" y="328" font-size="13" font-weight="bold">Other I/O</text>
+  <text x="330" y="348" font-size="12">eth0 FEC (WAN)</text>
+  <text x="330" y="366" font-size="12">console uart2 via GW16099</text>
+  <text x="330" y="384" font-size="12">GSC: vdd_vin, temperatures</text>
+  <text x="330" y="402" font-size="12">off-board I2C (i2c3): INA228</text>
+
+  <rect x="573" y="306" width="250" height="118" fill="#fff" stroke="#2f6b4a"/>
+  <text x="585" y="328" font-size="13" font-weight="bold">Software (gw_venice image)</text>
+  <text x="585" y="348" font-size="12">mt7915e + MT7916 firmware</text>
+  <text x="585" y="366" font-size="12">kmod-mm8108 (USB)</text>
+  <text x="585" y="384" font-size="12">gpsd: /dev/pps0 /dev/ttymxc0</text>
+  <text x="585" y="402" font-size="12">ntpd: PPS on SHM(0)</text>
+
+  <!-- antennas -->
+  <rect x="20" y="194" width="230" height="230" fill="#eceeed" stroke="#6b746f"/>
+  <text x="32" y="216" font-size="13" font-weight="bold">Antennas (300 mm bar)</text>
+  <text x="32" y="240" font-size="12">x = 0: HaLow whip (GW16167)</text>
+  <text x="32" y="262" font-size="12">x = 90, 150, 210 mm:</text>
+  <text x="32" y="280" font-size="12">  3 Wi-Fi dipoles (AW7916)</text>
+  <text x="32" y="302" font-size="12">x = 300: ANN-MB1 on plate</text>
+  <text x="32" y="324" font-size="12">  (SMA to MMCX cable)</text>
+  <text x="32" y="356" font-size="11" fill="#56635c">Layout and isolation figures:</text>
+  <text x="32" y="372" font-size="11" fill="#56635c">bench compute screen,</text>
+  <text x="32" y="388" font-size="11" fill="#56635c">"Antennas within one foot"</text>
+  <line x1="250" y1="250" x2="316" y2="250" stroke="#444" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <path d="M250,300 H290 V140 H700 V192" fill="none" stroke="#444" stroke-width="1.5" stroke-dasharray="5 4"/>
+</svg>

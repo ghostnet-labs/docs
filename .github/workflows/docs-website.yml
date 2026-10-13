@@ -6,7 +6,7 @@ permissions:
 jobs:
   website:
     name: Documentation website build
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.pull_request.head.repo.full_name == github.repository && fromJSON('["self-hosted", "Linux", "ARM64"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1

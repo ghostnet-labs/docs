@@ -152,7 +152,7 @@ Reference: [Linux mac80211 queue and driver behavior](https://cdn.kernel.org/doc
 | Timing | mosaic-X5 USB data plus direct SoC GPIO PPS | Same, with verified GPIO level/pin mapping | Same, PPS to a real SoC GPIO; M7 supervision is an optional software extension |
 | Audio | OpenVLM-compatible USB audio/PTT plus Kenwood-style speaker microphone | Same | Same |
 | Cooling | CM5 active cooler, radio heatsinks, chassis airflow | SoM heatsink/fan, radio airflow, SFP+ cooling | SoM heatsink/fan, radio airflow; do not assume stock passive heatsink is enough |
-| Software work | Closest to current CM5 firmware; new PCIe/radio/power/UI integration still required | OpenWrt board support is a useful starting point; Maer image and HaLow/voice/GPIO integration remain | Vendor BSP is a starting point; Maer/OpenWrt port, drivers, GPIO and optional M7 work remain |
+| Software work | Closest to current CM5 firmware; new PCIe/radio/power/UI integration still required | OpenWrt board support is a useful starting point; Maer image and HaLow/voice/GPIO integration remain | Our OpenWrt `imx` target already supports the i.MX8M Plus SoC (Gateworks Venice boards); a DART/Sonata device recipe and DTS, Maer image, HaLow/voice/GPIO integration and optional M7 work remain |
 | Biggest strength | A76 CPU and abundant RAM for services, diagnostics and software development | Native networking and cleaner multi-radio expansion | Vendor module/carrier ecosystem plus M7/NPU peripherals for future experiments |
 | Remaining tradeoff | Shared PCIe; USB Ethernet; more adapters | More expensive kit; older A72 application CPU; native radio-slot power is unproven | A53 application CPU, smaller stock RAM, shared PCIe, largest firmware-port burden |
 
@@ -261,7 +261,7 @@ Prices are USD, before shipping/tax unless noted. Listed observations are not re
 | CN9130 8 GB/64 GB ClearFog Pro kit, cooling and possible powered radio interposers | $1,350–1,650 | **$4,950–6,750** |
 | DART commercial starter kit, cooling, riser/switch/adapters and USB 2.5GbE | $650–850 | **$4,250–5,950** |
 
-DART's directly listed starter kit is $449, commercial 4 GB/16 GB, with advertised dispatch within four working days. Industrial/custom configurations are separate quotes. CN9130's roughly $1,350 kit allowance is not a bare-SoM price. CM5 prices have changed materially; the currently indexed official brief lists CM5116064 at $330, so the old launch price is not used. None of these estimates is a final cart.
+DART's directly listed starter kit is $449, commercial 4 GB/16 GB, with advertised dispatch within four working days. Industrial/custom configurations are separate quotes. CN9130's roughly $1,350 kit allowance is not a bare-SoM price. CM5 prices have changed materially; the official product brief (dated 2026-08-26, read 2026-10-12) lists CM5116064 at $375, so the old launch price is not used. None of these estimates is a final cart.
 
 Three unlike nodes can test interoperability and three-node routing, but cannot establish every platform's same-platform peak throughput. For that, temporarily swap a second compute/carrier into the same payload or build matching peer pairs; do not infer performance ceilings from a slower peer.
 
