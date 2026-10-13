@@ -17,6 +17,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
+          # Self-hosted runners keep a tool cache; without this "3.x" can
+          # resolve to an old cached Python (3.8 from another repo's job).
+          check-latest: true
       - name: GPIO allocation consistency
         run: python project/scripts/check_gpio_allocations.py
       - name: Agent instruction links
