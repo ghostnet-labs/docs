@@ -7,10 +7,12 @@ A small always-on page that shows, without anyone asking:
   with idle / busy / offline, labels and runner group;
 - every queued and running Actions job across the org's repos, oldest first,
   with its age, the runner labels it wants and the runner it got;
-- alerts: offline runners, jobs queued 20+ minutes, GitHub-hosted jobs stuck
-  (the usual sign of the Actions minutes or spending limit), disabled
-  workflows, low disk, stopped Lima VMs, and the minutes counter when the
-  token can read billing;
+- alerts: offline or flapping runners, stuck runs, runners held by a merged
+  PR, jobs queued 20+ minutes, GitHub-hosted jobs stuck (the usual sign of the
+  Actions minutes or spending limit), disabled workflows, low disk, swap,
+  sleep settings, growing VM disks, stopped runner services, leftover job
+  processes, runner version drift, and the minutes counter when the token can
+  read billing (full list under "Alerts");
 - each Mac's RAM, CPU load, disks (`/` and `/Volumes/NAS`) and Lima VMs
   (`gh-ubuntu`, `gh-build`, `gh-build-2` on the Studio).
 
@@ -152,6 +154,104 @@ A runner belongs to the first machine whose `runner_pattern` matches its
 name; unmatched runners show under "Other runners", so a wrong pattern never
 hides one. Other keys: `poll_seconds`, `queued_alert_minutes`,
 `hosted_stall_minutes`, `disk_paths`.
+
+## Alerts
+
+Every alert shows at the top of the page (and as a macOS banner with
+`--notify`). None of them costs extra GitHub calls except the PR check, which
+is one cached call per PR that a busy runner is working for (unchanged PRs
+answer "304" for free), and one call every 10 minutes for the newest runner
+release.
+
+| Alert | Fires when | Setting (config.json) |
+|---|---|---|
+| Offline runners | A runner is offline; red after it has been offline this long | `offline_crit_minutes` (30) |
+| Flapping runners | A runner went offline and back this many times in an hour | `flap_changes_per_hour` (4) |
+| Stuck run | A job has been running longer than this | `stuck_run_hours` (4) |
+| Runner held by a closed PR | A busy runner's job belongs to a PR that is already merged or closed (cancel the run) | always on |
+| Disk low | A watched disk has less than this share free | `disk_alert_free_pct` (10) |
+| Swapping / memory pressure | Swap in use above this many GiB, or macOS memory pressure high or critical | `swap_alert_gb` (4) |
+| Sleeps on power | A listed Mac would sleep on AC power (`pmset -c sleep` not 0) | `no_sleep_machines` |
+| VM disk image | A Lima VM's disk image on the Mac has filled past this share of its size (it only shrinks after `fstrim` in the VM, which the cleanup does) | `vm_disk_alert_pct` (85) |
+| Runner service not running | A `actions.runner.*` launchd service on the Mac has no process | always on |
+| Leftover job processes | A process from a runner `_work` dir outlived its job (re-parented to launchd) for over an hour | always on |
+| VM drift | `tools/ci-hosts/verify-vm.sh` (run hourly in each VM by the watchdog) reports a VM that no longer matches the committed setup, e.g. runc back in an OpenWrt build VM | `vm_roles` per machine |
+| Runner version behind | A runner dir under `runner_roots` logs an older version than the newest release, two days after that release | `runner_roots` (`["~"]`) |
+| Queued, hosted stall, disabled workflow, minutes, API quota | As before | `queued_alert_minutes`, `hosted_stall_minutes` |
+
+Machine checks run on the Macs themselves (`sysctl`, `pmset -g custom`,
+`launchctl list`, `ps`, `limactl list`, and a stat of each VM's disk image),
+all read-only. The Linux runners inside the VMs are covered by the GitHub
+side (offline, flapping, stuck, closed PR) and by the VM disk-image check.
+
+## Daily cleanup
+
+`runner_cleanup.py` finds old runner checkouts, temp files, runner logs and
+oversized logs on a runner host and inside its Lima VMs. It only reports by
+default; `--apply` removes. It never touches a runner that is running a job,
+the runner's own files, or anything outside the runner `_work` and `_diag`
+directories and the listed logs. See `python3 runner_cleanup.py --help`.
+
+```sh
+python3 tools/runner-status/runner_cleanup.py            # report only
+python3 tools/runner-status/runner_cleanup.py --apply    # clean
+```
+
+Install it as a daily LaunchAgent (04:30, low priority) after one dry run
+looks right:
+
+```sh
+python3 runner_cleanup.py --print-launchd \
+  > ~/Library/LaunchAgents/com.ghostnet.runner-cleanup.plist
+launchctl load ~/Library/LaunchAgents/com.ghostnet.runner-cleanup.plist
+```
+
+Log: `~/Library/Logs/runner-cleanup.log`.
+
+## Watchdog: why a runner is offline, and getting it back
+
+`runner_watchdog.py` runs every 2 minutes on each runner Mac. It reads this
+page's `/api/state` to see which of its runners GitHub reports offline (no
+token needed), works out why on the Mac, fixes what is safe to fix, and writes
+`~/.config/runner-status/watchdog.json`. The page shows that reason and the
+last recovery step under each offline runner and in the offline alert.
+
+| Cause | What it does |
+|---|---|
+| Listed in `maintenance.json` | Nothing; shown as "Draining for maintenance" (blue, not a fault) |
+| Lima VM stopped | `limactl start <vm>` (once for all its runners) |
+| Runner service stopped | `launchctl kickstart -k` (Mac) or `systemctl restart` (in the VM) |
+| Service runs but GitHub sees it offline | Restart the service |
+| VM cannot reach github.com | `limactl restart <vm>` |
+| Registration removed or credentials refused | Nothing; needs re-registering |
+| Disk nearly full (under 2 GB) | Nothing; run the cleanup |
+| The Mac cannot reach github.com | Nothing |
+| No service for that runner | Runs `--jit-command <name>` if given, else nothing |
+| The Mac itself is silent (asleep, off) | Shown by the page from missing stats |
+
+Restarts back off 2, 4 and 8 minutes and stop after 3 tries in an hour, so a
+runner that cannot come back is never restarted in a loop; the page then says
+auto-recovery gave up. `--dry-run` diagnoses without changing anything.
+
+Before taking runners down on purpose (for example the one-job runner
+conversion), list them in `~/.config/runner-status/maintenance.json`:
+
+```json
+{"entries": [{"runner": "^gh-ubuntu", "reason": "one-job runner conversion",
+              "until": "2026-10-13T12:00:00Z"}]}
+```
+
+Install on the Studio (the page runs there):
+
+```sh
+python3 runner_watchdog.py launchd --machine "Mac Studio" \
+  > ~/Library/LaunchAgents/com.ghostnet.runner-watchdog.plist
+launchctl load ~/Library/LaunchAgents/com.ghostnet.runner-watchdog.plist
+```
+
+On the MacBook Pro add `--page http://<studio-name>.local:8090` and
+`--machine "MacBook Pro"`; its report reaches the page with the pushed stats.
+Log: `~/Library/Logs/runner-watchdog.log`.
 
 ## Troubleshooting
 
