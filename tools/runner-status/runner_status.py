@@ -59,9 +59,13 @@ DEFAULT_CONFIG = {
     "disk_paths": ["/", "/Volumes/NAS"],
     "machines": [
         {"name": "Mac Studio", "agent": "local",
-         "runner_pattern": r"(?i)studio|gh-ubuntu|gh-build"},
+         "runner_pattern": r"(?i)studio|gh-ubuntu|gh-build",
+         # Lima VM name -> pattern for the runners that live inside it.
+         "vms": {"gh-ubuntu": r"(?i)^gh-ubuntu", "gh-build": r"(?i)^studio-build-1$",
+                 "gh-build-2": r"(?i)^studio-build-2$"}},
         {"name": "MacBook Pro", "agent": "push",
-         "runner_pattern": r"(?i)macbook|mac-dev|\bdev\b"},
+         "runner_pattern": r"(?i)macbook|mac-dev|\bdev\b",
+         "vms": {"gh-build": r"(?i)^macbook-pro-build"}},
         {"name": "R620", "agent": "", "runner_pattern": r"(?i)r620"},
     ],
 }
@@ -554,6 +558,8 @@ class Poller:
                     j["repo"] = repo
                     j["workflow"] = run.get("name")
                     j["branch"] = run.get("head_branch")
+                    j["prs"] = [pr["number"] for pr in run.get("pull_requests") or []
+                                if isinstance(pr, dict) and "number" in pr]
                     out.append(j)
             return out
 
@@ -602,33 +608,50 @@ def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
                  "stats": raw.get("machine_stats", {}).get(m["name"])}
                 for m in cfg["machines"]]
     other = {"name": "Other runners", "runners": [], "stats": None, "configured_agent": False}
-    for r in sorted(raw.get("runners", []), key=lambda r: r.get("name", "")):
-        status = "offline" if r.get("status") != "online" else ("busy" if r.get("busy") else "idle")
-        runner = {"name": r.get("name"), "status": status, "os": r.get("os"),
-                  "labels": [lbl["name"] for lbl in r.get("labels", [])],
-                  "group": groups.get(r.get("id"), "unknown")}
-        target = next((m for m in machines if m["pattern"].search(runner["name"] or "")), other)
-        target["runners"].append(runner)
-    shown = [m for m in machines if m["runners"] or m["stats"] or m["name"] == "Mac Studio"]
-    if other["runners"]:
-        shown.append(other)
-    for m in shown:
-        m.pop("pattern", None)
-        counts = {"idle": 0, "busy": 0, "offline": 0}
-        for r in m["runners"]:
-            counts[r["status"]] += 1
-        m["counts"] = counts
-
+    org = cfg["org"]
     jobs = []
     for j in raw.get("jobs", []):
         labels = j.get("labels", [])
         hosted = any(HOSTED_LABELS.match(lbl) for lbl in labels) and "self-hosted" not in labels
         since = j.get("started_at") if j.get("status") == "in_progress" else j.get("created_at")
+        prs = [{"number": n, "url": f"https://github.com/{org}/{j.get('repo')}/pull/{n}"}
+               for n in j.get("prs") or []]
         jobs.append({"repo": j.get("repo"), "workflow": j.get("workflow"), "name": j.get("name"),
                      "status": j.get("status"), "labels": labels, "hosted": hosted,
-                     "runner": j.get("runner_name"), "branch": j.get("branch"),
+                     "runner": j.get("runner_name"), "branch": j.get("branch"), "prs": prs,
                      "url": j.get("html_url"), "age_min": age_minutes(since, now)})
     jobs.sort(key=lambda j: (j["status"] != "queued", -(j["age_min"] or 0)))
+    # What each runner is working on, from the job list already fetched (no extra calls).
+    by_runner = {j["runner"]: j for j in jobs if j["runner"] and j["status"] == "in_progress"}
+    for r in sorted(raw.get("runners", []), key=lambda r: r.get("name", "")):
+        status = "offline" if r.get("status") != "online" else ("busy" if r.get("busy") else "idle")
+        runner = {"name": r.get("name"), "status": status, "os": r.get("os"),
+                  "labels": [lbl["name"] for lbl in r.get("labels", [])],
+                  "group": groups.get(r.get("id"), "unknown"),
+                  "job": by_runner.get(r.get("name"))}
+        target = next((m for m in machines if m["pattern"].search(runner["name"] or "")), other)
+        target["runners"].append(runner)
+    shown = [m for m in machines if m["runners"] or m["stats"] or m["name"] == "Mac Studio"]
+    if other["runners"]:
+        shown.append(other)
+    vm_cfg = {m["name"]: m.get("vms", {}) for m in cfg["machines"]}
+    for m in shown:
+        m.pop("pattern", None)
+        st = m.get("stats") or {}
+        if st.get("vms"):
+            vms = []  # copies: stats dicts may be shared with the push thread
+            for vm in st["vms"]:
+                pattern = vm_cfg.get(m["name"], {}).get(vm.get("name"))
+                rx = re.compile(pattern) if pattern else None
+                inside = [r for r in m["runners"] if rx and rx.search(r["name"] or "")]
+                vms.append({**vm, "runners": [r["name"] for r in inside],
+                            "jobs": [r["job"] for r in inside if r["job"]]})
+            m["stats"] = {**st, "vms": vms}
+        counts = {"idle": 0, "busy": 0, "offline": 0}
+        for r in m["runners"]:
+            counts[r["status"]] += 1
+        m["counts"] = counts
+
 
     alerts = [{"level": "crit", "text": f"GitHub: {e}"}
               for e in dict.fromkeys(raw.get("errors", []))]
@@ -729,6 +752,9 @@ const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 const bytes=n=>{if(n==null)return"?";const u=["B","KB","MB","GB","TB"];let i=0;while(n>=1024&&i<4){n/=1024;i++}return n.toFixed(i<2?0:1)+" "+u[i]};
 const age=m=>m==null?"?":m<1?"<1m":m<60?Math.floor(m)+"m":m<2880?Math.floor(m/60)+"h "+Math.floor(m%60)+"m":Math.floor(m/1440)+"d";
 const bar=(used,total)=>{const p=total?Math.min(100,100*used/total):0;return `<div class="bar"><i class="${p>90?"hot":""}" style="width:${p}%"></i></div>`};
+function jobLine(j){
+  const prs=(j.prs||[]).map(p=>`<a href="${esc(p.url)}">PR #${esc(p.number)}</a>`).join(", ");
+  return `<a href="${esc(j.url)}">${esc(j.workflow)} / ${esc(j.name)}</a><br><span class="labels">${esc(j.repo)} · ${prs||esc(j.branch)} · ${age(j.age_min)}</span>`}
 function machine(m){
   const c=m.counts,st=m.stats||{};let h=`<div class="card"><h2>${esc(m.name)}</h2><div class="pills">
   <span class="pill idle">${c.idle} idle</span><span class="pill busy">${c.busy} busy</span>
@@ -737,12 +763,14 @@ function machine(m){
   if(st.memory&&st.memory.total)h+=`<div class="stat"><span>RAM</span>${bar(st.memory.used,st.memory.total)}<span>${bytes(st.memory.used)} / ${bytes(st.memory.total)}</span></div>`;
   if(st.load&&st.cores)h+=`<div class="stat"><span>CPU load</span>${bar(st.load[0],st.cores)}<span>${st.load[0].toFixed(1)} / ${st.cores} cores</span></div>`;
   for(const d of st.disks||[])h+=`<div class="stat"><span>Disk ${esc(d.path)}</span>${bar(d.used,d.total)}<span>${bytes(d.free)} free</span></div>`;
-  if(st.vms&&st.vms.length){h+=`<table><tr><th>VM</th><th>State</th><th>CPU</th><th>RAM</th><th>Disk</th></tr>`;
-    for(const v of st.vms)h+=`<tr><td>${esc(v.name)}</td><td class="${v.status==="Running"?"idle":"offline"}">${esc(v.status)}</td><td>${esc(v.cpus)}</td><td>${bytes(v.memory)}</td><td>${bytes(v.disk)}</td></tr>`;
+  if(st.vms&&st.vms.length){h+=`<table><tr><th>VM</th><th>State</th><th>CPU</th><th>RAM</th><th>Disk</th><th>Working on</th></tr>`;
+    for(const v of st.vms){const js=v.jobs||[];const busy=js.length?js.map(jobLine).join("<br>"):v.status!=="Running"?`<span class="muted">–</span>`:(v.runners&&v.runners.length?`<span class="muted">idle</span>`:`<span class="muted">–</span>`);
+      h+=`<tr><td>${esc(v.name)}</td><td class="${v.status==="Running"?"idle":"offline"}">${esc(v.status)}</td><td>${esc(v.cpus)}</td><td>${bytes(v.memory)}</td><td>${bytes(v.disk)}</td><td>${busy}</td></tr>`}
     h+=`</table>`}
   if(!m.stats&&!m.configured_agent&&m.name!=="Other runners")h+=`<p class="muted">No stats agent configured.</p>`;
-  if(m.runners.length){h+=`<table style="margin-top:8px"><tr><th>Runner</th><th>State</th><th>Labels</th></tr>`;
-    for(const r of m.runners)h+=`<tr><td>${esc(r.name)}</td><td class="${r.status}"><span class="dot"></span>${r.status}</td><td class="labels">${esc(r.labels.join(", "))}<br>group: ${esc(r.group)}</td></tr>`;
+  if(m.runners.length){h+=`<table style="margin-top:8px"><tr><th>Runner</th><th>State</th><th>Working on</th></tr>`;
+    for(const r of m.runners){const doing=r.job?jobLine(r.job):r.status==="busy"?`<span class="muted">busy (job not in the latest sweep)</span>`:`<span class="muted">${r.status==="offline"?"offline":"idle"}</span>`;
+      h+=`<tr><td>${esc(r.name)}<br><span class="labels">${esc(r.labels.join(", "))} · ${esc(r.group)}</span></td><td class="${r.status}"><span class="dot"></span>${r.status}</td><td>${doing}</td></tr>`}
     h+=`</table>`}else h+=`<p class="muted">No runners registered.</p>`;
   return h+`</div>`}
 function render(s){
@@ -751,7 +779,7 @@ function render(s){
   document.getElementById("machines").innerHTML=(s.machines||[]).map(machine).join("");
   const c=s.counts||{queued:0,running:0};document.getElementById("jobs-title").textContent=s.loading?"Jobs: loading from GitHub…":`Jobs: ${c.queued} queued, ${c.running} running`;
   const j=s.jobs||[];document.getElementById("jobs").innerHTML=s.loading?`<p class="muted">Checking every repo for queued and running jobs. Runners and machine stats above are already live.</p>`:j.length?`<table><tr><th>State</th><th>Age</th><th>Repo</th><th>Job</th><th>Wants</th><th>Runner</th></tr>`+
-   j.map(x=>`<tr><td class="${x.status==="queued"?"queued":"running"}">${x.status==="in_progress"?"running":esc(x.status)}</td><td>${age(x.age_min)}</td><td>${esc(x.repo)}</td><td><a href="${esc(x.url)}">${esc(x.workflow)} / ${esc(x.name)}</a><br><span class="labels">${esc(x.branch)}</span></td><td class="labels">${esc(x.labels.join(", "))}${x.hosted?" (GitHub-hosted)":""}</td><td>${esc(x.runner||"–")}</td></tr>`).join("")+`</table>`:`<p class="muted">No queued or running jobs.</p>`;
+   j.map(x=>`<tr><td class="${x.status==="queued"?"queued":"running"}">${x.status==="in_progress"?"running":esc(x.status)}</td><td>${age(x.age_min)}</td><td>${esc(x.repo)}</td><td><a href="${esc(x.url)}">${esc(x.workflow)} / ${esc(x.name)}</a><br><span class="labels">${(x.prs||[]).length?x.prs.map(p=>`<a href="${esc(p.url)}">PR #${esc(p.number)}</a>`).join(", "):esc(x.branch)}</span></td><td class="labels">${esc(x.labels.join(", "))}${x.hosted?" (GitHub-hosted)":""}</td><td>${esc(x.runner||"–")}</td></tr>`).join("")+`</table>`:`<p class="muted">No queued or running jobs.</p>`;
   const e=s.errors||[];document.getElementById("foot").textContent=(s.token?`Using ${s.token}. `:"")+(s.rate&&s.rate.remaining!=null?`GitHub API: ${s.rate.remaining} of ${s.rate.limit} calls left this hour${s.rate.reset?`, resets ${new Date(s.rate.reset*1000).toLocaleTimeString()}`:""}; this page used ${s.rate.used_by_page_last_hour} in the last hour (${s.rate.free_304s} more answered free from cache). `:"")+(e.length?"Problems: "+e.join(" | "):"");
 }
 async function tick(){try{const r=await fetch("api/state",{cache:"no-store"});render(await r.json())}catch(e){document.getElementById("meta").textContent="Status server unreachable, retrying"}}
@@ -991,11 +1019,12 @@ def demo_raw() -> dict:
     jobs = [
         {"repo": "firmware", "workflow": "Build firmware (Mac pilot)", "name": "build (bcm27xx)",
          "status": "in_progress", "labels": bld, "runner_name": "studio-build-1",
-         "head_branch": "main", "started_at": ago(74), "html_url": "#"},
+         "head_branch": "main", "started_at": ago(74), "html_url": "#", "prs": [56]},
         {"repo": "firmware", "workflow": "Build PR", "name": "build (mediatek/filogic)",
          "status": "queued", "labels": ["ubuntu-latest"], "created_at": ago(41), "html_url": "#"},
         {"repo": "luci", "workflow": "Manet merge gate", "name": "gate", "status": "in_progress",
-         "labels": mac, "runner_name": "studio-mac-1", "started_at": ago(3), "html_url": "#"},
+         "labels": mac, "runner_name": "studio-mac-1", "started_at": ago(3), "html_url": "#",
+         "prs": [7]},
         {"repo": "openmanetd", "workflow": "CodeQL", "name": "Analyze (go)",
          "status": "in_progress", "labels": lin, "runner_name": "gh-ubuntu-1",
          "started_at": ago(9), "html_url": "#"},

@@ -44,6 +44,34 @@ class BuildStateTest(unittest.TestCase):
         self.assertEqual(studio["runners"][2]["group"], "Default")
         self.assertIn("Offline runners: studio-build-2", [a["text"] for a in st["alerts"]])
 
+    def test_runner_and_vm_show_their_current_job_and_pr(self):
+        raw = {"runners": [runner(1, "studio-build-1", busy=True), runner(2, "studio-build-2"),
+                           runner(3, "gh-ubuntu-1", busy=True)],
+               "jobs": [job("in_progress", ["self-hosted"], 12, runner_name="studio-build-1",
+                            prs=[56]),
+                        job("in_progress", ["self-hosted"], 3, runner_name="gh-ubuntu-1",
+                            repo="docs", prs=[])],
+               "machine_stats": {"Mac Studio": {"vms": [
+                   {"name": "gh-build", "status": "Running"},
+                   {"name": "gh-build-2", "status": "Running"},
+                   {"name": "gh-ubuntu", "status": "Running"}]}}}
+        st = rs.build_state(raw, self.cfg, NOW)
+        studio = st["machines"][0]
+        by_name = {r["name"]: r for r in studio["runners"]}
+        build = by_name["studio-build-1"]["job"]
+        self.assertEqual(build["prs"], [{"number": 56, "url":
+                                         "https://github.com/ghostnet-labs/firmware/pull/56"}])
+        self.assertAlmostEqual(build["age_min"], 12, places=3)
+        self.assertIsNone(by_name["studio-build-2"]["job"])
+        vms = {v["name"]: v for v in studio["stats"]["vms"]}
+        self.assertEqual(vms["gh-build"]["runners"], ["studio-build-1"])
+        self.assertEqual(vms["gh-build"]["jobs"][0]["repo"], "firmware")
+        self.assertEqual((vms["gh-build-2"]["runners"], vms["gh-build-2"]["jobs"]),
+                         (["studio-build-2"], []))
+        self.assertEqual(vms["gh-ubuntu"]["jobs"][0]["repo"], "docs")
+        # The input stats are not mutated (they can be shared with the push thread).
+        self.assertNotIn("runners", raw["machine_stats"]["Mac Studio"]["vms"][0])
+
     def test_dev_mac_appears_once_its_runner_exists(self):
         raw = {"runners": [runner(1, "macbook-pro-build-1")]}
         st = rs.build_state(raw, self.cfg, NOW)
@@ -181,7 +209,8 @@ class FakeGitHub:
         if path.endswith("/actions/runs"):
             if path.startswith("/repos/o/firmware") and params["status"] == "queued":
                 return {"workflow_runs": [{"name": "Build", "head_branch": "main",
-                                           "jobs_url": "jobs/firmware/1"}]}
+                                           "jobs_url": "jobs/firmware/1",
+                                           "pull_requests": [{"number": 41}]}]}
             return {"workflow_runs": []}
         if path.startswith("jobs/"):
             return {"jobs": [job("queued", ["ubuntu-latest"], 3), job("completed", [], 9)]}
@@ -213,6 +242,7 @@ class PollerTest(unittest.TestCase):
         final = rs.build_state(raw, cfg, NOW)
         self.assertFalse(final["loading"])
         self.assertEqual(final["counts"], {"queued": 1, "running": 0})
+        self.assertEqual(final["jobs"][0]["prs"][0]["number"], 41)
         self.assertEqual(final["machines"][0]["runners"][0]["group"], "Default")
         self.assertIn("Workflow disabled: firmware / Old (disabled_manually)",
                       [a["text"] for a in final["alerts"]])
