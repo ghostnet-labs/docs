@@ -125,7 +125,7 @@ class WatchdogTest(unittest.TestCase):
         self.assertEqual(host.ran[0], ["launchctl", "kickstart", "-k",
                                        "gui/501/actions.runner.ghostnet-labs.studio-mac-1"])
         e = self.run_dog(host)["runners"]["studio-mac-1"]  # right away: backoff
-        self.assertIn("waiting", e["result"])
+        self.assertTrue(e["result"].startswith("retrying: waiting"))
         self.assertFalse(e["gave_up"])
         self.assertEqual(len(host.ran), 1)
         now = time.time()
@@ -135,6 +135,7 @@ class WatchdogTest(unittest.TestCase):
                        [now - 1000, now - 600, now - 300]}, fh)
         e = self.run_dog(host)["runners"]["studio-mac-1"]
         self.assertTrue(e["gave_up"])
+        self.assertTrue(e["result"].startswith("gave up"))
         self.assertEqual(e["tries"], 3)
         self.assertTrue(wd.may_act([now - 4000], now)[0])
 
