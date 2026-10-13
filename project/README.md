@@ -47,6 +47,7 @@ Every fact has exactly one owner. Everywhere else refers to it by ID or link and
 | Unified UI repository boundaries, local lab vs. physical-node modes and release procedure | [software/unified-ui-developer-guide.md](software/unified-ui-developer-guide.md) |
 | LuCI-only tasks and the criteria for migrating or retiring each | [software/luci-only-tasks.md](software/luci-only-tasks.md) |
 | Unified UI physical-node acceptance checklist (results go on [GHO-79](https://linear.app/ghostnet-labs/issue/GHO-79)) | [software/unified-ui-acceptance-plan.md](software/unified-ui-acceptance-plan.md) |
+| Stage 2 bench compute tracks: per-track carrier notes, power budget, bring-up procedure, scorecard, and a dated screening snapshot of node parts (purchase quantities, prices and status stay in the Linear Purchase BOM and [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36)) | [bench-tracks/](bench-tracks/) (one folder per track, e.g. [bench-tracks/cm5/](bench-tracks/cm5/README.md)) |
 | Firmware source, board target, CI and build evidence | [ghostnet-labs/firmware](https://github.com/ghostnet-labs/firmware) and its PRs |
 | History of the 2026-09-29 Track A options | [poc/history-2026-09-29.md](poc/history-2026-09-29.md) (historical, never authoritative) |
 
