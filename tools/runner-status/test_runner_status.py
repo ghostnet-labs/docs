@@ -42,7 +42,8 @@ class BuildStateTest(unittest.TestCase):
         studio = st["machines"][0]
         self.assertEqual(studio["counts"], {"idle": 1, "busy": 1, "offline": 1})
         self.assertEqual(studio["runners"][2]["group"], "Default")
-        self.assertIn("Offline runners: studio-build-2", [a["text"] for a in st["alerts"]])
+        self.assertIn("Offline runners: studio-build-2 (no stats from that machine)",
+                      [a["text"] for a in st["alerts"]])
 
     def test_runner_and_vm_show_their_current_job_and_pr(self):
         raw = {"runners": [runner(1, "studio-build-1", busy=True), runner(2, "studio-build-2"),
@@ -592,6 +593,233 @@ class StartupTest(unittest.TestCase):
         st = poller.snapshot()
         self.assertFalse(st["loading"])
         self.assertTrue(st["errors"])
+
+
+class HygieneAlertTest(unittest.TestCase):
+    def setUp(self):
+        self.cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+
+    def texts(self, raw):
+        return {a["text"]: a["level"] for a in rs.build_state(raw, self.cfg, NOW)["alerts"]}
+
+    def test_long_offline_runner_turns_red_with_duration(self):
+        since = datetime.fromtimestamp(NOW.timestamp() - 45 * 60, timezone.utc).isoformat()
+        raw = {"runners": [runner(1, "studio-build-2", status="offline")],
+               "runner_history": {"studio-build-2": {"offline_since": since,
+                                                     "flips_last_hour": 0}}}
+        self.assertEqual(self.texts(raw), {
+            "Offline runners: studio-build-2 (45m; no stats from that machine)": "crit"})
+
+    def test_track_runners_counts_flips_and_forgets_removed_runners(self):
+        poller = rs.Poller(self.cfg, None)
+        t = 1_000_000.0
+        for i in range(5):
+            status = "online" if i % 2 == 0 else "offline"
+            hist = poller.track_runners([runner(1, "gh-ubuntu-1", status=status)], t + i * 60)
+        self.assertEqual(hist["gh-ubuntu-1"]["flips_last_hour"], 4)
+        self.assertIsNone(hist["gh-ubuntu-1"]["offline_since"])  # online again
+        hist = poller.track_runners([runner(1, "gh-ubuntu-1")], t + 2 * 3600)
+        self.assertEqual(hist["gh-ubuntu-1"]["flips_last_hour"], 0)  # flips aged out
+        self.assertEqual(poller.track_runners([], t + 3 * 3600), {})
+        raw = {"runners": [runner(1, "gh-ubuntu-1")],
+               "runner_history": {"gh-ubuntu-1": {"flips_last_hour": 4}}}
+        self.assertTrue(any(t.startswith("Flapping runners") for t in self.texts(raw)))
+
+    def test_stuck_run_and_run_for_closed_pr(self):
+        raw = {"jobs": [job("in_progress", ["self-hosted"], 5 * 60, runner_name="studio-mac-2",
+                            workflow="Build", name="b"),
+                        job("in_progress", ["self-hosted"], 50, runner_name="studio-mac-3",
+                            repo="luci", workflow="Manet merge gate", prs=[4], closed_prs=[4]),
+                        job("in_progress", ["self-hosted"], 30, runner_name="studio-mac-4")]}
+        texts = self.texts(raw)
+        self.assertEqual(texts["Stuck run: firmware / Build / b running 5h 0m on studio-mac-2"],
+                         "warn")
+        closed = [t for t in texts if "closed or merged PR #4" in t]
+        self.assertEqual(len(closed), 1)
+        self.assertEqual(texts[closed[0]], "crit")
+        self.assertIn("studio-mac-3", closed[0])
+        self.assertEqual(len(texts), 2)  # the 30-minute job is fine
+
+    def test_machine_hygiene_alerts(self):
+        gib = 1024 ** 3
+        st = {"swap": {"total": 8 * gib, "used": 6 * gib}, "pressure": 4, "sleep_ac": 10,
+              "disks": [{"path": "/", "total": 1000 * gib, "used": 880 * gib,
+                         "free": 120 * gib}],
+              "vms": [{"name": "gh-build", "status": "Running", "disk": 60 * gib,
+                       "disk_used": 55 * gib}],
+              "runner_services": [{"label": "actions.runner.ghostnet-labs.studio-mac-1",
+                                   "running": False, "exit": 1},
+                                  {"label": "actions.runner.ghostnet-labs.studio-mac-2",
+                                   "running": True, "exit": 0}],
+              "orphans": ["pid 9 up 02:00:00: qemu /x/_work/fw"],
+              "runner_versions": [{"dir": "~/runners/a", "version": "2.320.0"},
+                                  {"dir": "~/runners/b", "version": "2.321.0"}]}
+        raw = {"machine_stats": {"MacBook Pro": st},
+               "runner_latest": {"version": "2.321.0",
+                                 "published_at": "2026-10-01T00:00:00Z"}}
+        texts = self.texts(raw)
+        joined = " | ".join(texts)
+        self.assertIn("MacBook Pro is swapping: 6.0 GB", joined)
+        self.assertEqual(texts["MacBook Pro memory pressure is critical"], "crit")
+        self.assertIn("sleeps after 10 min on power", joined)
+        self.assertIn("VM gh-build disk image is 55.0 GB of 60.0 GB", joined)
+        self.assertIn("runner service(s) not running: ghostnet-labs.studio-mac-1", joined)
+        self.assertIn("1 leftover job process", joined)
+        self.assertIn("runner version behind 2.321.0: ~/runners/a 2.320.0", joined)
+        self.assertNotIn("~/runners/b", joined)
+        self.assertNotIn("disk / low", joined)  # 12% free is above the 10% default
+
+    def test_fresh_runner_release_and_healthy_machine_raise_nothing(self):
+        gib = 1024 ** 3
+        st = {"swap": {"total": 2 * gib, "used": 0.5 * gib}, "pressure": 1, "sleep_ac": 0,
+              "vms": [{"name": "gh-build", "status": "Running", "disk": 60 * gib,
+                       "disk_used": 20 * gib}],
+              "runner_versions": [{"dir": "~/a", "version": "2.320.0"}]}
+        raw = {"machine_stats": {"Mac Studio": st},
+               "runner_latest": {"version": "2.321.0", "published_at": "2026-10-12T20:00:00Z"}}
+        self.assertEqual(self.texts(raw), {})
+
+    def test_pushed_hygiene_fields_survive_sanitizing(self):
+        out = rs.sanitize_stats({"swap": {"total": 1, "used": 2, "x": 3}, "sleep_ac": 5,
+                                 "pressure": 2, "orphans": ["a"] * 9,
+                                 "vms": [{"name": "v", "disk_used": 7, "evil": 1}],
+                                 "runner_services": [{"label": "actions.runner.x",
+                                                      "running": 0, "exit": 3}],
+                                 "runner_versions": [{"dir": "~/r", "version": "2.1.0"}]})
+        self.assertEqual(out["swap"], {"total": 1, "used": 2})
+        self.assertEqual((out["sleep_ac"], out["pressure"]), (5, 2))
+        self.assertEqual(len(out["orphans"]), 5)
+        self.assertEqual(out["vms"][0]["disk_used"], 7)
+        self.assertNotIn("evil", out["vms"][0])
+        self.assertFalse(out["runner_services"][0]["running"])
+        self.assertEqual(out["runner_versions"][0]["version"], "2.1.0")
+
+
+class JitSlotTest(unittest.TestCase):
+    def test_missing_slot_alerts_after_grace_and_names_the_cause(self):
+        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        poller = rs.Poller(cfg, None)
+        t = 1_000_000.0
+        online = [runner(i, f"studio-ubuntu-{i}-17608{i}") for i in (1, 2, 3, 4)]
+        slots_up = online + [runner(6, "studio-build-1-1760800"), runner(7, "studio-build-2-1760801")]
+        self.assertEqual(poller.track_jit_slots(slots_up, t), {})  # studio-ubuntu-5 first seen
+        missing = poller.track_jit_slots(slots_up, t + 600)
+        self.assertEqual(list(missing), ["studio-ubuntu-5"])
+        self.assertAlmostEqual(missing["studio-ubuntu-5"]["minutes"], 10)
+        # a slot seen online recovers; gaps between jobs shorter than the grace are quiet
+        back = slots_up + [runner(5, "studio-ubuntu-5-1760900")]
+        self.assertEqual(poller.track_jit_slots(back, t + 660), {})
+        raw = {"jit_missing": missing, "machine_stats": {"Mac Studio": {"watchdog": {"runners": {
+            "studio-ubuntu-5": {"cause": "service-dead", "detail": "LaunchAgent has no process",
+                                "action": "launchctl kickstart -k x", "result": "ok"}}}}}}
+        texts = {a["text"]: a["level"] for a in rs.build_state(raw, cfg, NOW)["alerts"]}
+        self.assertEqual(texts["One-job slot studio-ubuntu-5 has had no online runner for 10m: "
+                              "LaunchAgent has no process; auto-recovery: launchctl kickstart "
+                              "-k x -> ok"], "warn")
+        quiet = {"jit_missing": {"studio-ubuntu-5": {"machine": "Mac Studio", "minutes": 1}}}
+        self.assertEqual(rs.build_state(quiet, cfg, NOW)["alerts"], [])
+
+    def test_jit_runner_names_map_to_their_vm(self):
+        st = {"vms": [{"name": "gh-ubuntu", "status": "Running"},
+                      {"name": "gh-build", "status": "Running"}]}
+        raw = {"runners": [runner(1, "studio-ubuntu-2-1760800", busy=True),
+                           runner(2, "studio-build-1-1760801")], "machine_stats": {"Mac Studio": st}}
+        state = rs.build_state(raw, json.loads(json.dumps(rs.DEFAULT_CONFIG)), NOW)
+        vms = {v["name"]: v["runners"] for v in state["machines"][0]["stats"]["vms"]}
+        self.assertEqual(vms["gh-ubuntu"], ["studio-ubuntu-2-1760800"])
+        self.assertEqual(vms["gh-build"], ["studio-build-1-1760801"])
+
+
+class PrStateTest(unittest.TestCase):
+    def test_closed_pr_found_with_one_cached_call_per_pr(self):
+        class Fake(FakeGitHub):
+            def get(self, path, params=None):
+                with self.mu:
+                    self.calls.append(path)
+                if path.endswith("/actions/runs"):
+                    if params["status"] != "in_progress":
+                        return {"workflow_runs": []}
+                    return {"workflow_runs": [
+                        {"name": "Manet merge gate", "event": "pull_request",
+                         "head_branch": "a", "jobs_url": "jobs/luci/1",
+                         "pull_requests": [{"number": 4}]},
+                        {"name": "Manet merge gate", "event": "pull_request",
+                         "head_branch": "b", "jobs_url": "jobs/luci/2",
+                         "pull_requests": [{"number": 5}]}]}
+                if path == "/repos/o/luci/pulls/4":
+                    return {"state": "closed", "merged_at": "2026-10-13T04:00:00Z"}
+                if path == "/repos/o/luci/pulls/5":
+                    return {"state": "open", "merged_at": None}
+                if path.startswith("jobs/"):
+                    return {"jobs": [job("in_progress", ["self-hosted"], 60,
+                                         runner_name="studio-mac-1")]}
+                raise rs.GitHubError("not available")
+
+        gh = Fake()
+        jobs = rs.Poller.fetch_jobs(gh, "o", ["luci"], [])
+        self.assertEqual(sorted((j["prs"], j["closed_prs"]) for j in jobs),
+                         [([4], [4]), ([5], [])])
+        self.assertEqual(gh.calls.count("/repos/o/luci/pulls/4"), 1)
+
+
+class MacParserTest(unittest.TestCase):
+    def test_swapusage(self):
+        out = rs.parse_swapusage("total = 2048.00M  used = 1536.25M  free = 511.75M  (encrypted)")
+        self.assertEqual(out, {"total": 2048 * 1024 ** 2, "used": 1536.25 * 1024 ** 2})
+        self.assertIsNone(rs.parse_swapusage(""))
+
+    def test_pmset_ac_sleep(self):
+        laptop = ("Battery Power:\n lowpowermode         0\n sleep                1\n"
+                  "AC Power:\n powernap             1\n sleep                0\n"
+                  " displaysleep         10\n")
+        self.assertEqual(rs.parse_pmset_sleep(laptop), 0)
+        desktop = "AC Power:\n displaysleep         10\n sleep                30\n"
+        self.assertEqual(rs.parse_pmset_sleep(desktop), 30)
+        self.assertIsNone(rs.parse_pmset_sleep("garbage"))
+
+    def test_launchctl_runner_services(self):
+        text = ("PID\tStatus\tLabel\n123\t0\tactions.runner.ghostnet-labs.studio-mac-1\n"
+                "-\t78\tactions.runner.ghostnet-labs.studio-mac-2\n-\t0\tcom.apple.x\n")
+        self.assertEqual(rs.parse_launchctl(text), [
+            {"label": "actions.runner.ghostnet-labs.studio-mac-1", "running": True, "exit": 0},
+            {"label": "actions.runner.ghostnet-labs.studio-mac-2", "running": False, "exit": 78}])
+
+    def test_orphans(self):
+        ps = ("  PID  PPID     ELAPSED COMMAND\n"
+              "  10     1  1-02:00:00 /usr/bin/make -C /Users/r/a/_work/fw/fw\n"
+              "  11     1       05:00 /usr/bin/make -C /Users/r/a/_work/fw/fw\n"
+              "  12   300    03:00:00 /usr/bin/make -C /Users/r/a/_work/fw/fw\n"
+              "  13     1    03:00:00 /Users/r/a/bin/Runner.Listener run\n"
+              "  14     1    03:00:00 /usr/sbin/sshd\n")
+        found = rs.find_orphans(ps)
+        self.assertEqual(len(found), 1)
+        self.assertTrue(found[0].startswith("pid 10 up 1-02:00:00"))
+        self.assertEqual(rs.etime_seconds("1-02:03:04"), 93784)
+        self.assertEqual(rs.etime_seconds("05:00"), 300)
+
+    def test_runner_versions_from_diag_log(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as root:
+            r = os.path.join(root, "runners", "studio-mac-1")
+            os.makedirs(os.path.join(r, "_diag"))
+            os.makedirs(os.path.join(r, "_work", "deep", ".runner"))  # never walked
+            open(os.path.join(r, ".runner"), "w").close()
+            with open(os.path.join(r, "_diag", "Runner_20261013.log"), "w") as fh:
+                fh.write("[INFO] Runner Version: 2.321.0\n")
+            rs._runner_scan.update(at=0.0, found=[])
+            found = rs.runner_versions([root])
+            self.assertEqual([v["version"] for v in found], ["2.321.0"])
+            rs._runner_scan.update(at=0.0, found=[])
+
+    def test_lima_disk_used_reads_sparse_allocation(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "diffdisk"), "wb") as fh:
+                fh.truncate(1024 ** 3)  # 1 GiB sparse, almost nothing allocated
+                fh.write(b"x" * 4096)
+            used = rs.lima_disk_used({"name": "v", "dir": d})
+            self.assertLess(used, 1024 ** 2)
+        self.assertIsNone(rs.lima_disk_used({"name": "v", "dir": "/nonexistent"}))
 
 
 class ParserTest(unittest.TestCase):
