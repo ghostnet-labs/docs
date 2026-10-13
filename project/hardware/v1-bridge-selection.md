@@ -167,17 +167,17 @@ The radio body grows downward. A tray holds the bank between the carrier's botto
 | Radio interior (2.0 mm wall, from parts.yaml) | X 2 to 143, Y 2 to 72 | X −1.5 to 139.5, Y −1.5 to 68.5 | Unverified (parts.yaml assumption) |
 | Row A (Y 13), row B (Y 37), row C (Y 61); cells Ø19, gaps 5.0 mm between rows and 1.5 mm to the walls | Y 3.5–22.5, 27.5–46.5, 51.5–70.5 | Y 0–19, 24–43, 48–67 | Calculated |
 | Left and right cell of each row, leads facing the centre | X 3.5–65.5 and 79.5–141.5 | X 76–138 and 0–62 | Calculated |
-| Bank board (vertical, cells soldered through, series bus, fuse, NTC, harness exit) | X 65.5–79.5 (14 mm gap) | X 62–76 | Proposed |
+| Bank board (vertical, cells soldered through, series bus, fuse, harness exit) | X 65.5–79.5 (14 mm gap) | X 62–76 | Proposed |
 | Bank envelope | 138 × 67 × 19 mm | the board outline | Calculated |
 | Pogo daughterboard column (M-10, M-14; 10.4 mm, from parts.yaml) | X 105–129, Y 29–45, under row B right | X 12.5–36.5, Y 25.5–41.5 | Unverified (pack-to-board mapping assumed in parts.yaml) |
 
 **Groups.** Each row is one 2P group: A-left with A-right, and so on. The bank board connects A to B to C in series. All bus links are short and lie on one board. Proposed.
 
-**Height.** Row B's board-frame X 0 to 62 cell sits over the pogo column and under the bottom-side charger block (board X 38 to 60, Y 26 to 42, to Z −4.6). The stack below the board is: 3.0 mm bottom-side parts (parts.yaml assumption), 0.5 mm clearance, 19.0 mm cell, 0.5 mm clearance and the 10.4 mm pogo column. That is **33.4 mm under the board, against 10.4 mm today: +23.0 mm.** If the charger block moved off row B, it would be +20.0 mm. Calculated.
+**Height.** Row B's board-frame X 0 to 62 cell sits over the pogo column and under the bottom-side charger block (board X 38 to 60, Y 26 to 42, to Z −4.6). The stack below the board is: 3.0 mm bottom-side parts (parts.yaml assumption), 0.5 mm clearance, 19.0 mm cell, 0.5 mm clearance and the 10.4 mm pogo column. That is **33.4 mm under the board, against 10.4 mm today: +23.0 mm.** If the charger block moved off row B, it would be +20.0 mm. Calculated. The 1 mm insulating sheet under the bottom-side power parts (D-051) needs its own layer in this stack: +0.5 to +1.0 mm, so 33.9 to 34.4 mm under the board.
 
 **Clearances that pass.** Locating-boss recesses (X 117, Y 12 and 60, M-18) and the latch keeper (X 134 to 141 near Y 37, M-20) are in the interface plate below the tray. Every cell is clear of the hook bay (X 0 to 6) by its own 1.5 mm end clearance. These checks use the envelope only, and the plate thickness is not recorded (Unverified).
 
-**Thermal.** The tray puts the cells next to the pack and away from the finned lid. That is the coolest internal location this body offers. Fit a 1 mm insulating sheet between the carrier's bottom-side power parts and the cells. Bottom-side parts that need a chassis path ([v1-thermal-rf-plan.md](v1-thermal-rf-plan.md) §2) must reach it through the side walls. The tray also lengthens the radio's side walls by 23 mm, which adds shedding area. Neither effect is modelled (B7).
+**Thermal.** The tray puts the cells next to the pack and away from the finned lid. That is the coolest internal location this body offers. Fit a 1 mm insulating sheet between the carrier's bottom-side power parts and the cells. Bottom-side parts that need a chassis path ([v1-thermal-rf-plan.md](v1-thermal-rf-plan.md) §2) must reach it through the side walls. The tray also lengthens the radio's side walls by 23 mm, which adds shedding area. Modelled in [v1-thermal-update-tray.md](v1-thermal-update-tray.md): hottest cells 75 to 82 °C at the hot endpoint and 18.5 W; B7 measures it.
 
 **Service.** The pogo daughterboard is replaced by lifting out the tray. That is acceptable for depot service. It is not a field operation.
 
@@ -192,7 +192,7 @@ The bank board splits to the two outer ends, so the centre gap becomes X 67.5 to
 | VCAP+ and CAPRTN (stack power) | 2 × 16 AWG per pole, about 150 mm, soldered at the bank board | 13.17 mΩ/m per wire, so about 1.0 mΩ per pole for two wires in parallel. The worst-case average is 7.94 A (4 A per wire) and the peak 10.94 A. | Calculated |
 | Carrier connector | Würth WR-MPC4 dual row, 8 pins, 4.2 mm pitch: header 649008227222 (right angle), housing 649008113322, crimp 64900113722 (16 AWG) | Header 7 A max per contact at 8 pins, crimp 9 A, contact 10 mΩ max, −40 to +105 °C (Verified, Würth datasheets 002.001 2019-12-20 and 001.001 2025-02-18). Two contacts per pole give 14 A. | Verified ratings. The vertical header variant and the crimp for 20 to 24 AWG are not chosen (Unverified). |
 | Pin map | 1–2 VCAP+, 3–4 CAPRTN, 5 CAP1, 6 CAP2, 7 CAP3 Kelvin, 8 CAPRTN Kelvin | The Kelvin taps feed the CAP pins through the 2.4 Ω ballasts and carry at most 0.48 A, so 22 to 24 AWG is enough. | Proposed |
-| Bank NTC | 10 kΩ NTC on the bank board to the LTC3350 GPI (a thermistor input the datasheet supports, p14), 2-pin link | Lets firmware tie the DAC code to cell temperature | Proposed. Circuit values Unverified. |
+| Bank NTC | 10 kΩ NTC on the row A right cell (board X 0 to 62, Y 0 to 19, the hottest cell, under the bucks) to the LTC3350 GPI (a thermistor input the datasheet supports, p14), 2-pin link | Lets firmware step the charge from code 12 to code 11 (6.30 V) while it reads 60 °C or more (D-051) | Proposed. Circuit values Unverified. |
 | Bank fuse | One fuse at the bank board in series with VCAP+: about 15 A slow-blow, ≥ 32 V, cold resistance ≤ 5 mΩ | Stack short-circuit current is about 6.5 V / 27 mΩ = 240 A. Without a fuse a harness short dumps the full bank (about 1.4 kJ). | MPN open (Unverified). Owner decision 5. |
 | Path ESR budget | Connector pairs 2 × 5 mΩ max, wires 2 mΩ, bank bus about 2 mΩ: **14 mΩ**. 15 mΩ is used in §4; with a fuse, about +5 mΩ. | Calculated, B6 |
 
@@ -391,7 +391,7 @@ These were found, not resolved. README rule 6 asks for a Linear issue for each o
 3. **RSNSI.** The bridge study's 6.4 mΩ gives up to 5.20 A worst case, above the 5.17 A eFuse minimum it was meant to stay under.
 4. **Stack voltage and cell count.** The bridge study holds a 4-cell stack at 8.0 V. This file proposes 3 cells at 6.525 V. D-027's rationale still names "four 50 F cells" as a candidate, and the bridge study already calls that superseded.
 5. **Power-stage side.** [v1-rf-coexistence.md](v1-rf-coexistence.md) §3.2 and [v1-stackup-routing.md](v1-stackup-routing.md) (L8) place the LTC3350 stage on the bottom side. This file's default is the top side (decision 7).
-6. **Radio-body height.** [v1-thermal-rf-plan.md](v1-thermal-rf-plan.md) models a 27 mm body. The floorplan already needs more than 26.66 mm above the PCB for the feed-through, and option A adds 23 mm below. The thermal model's area and height inputs need updating (GHO-7, GHO-12).
+6. **Radio-body height.** The thermal model ([v1-thermal-update-tray.md](v1-thermal-update-tray.md)) uses a 50 mm body: 27 mm plus option A's 23 mm. The floorplan already needs more than 26.66 mm above the PCB for the feed-through, so the real body may be taller; 66 mm is run as a sensitivity case. The body height is not recorded yet (GHO-7).
 7. **Bottom-side height.** parts.yaml assumes 3 mm for every bottom-side part. The 5.0 to 6.5 mm bridge inductor (if on the bottom) and probably the LM76005 inductors exceed that. The tray depth above uses 3 mm.
 8. **LTC3350 frequency.** [v1-rf-coexistence.md](v1-rf-coexistence.md) says the nominal frequency is not recorded. Rev. D gives 500 kHz nominal, 495 to 505 kHz at 25 °C and 490 to 510 kHz over temperature (p4). This is informational and needs no change to the analysis.
 
