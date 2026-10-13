@@ -594,6 +594,64 @@ class StartupTest(unittest.TestCase):
         self.assertTrue(st["errors"])
 
 
+class HistoryTest(unittest.TestCase):
+    def test_samples_are_spaced_bounded_and_skip_missing_stats(self):
+        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        raw = rs.demo_raw()
+        raw["machine_stats"]["MacBook Pro"] = {"error": "no stats pushed yet"}
+        state = rs.build_state(raw, cfg, NOW)
+        h = rs.History()
+        for i in range(rs.HISTORY_POINTS + 10):
+            h.record(state, 1000 + i * rs.HISTORY_SPACING)
+            h.record(state, 1000 + i * rs.HISTORY_SPACING + 1)  # too soon: dropped
+        out = h.export()
+        studio = out["machines"]["Mac Studio"]
+        self.assertEqual(len(studio["t"]), rs.HISTORY_POINTS)
+        self.assertAlmostEqual(studio["cpu"][-1], 7.4 / 12, places=3)
+        self.assertAlmostEqual(studio["mem"][-1], 27.5 / 32, places=3)
+        self.assertNotIn("MacBook Pro", out["machines"])
+        self.assertEqual(out["jobs"]["running"][-1], 3)
+
+    def test_no_job_samples_while_loading_or_failing(self):
+        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        h = rs.History()
+        h.record(rs.build_state({"loading": True}, cfg, NOW), 1000)
+        h.record(rs.build_state({"errors": ["Runners: boom"]}, cfg, NOW), 2000)
+        self.assertIsNone(h.export()["jobs"])
+
+    def test_page_state_carries_history(self):
+        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        poller = rs.Poller(cfg, None, demo=True)
+        poller.poll_once()
+        hist = poller.snapshot()["history"]
+        self.assertGreater(len(hist["machines"]["Mac Studio"]["t"]), 100)
+        self.assertIsNotNone(hist["jobs"])
+
+
+class PageTest(unittest.TestCase):
+    def test_page_is_self_contained(self):
+        # Nothing may load from the network, and the triple-quote that ends the
+        # Python string must not appear inside it.
+        import re
+        self.assertNotRegex(rs.PAGE, r"(?i)(src|href)=[\"']https?://")
+        self.assertNotIn("@import", rs.PAGE)
+        self.assertEqual(rs.PAGE.count("</html>"), 1)
+        self.assertLess(len(rs.PAGE), 90_000)
+        self.assertNotIn("\t", rs.PAGE)
+
+    def test_page_reads_the_state_keys_the_server_sends(self):
+        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        poller = rs.Poller(cfg, None, demo=True)
+        poller.poll_once()
+        state = poller.snapshot()
+        for key in ("machines", "jobs", "alerts", "counts", "rate", "history", "loading", "errors"):
+            self.assertIn(key, state)
+            self.assertIn(key, rs.PAGE)  # the page reads every key it is sent
+        job = state["jobs"][0]
+        for key in ("workflow", "name", "repo", "prs", "age_min", "runner", "status", "url"):
+            self.assertIn(key, job)
+
+
 class ParserTest(unittest.TestCase):
     def test_vm_stat(self):
         text = ('Mach Virtual Memory Statistics: (page size of 16384 bytes)\n'
@@ -644,7 +702,9 @@ class ServerTest(unittest.TestCase):
         base = f"http://127.0.0.1:{srv.server_port}"
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open(base + "/") as r:
-            self.assertIn(b"Builders and runners", r.read())
+            page = r.read()
+        self.assertIn(b"<title>Runner Status</title>", page)
+        self.assertIn(b'fetch("api/state"', page)
         with opener.open(base + "/api/state") as r:
             state = json.loads(r.read())
         self.assertEqual(state["machines"][0]["name"], "Mac Studio")
