@@ -101,14 +101,59 @@ def load_config(path: str | None) -> dict:
     return cfg
 
 
-def read_token() -> str | None:
-    token = os.environ.get("RUNNER_STATUS_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if token:
-        return token.strip()
+def read_token() -> tuple[str | None, str]:
+    """Return (token, where it came from). The dedicated file wins over a
+    stray GITHUB_TOKEN in the environment, which is often some other token."""
+    if os.environ.get("RUNNER_STATUS_TOKEN", "").strip():
+        return os.environ["RUNNER_STATUS_TOKEN"].strip(), "RUNNER_STATUS_TOKEN"
     if os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, encoding="utf-8") as fh:
-            return fh.read().strip() or None
-    return None
+            token = fh.read().strip()
+        if token:
+            return token, TOKEN_FILE
+        return None, f"{TOKEN_FILE} (empty)"
+    if os.environ.get("GITHUB_TOKEN", "").strip():
+        return os.environ["GITHUB_TOKEN"].strip(), "GITHUB_TOKEN"
+    return None, f"{TOKEN_FILE} (missing)"
+
+
+def token_kind(token: str) -> str:
+    """Name the token type from its prefix, never showing the token itself."""
+    kinds = {"github_pat_": "fine-grained personal token", "ghp_": "classic personal token",
+             "gho_": "gh CLI / OAuth token", "ghs_": "GitHub Actions or app token (short-lived)",
+             "ghu_": "GitHub app user token"}
+    return next((v for k, v in kinds.items() if token.startswith(k)), "unrecognised token format")
+
+
+class GitHubError(OSError):
+    """An API failure with a plain-language cause."""
+
+
+def explain_http_error(code: int, message: str, path: str, source: str, kind: str) -> str:
+    low = message.lower()
+    if code == 401:
+        return (f"token rejected by GitHub (401 {message or 'Bad credentials'}). The {kind} in "
+                f"{source} is wrong, expired or revoked; make a new one (README step 1).")
+    if "fine-grained personal access token" in low and "forbid" in low:
+        return ("the ghostnet-labs org does not allow fine-grained tokens: org Settings > "
+                "Personal access tokens > allow access via fine-grained tokens.")
+    if "pending" in low or "approv" in low:
+        return ("the token is waiting for org-owner approval: approve it at "
+                "https://github.com/organizations/ghostnet-labs/settings/personal-access-token-requests")
+    if code in (403, 404) and ("not accessible" in low or code == 404):
+        if "/actions/runner" in path:
+            need = "Organization permissions > Self-hosted runners: Read-only"
+        elif "/billing" in path:
+            need = "org billing access (optional)"
+        elif path.startswith("/orgs/") and path.endswith("/repos"):
+            need = "Resource owner ghostnet-labs and Repository access: All repositories"
+        else:
+            need = "Repository permissions > Actions: Read-only, on All repositories"
+        return (f"missing permission ({code} {message}). The {kind} in {source} needs: {need}. "
+                "Edit the token, add it, and the page picks it up on the next poll.")
+    if code in (403, 429) and "rate limit" in low:
+        return f"GitHub rate limit hit ({code}); it clears within the hour."
+    return f"HTTP {code}: {message}"
 
 
 # --------------------------------------------------------------------------
@@ -215,8 +260,10 @@ def collect_stats(disk_paths: list[str]) -> dict:
 # --------------------------------------------------------------------------
 
 class GitHub:
-    def __init__(self, token: str):
+    def __init__(self, token: str, source: str = "environment"):
         self.token = token
+        self.source = source
+        self.kind = token_kind(token)
         self.rate_remaining: int | None = None
 
     def get(self, path: str, params: dict | None = None):
@@ -229,19 +276,30 @@ class GitHub:
             "X-GitHub-Api-Version": "2022-11-28",
             "User-Agent": "ghostnet-runner-status",
         })
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            remaining = resp.headers.get("X-RateLimit-Remaining")
-            if remaining is not None:
-                self.rate_remaining = int(remaining)
-            return json.loads(resp.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                remaining = resp.headers.get("X-RateLimit-Remaining")
+                if remaining is not None:
+                    self.rate_remaining = int(remaining)
+                return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as exc:
+            try:
+                message = json.loads(exc.read().decode()).get("message", "")
+            except (OSError, ValueError, AttributeError):
+                message = exc.reason or ""
+            short = url.removeprefix(API).split("?")[0]
+            raise GitHubError(explain_http_error(exc.code, str(message), short, self.source,
+                                                 self.kind)) from exc
 
 
 class Poller:
     """Polls GitHub and agents on one background thread; the page reads a copy."""
 
-    def __init__(self, cfg: dict, gh: GitHub | None, demo: bool = False):
+    def __init__(self, cfg: dict, gh: GitHub | None, demo: bool = False,
+                 token_source: str = ""):
         self.cfg = cfg
         self.gh = gh
+        self.token_source = token_source
         self.demo = demo
         self.stop = threading.Event()
         self.mu = threading.Lock()  # protects the fields below
@@ -266,9 +324,16 @@ class Poller:
         org = self.cfg["org"]
         errors: list[str] = []
         raw: dict = {"errors": errors}
+        # Re-read the token every poll so replacing the file needs no restart.
+        token, self.token_source = read_token()
+        if not token:
+            self.gh = None
+        elif self.gh is None or self.gh.token != token:
+            self.gh = GitHub(token, self.token_source)
         gh = self.gh
         if gh is None:
-            errors.append("No GitHub token found. See README.md (token setup).")
+            errors.append(f"No GitHub token: {self.token_source}. Put a read-only token there "
+                          "(README step 1).")
         else:
             try:
                 raw["runners"] = gh.get(f"/orgs/{org}/actions/runners",
@@ -282,6 +347,7 @@ class Poller:
             raw.update(self.slow)
             raw["jobs"] = self.fetch_jobs(gh, org, raw.get("repos", []), errors)
             raw["rate_remaining"] = gh.rate_remaining
+            raw["token"] = f"{gh.kind} from {gh.source}"
         raw["machine_stats"] = self.fetch_agents(errors)
         return raw
 
@@ -396,7 +462,8 @@ def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
                      "url": j.get("html_url"), "age_min": age_minutes(since, now)})
     jobs.sort(key=lambda j: (j["status"] != "queued", -(j["age_min"] or 0)))
 
-    alerts = []
+    alerts = [{"level": "crit", "text": f"GitHub: {e}"}
+              for e in dict.fromkeys(raw.get("errors", []))]
     offline = [r["name"] for m in shown for r in m["runners"] if r["status"] == "offline"]
     if offline:
         alerts.append({"level": "warn", "text": f"Offline runners: {', '.join(offline)}"})
@@ -438,7 +505,8 @@ def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
 
     return {"updated": now.isoformat(), "org": cfg["org"], "machines": shown, "jobs": jobs,
             "alerts": alerts, "billing": billing, "rate_remaining": raw.get("rate_remaining"),
-            "errors": raw.get("errors", []),
+            "token": raw.get("token"),
+            "errors": list(dict.fromkeys(raw.get("errors", []))),
             "counts": {"queued": sum(j["status"] == "queued" for j in jobs),
                        "running": sum(j["status"] == "in_progress" for j in jobs)}}
 
@@ -510,7 +578,7 @@ function render(s){
   const c=s.counts||{queued:0,running:0};document.getElementById("jobs-title").textContent=`Jobs: ${c.queued} queued, ${c.running} running`;
   const j=s.jobs||[];document.getElementById("jobs").innerHTML=j.length?`<table><tr><th>State</th><th>Age</th><th>Repo</th><th>Job</th><th>Wants</th><th>Runner</th></tr>`+
    j.map(x=>`<tr><td class="${x.status==="queued"?"queued":"running"}">${x.status==="in_progress"?"running":esc(x.status)}</td><td>${age(x.age_min)}</td><td>${esc(x.repo)}</td><td><a href="${esc(x.url)}">${esc(x.workflow)} / ${esc(x.name)}</a><br><span class="labels">${esc(x.branch)}</span></td><td class="labels">${esc(x.labels.join(", "))}${x.hosted?" (GitHub-hosted)":""}</td><td>${esc(x.runner||"–")}</td></tr>`).join("")+`</table>`:`<p class="muted">No queued or running jobs.</p>`;
-  const e=s.errors||[];document.getElementById("foot").textContent=(s.rate_remaining!=null?`API calls left this hour: ${s.rate_remaining}. `:"")+(e.length?"Problems: "+e.join(" | "):"");
+  const e=s.errors||[];document.getElementById("foot").textContent=(s.token?`Using ${s.token}. `:"")+(s.rate_remaining!=null?`API calls left this hour: ${s.rate_remaining}. `:"")+(e.length?"Problems: "+e.join(" | "):"");
 }
 async function tick(){try{const r=await fetch("api/state",{cache:"no-store"});render(await r.json())}catch(e){document.getElementById("meta").textContent="Status server unreachable, retrying"}}
 tick();setInterval(tick,15000);
@@ -559,8 +627,9 @@ class Notifier:
 
 def serve(args) -> None:
     cfg = load_config(args.config)
-    token = None if args.demo else read_token()
-    poller = Poller(cfg, GitHub(token) if token else None, demo=args.demo)
+    token, source = (None, "") if args.demo else read_token()
+    poller = Poller(cfg, GitHub(token, source) if token else None, demo=args.demo,
+                    token_source=source)
     notifier = Notifier(args.notify)
 
     def loop():

@@ -51,7 +51,10 @@ pbpaste > ~/.config/runner-status/token
 chmod 600 ~/.config/runner-status/token
 ```
 
-`RUNNER_STATUS_TOKEN` or `GITHUB_TOKEN` in the environment also works.
+`RUNNER_STATUS_TOKEN` in the environment also works. `GITHUB_TOKEN` is used
+only when neither of those exists, because on a runner machine it is often
+some other, short-lived token. The page footer names the token type and where
+it came from (never the token itself).
 
 ## 2. Run it on the Mac Studio
 
@@ -99,6 +102,22 @@ A runner belongs to the first machine whose `runner_pattern` matches its
 name; unmatched runners show under "Other runners", so a wrong pattern never
 hides one. Other keys: `poll_seconds`, `queued_alert_minutes`,
 `hosted_stall_minutes`, `disk_paths`.
+
+## Troubleshooting
+
+Problems show as red alerts at the top of the page, in plain words:
+
+| Alert says | Meaning | Fix |
+|---|---|---|
+| No GitHub token | No token file | Step 1 |
+| token rejected (401) | Token wrong, expired or revoked, or not the one you meant (check the footer's "Using ... from ...") | Make a new token and overwrite the file; picked up on the next poll |
+| missing permission | The token lacks the named permission | Edit the token on GitHub and add it; no restart needed |
+| waiting for org-owner approval | Org requires approval for fine-grained tokens | Approve it in the org's token requests |
+| org does not allow fine-grained tokens | Org policy blocks them | Allow them in org Settings > Personal access tokens |
+
+If fine-grained tokens cannot be used at all, a classic token works too, but
+listing org runners needs the `admin:org` scope, which also grants write
+access to the org. Prefer the fine-grained token.
 
 ## Tests
 
