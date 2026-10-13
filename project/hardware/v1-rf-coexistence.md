@@ -1,9 +1,9 @@
 # V1 RF coexistence review
 
 **Owner:** [GHO-12](https://linear.app/ghostnet-labs/issue/GHO-12), RF-coexistence half (antenna isolation and keepouts, switcher placement, prototype measurements).  
-**Status:** Candidate, desk review, 2026-10-09. Nothing here was built, simulated or measured. It edits no record, selects no part and assigns no D-number. Where it disagrees with a record, the record wins until the records owner applies the proposed text in [section 5](#5-proposed-text-for-the-records-owner) (README rule 6).
+**Status:** Desk review, 2026-10-09. Nothing here was built, simulated or measured. Adopted as working default by D-045 in [../decisions.md](../decisions.md). The registers and decisions win over this file (README rule 6). The items D-045 left open are in [section 6](#6-still-open).
 
-The thermal half of GHO-12 is [v1-thermal-rf-plan.md](v1-thermal-rf-plan.md), under D-028 and D-035. That file's §3 lists the coexistence mechanisms and its §4 defines tests T7 to T12; this file sizes them. Radio facts come from [v1-reference.md](v1-reference.md) §5, §7, §9 and §18 and [v1-selections.md](v1-selections.md) (B-02, B-03, B-05, B-21). Layout facts come from [v1-stackup-routing.md](v1-stackup-routing.md) §4 and the firmware floorplan model on branch `gho7-usbc-magnetics` (commit `44aa670`, `docs/hardware/v1-mechanical/parts.yaml` and `out/report.md`). Three open docs PRs are read but not relied on as records: `v1-eth-gnss-protection.md` (branch `gho11-eth-gnss`, GHO-11), `v1-schematic-netplan.md` (branch `gho13-schematic-netplan`, GHO-13) and `v1-netplan-blocker-proposals.md` (branch `gho10-netplan-blockers`, GHO-10).
+The thermal half of GHO-12 is [v1-thermal-rf-plan.md](v1-thermal-rf-plan.md), under D-028 and D-035. That file's §3 lists the coexistence mechanisms and its §4 defines tests T7 to T12; this file sizes them. Radio facts come from [v1-reference.md](v1-reference.md) §5, §7, §9 and §18 and [v1-selections.md](v1-selections.md) (B-02, B-03, B-05, B-21). Layout facts come from [v1-stackup-routing.md](v1-stackup-routing.md) §4 and the firmware floorplan model on branch `gho7-usbc-magnetics` (commit `44aa670`, `docs/hardware/v1-mechanical/parts.yaml` and `out/report.md`). It also reads three proposal files, which are not records: [v1-eth-gnss-protection.md](v1-eth-gnss-protection.md) (GHO-11), [v1-schematic-netplan.md](v1-schematic-netplan.md) (GHO-13) and [v1-netplan-blocker-proposals.md](v1-netplan-blocker-proposals.md) (GHO-10).
 
 ## Conventions
 
@@ -116,8 +116,8 @@ Harmonic order n = 1575.42 / f_sw. A C/A main lobe is 2.046 MHz wide, so any swi
 |---|---|---|---|---|---|
 | LM76005, 5 V and 3.3 V (B-18) | 400 kHz typical, 350 to 450 kHz with RT open; 200 to 500 kHz settable (SNVSBK5A §6.5 fOSC, §7.1) | 3938.55 | 3938 → 1575.2, 3939 → 1575.6 | 5 or 6. Over the tolerance the order runs 3501 to 4501, which moves a given harmonic by about ± 197 MHz | 3903 → 1561.2 |
 | BQ25798 charger (B-09) | 1.5 MHz or 750 kHz typical, set by PROG strap or PWM_FREQ; no min/max given (SLUSDV2C §6.5, Table 7-1, REG0x18) | 1050.28 (1.5 MHz), 2100.56 (750 kHz) | 1575.0, 1576.5 (1.5 MHz); 1575.0, 1575.75 (750 kHz) | 1 (1.5 MHz), 2 (750 kHz) | 1041 → 1561.5; 2081 → 1560.75 |
-| LTC3350 bridge (B-24, candidate) | 500 kHz nominal, 490 to 510 kHz over temperature (LTC3350 Rev. D p4, [v1-bridge-selection.md](v1-bridge-selection.md)) | 3215.1 at 490 kHz | 1575.35, 1575.84 | 4 | 3186 → 1561.14 |
-| TLV62568 hub 1.1 V buck (GHO-10 proposal) | 1.5 MHz typical in PWM; power-save mode below DCM, with lower, load-dependent frequency (SLVSD89B §6.5, §7.3.1) | 1050.28 | 1575.0, 1576.5 | 1 in PWM; wanders in PSM | 1561.5 |
+| LTC3350 bridge (B-24, D-047) | 500 kHz nominal, 490 to 510 kHz over temperature (LTC3350 Rev. D p4, [v1-bridge-selection.md](v1-bridge-selection.md)) | 3215.1 at 490 kHz | 1575.35, 1575.84 | 4 | 3186 → 1561.14 |
+| TLV62568 hub 1.1 V buck (B-26, D-044) | 1.5 MHz typical in PWM; power-save mode below DCM, with lower, load-dependent frequency (SLVSD89B §6.5, §7.3.1) | 1050.28 | 1575.0, 1576.5 | 1 in PWM; wanders in PSM | 1561.5 |
 | TPS62A01A (forced-PWM alternative, section 3.3) | 2.4 MHz FPWM (SLUSEG9E §6.5) | 656.43 | 1574.4, 1576.8 | 1 (at the lobe edge) | 1560.0 |
 | TPS26633 eFuse (B-15) | Not a switching regulator: a pass FET with gate drive, no inductor. SLVSE94G gives no internal charge-pump frequency | – | – | – | – |
 | TPS25751A, TPS22975, TPS2553 | Not switching regulators (power switches) | – | – | – | – |
@@ -264,13 +264,13 @@ Results:
 - **No switching inductor or regulator sits under or over any RF module** (HaLow card and socket, Wi-Fi card and socket, GNSS block). The nearest switching region to an RF module is the charger, 9.0 mm from the HaLow card; the bucks are 17.0 mm from it. This matches the floorplan script's own rule check (`out/report.md`: no violations).
 - **Every placed power part is at least 40.5 mm from the GNSS block**, against the 15 mm rule in v1-reference.md §18. The bucks are 54.5 mm edge to edge (80.6 mm centre to centre).
 - The pack pogo zone sits below the HaLow socket (floorplan note). It carries pack current, not a switch node, so it does not break the rule; its return currents should not be routed under the HaLow card.
-- The `usb_hub` entry in `parts.yaml` is still named "TI TUSB4020BI", which B-04 retired (D-023). Position is unaffected (section 5, item 7).
+- The `usb_hub` entry in `parts.yaml` is still named "TI TUSB4020BI", which B-04 retired (D-023). Position is unaffected (section 5).
 
 ### 3.2 Switchers not yet in the floorplan: keepouts
 
 | Part | Proposed keepout |
 |---|---|
-| LTC3350 switching stage: IC, inductor, FETs, sense resistors (B-24 candidate) | Top side at board X 55 to 85, Y 1.5 to 23 (D-047, [v1-bridge-selection.md](v1-bridge-selection.md) §3.5), which meets the same rules. Bottom-side alternative: inside the power band X 30 to 86, Y 0 to 26 (the free strip X 30 to 66, Y 17 to 26, between the bucks and the charger, fits the 5 x 7 mm QFN and its inductor). Not in the XY shadow of the HaLow card and socket (X 7 to 29, Y 30.1 to 64) or of the Wi-Fi card and socket (X 88 to 118, Y 7 to 62.9). At least 15 mm from the GNSS block. The supercapacitor stack is not a switch node and may go elsewhere, but the 10 A path ([v1-stackup-routing.md](v1-stackup-routing.md) §5) favours keeping it close |
+| LTC3350 switching stage: IC, inductor, FETs, sense resistors (B-24, D-047) | Top side at board X 55 to 85, Y 1.5 to 23 (D-047, [v1-bridge-selection.md](v1-bridge-selection.md) §3.5), which meets the same rules. Bottom-side alternative: inside the power band X 30 to 86, Y 0 to 26 (the free strip X 30 to 66, Y 17 to 26, between the bucks and the charger, fits the 5 x 7 mm QFN and its inductor). Not in the XY shadow of the HaLow card and socket (X 7 to 29, Y 30.1 to 64) or of the Wi-Fi card and socket (X 88 to 118, Y 7 to 62.9). At least 15 mm from the GNSS block. The supercapacitor stack is not a switch node and may go elsewhere, but the 10 A path ([v1-stackup-routing.md](v1-stackup-routing.md) §5) favours keeping it close |
 | Hub 1.1 V buck (TLV62568 or alternative, GHO-10 proposal) | Beside the hub (X 39 to 53, Y 10 to 24), at least the hub-to-crystal distance from XI/XO and the USB pairs (TUSB4041I §7.4.1.1), not under the CM5 (top side), at least 9 mm from the HaLow socket (keep Y < 28 or X > 31) |
 | TPS22975 load switches (blocked in the floorplan) | Not switchers. Keep the WIFI_3V3 burst loop (switch to socket bulk capacitors) on the socket side away from the GNSS column |
 | Any future switcher | Same rules: not in the XY shadow of an RF module on either side, at least 15 mm from GNSS, switch node and input loop on L8 with L7 solid above |
@@ -289,7 +289,8 @@ Results:
 |---|---|
 | GNSS block (MAX-M10S, SAW, bias tee, RF feed and connector launch; X 120.5 to 136.5, Y 7 to 21) | **Lay out a two-piece shield (frame plus removable lid) on every build.** Populate the lid on half the first build, so C7 and T8 give an A/B answer. The Wi-Fi card is 2.5 mm away and its PCIe pairs reach the socket 6.5 mm away. The lid height must clear the lid-to-board gap under D-035's finned lid (GHO-7). u-blox also suggests shielding for thermal stability of the receiver's oscillator (manual R05 §4.4), which helps next to an 8 W card |
 | Wi-Fi card RF end | Not shieldable from the carrier. Whether the AW7916-AED has its own RF can is not published (**Unverified**; inspect a bench card) |
-| Bucks, charger, LTC3350 | No can needed by analysis: 40 mm or more from GNSS, bottom side, L7 solid above. Keep the inductors shielded-body parts (already in v1-reference.md §13) |
+| Bucks, charger | No can needed by analysis: 40 mm or more from GNSS, bottom side, L7 solid above. Keep the inductors shielded-body parts (already in v1-reference.md §13) |
+| LTC3350 stage | No can needed by analysis: top side (D-047), 35.5 mm from the GNSS block and outside both radio-card shadows ([v1-bridge-selection.md](v1-bridge-selection.md) §3.5) |
 | Enclosure | The aluminium enclosure is the main shield. Bond every cable shield and RF bulkhead at the wall (GHO-11 proposal §3). The GNSS bulkhead's shell to the wall is the most important of these |
 
 ### 3.5 Layout keepouts (in addition to v1-stackup-routing.md §4)
@@ -322,29 +323,20 @@ Equipment beyond the T-test list: GNSS SAW evaluation board, RF signal generator
 
 Order: C2 and C3 first (they replace A2, A5 and A6), then C1 and C4, then the system tests.
 
-## 5. Proposed text for the records owner
+## 5. Floorplan model update (not yet applied)
 
-Not applied here. Each item names the record and the text the owner can apply if the project owner agrees.
+The record text this review proposed has been applied, except the firmware floorplan model, which belongs to [GHO-7](https://linear.app/ghostnet-labs/issue/GHO-7):
 
-1. **v1-thermal-rf-plan.md §3, row "HaLow fundamental blocking", "What to check":** replace "Measure antenna isolation and C/N0." with "Budget in [v1-rf-coexistence.md](v1-rf-coexistence.md) §2.2: with a filtered active antenna and the external SAW, about 20 dB of HaLow-to-GNSS isolation leaves 21.5 dB of margin; without the SAW it needs about 38.5 dB. Measure isolation (C2) and C/N0." Add a row "Intermod: f(2.4 GHz) minus f(HaLow) on BeiDou B1I only when 2.4 GHz channels 9 to 11 run with HaLow's lower edge below 913 MHz (v1-rf-coexistence.md §1.4)."
-2. **v1-thermal-rf-plan.md §4, T11 pass:** replace "HaLow to GNSS at least 35 dB (estimate from D-020; confirm against T9)." with "Each pair meets the isolation assumed in v1-rf-coexistence.md §2.1 (A5, A6), or the §2.2 budget recomputed with the measured values keeps a margin of 0 dB or more."
-3. **v1-thermal-rf-plan.md §4:** add "C1 to C12 in v1-rf-coexistence.md §4 size and extend T8 to T11."
-4. **v1-reference.md §9 (GNSS), after "integrated LNA and SAW filter":** add "An external GNSS SAW filter is populated between the antenna bias tee and RF_IN, and the internal LNA runs in bypass mode (CFG-HW-RF_LNA_MODE) because the external active antenna gives 10 dB or more of gain ([v1-rf-coexistence.md](v1-rf-coexistence.md) §2.2, §2.6). The active antenna must have a filter ahead of its LNA (§2.5)."
-5. **GHO-11 proposal `v1-eth-gnss-protection.md` §2.4 item 3 (branch `gho11-eth-gnss`, not merged):** replace "Whether to populate the SAW is set by the T9 and T11 tests in v1-thermal-rf-plan.md." with "Populate the SAW by default ([v1-rf-coexistence.md](v1-rf-coexistence.md) §2.6); the 0 Ω option exists only for the C4 A/B test." Add the §2.5 antenna table to the B-21 selection criteria.
-6. **v1-reference.md §18, placement rules, GNSS line:** add "The GNSS antenna connector sits in the right-hand wall level with the GNSS block, not on the top RF wall (v1-rf-coexistence.md §2.5); a two-piece shield frame surrounds the GNSS receiver, SAW, bias tee and feed." GHO-7 owns the decision and the latch check.
-7. **firmware `docs/hardware/v1-mechanical/parts.yaml` (GHO-7):** rename `usb_hub` from "TI TUSB4020BI" to "TI TUSB4041IPAPRG4" (B-04, D-023). Add a `switching: true` envelope for the LTC3350 power stage and one for the hub 1.1 V buck with the §3.2 keepouts, and a `gnss_shield` keepout for the frame. Rerun the check.
-8. **v1-selections.md, "PCB and thermal approach":** "No inductors, regulators, or tall parts go under the CM5" reads as forbidding the floorplan's bottom-side charger (X 38–60, Y 26–42) and eFuse block (X 62–80, Y 26–36), which sit in the CM5's XY shadow on the other side of the board. v1-reference.md §18 places them there deliberately. Proposed wording: "No inductors, regulators, or tall parts go between the CM5 and the carrier (top side, 2.5 mm clearance). Bottom-side power parts may sit in the CM5's shadow; the CM5 is not an RF module." This is not an RF conflict (the CM5008032 has no radio); it is listed because the RF rule uses the same "under" wording.
-9. **GHO-10 proposal `v1-netplan-blocker-proposals.md` K-9 (branch `gho10-netplan-blockers`, not merged):** add after the TLV62568 part line: "At the hub's 98 mA active load the TLV62568 is in power-save mode (DCM below about 111 mA with 2.2 µH), so its frequency varies with load. If C7 shows its harmonics in the GNSS band, the forced-PWM TPS62A01A (2.4 MHz, SLUSEG9E) is the alternative; it is not pin-compatible."
-10. **README.md ownership table:** add a row "V1 RF coexistence: frequency plan, isolation budget, switcher placement review and coexistence measurements C1 to C12 | `[hardware/v1-rf-coexistence.md](hardware/v1-rf-coexistence.md)` (supporting; registers and v1-thermal-rf-plan.md test IDs win)".
+- **firmware `docs/hardware/v1-mechanical/parts.yaml` (GHO-7):** rename `usb_hub` from "TI TUSB4020BI" to "TI TUSB4041IPAPRG4" (B-04, D-023). Add a `switching: true` envelope for the LTC3350 power stage and one for the hub 1.1 V buck with the §3.2 keepouts, and a `gnss_shield` keepout for the frame. Rerun the check.
 
-## 6. Decisions only the owner can make
+## 6. Still open
 
-1. **BeiDou B1I or B1C.** The default GPS + Galileo + B1I mode is exposed to the HaLow/2.4 GHz second-order product and to 1560 MHz clock harmonics (24 MHz × 65, 12 MHz × 130). GPS + Galileo + B1C (data sheet R08 Table 2: 28 s cold start against 27 s) avoids all three. The alternative is a channel-controller rule that keeps 2.4 GHz channels 9 to 11 away from HaLow channels starting below 913 MHz.
-2. **External SAW populated as standard** (a BOM addition). Recommended.
-3. **GNSS antenna type and location:** on the enclosure (patch, top face, right end) or remote on a cable. This sets A5 more than any other choice.
-4. **Inline filters on the HaLow and Wi-Fi antenna paths**, if C1, C9 or C10 fail, including the test-lab question on the modular grants.
-5. **Channel exclusions in openmanetd** (HaLow 6f and 7f against 5/6 GHz Wi-Fi channels; B1I item above) against D-029's all-band roles and D-041's admission rules, versus D-031 scheduling.
-6. **GNSS shield lid** populated in production, after C7.
+D-045 settled the BeiDou signal (B1C) and the external SAW. These items remain open under [GHO-12](https://linear.app/ghostnet-labs/issue/GHO-12):
+
+1. **GNSS antenna type and location:** on the enclosure (patch, top face, right end) or remote on a cable. This sets A5 more than any other choice.
+2. **Inline filters on the HaLow and Wi-Fi antenna paths**, if C1, C9 or C10 fail, including the test-lab question on the modular grants.
+3. **Channel exclusions in openmanetd** (HaLow 6f and 7f against 5/6 GHz Wi-Fi channels) against D-029's all-band roles and D-041's admission rules, versus D-031 scheduling.
+4. **GNSS shield lid** populated in production, after C7.
 
 ## 7. What is unverified
 

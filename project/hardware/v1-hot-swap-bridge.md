@@ -76,7 +76,7 @@ Model: identical series cells give effective stack capacitance `Ccell × deratin
 
 Use the source-grounded candidate comparison below for current inputs and exact commands. Save JSON with the source/evidence for every input; replace estimates as GHO-30 produces measurements. Equality at the ESR maximum-power boundary offers no design margin.
 
-Run verification with `python3 -m unittest discover -s project/scripts -p 'test_bridge_budget.py' -v`. Tests cover hand-calculated energy, series capacitance, current floor, ESR penalties, shutdown demand, low charge and invalid inputs; an independent numerical constant-power discharge checks the conservative duration bound.
+Run verification with `python3 -m unittest discover -s project/tests -p 'test_bridge_budget.py' -v`. Tests cover hand-calculated energy, series capacitance, current floor, ESR penalties, shutdown demand, low charge and invalid inputs; an independent numerical constant-power discharge checks the conservative duration bound.
 
 ## 3. Storage options
 
