@@ -32,6 +32,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -58,6 +59,9 @@ DEFAULT_CONFIG = {
         {"name": "R620", "agent": "", "runner_pattern": r"(?i)r620"},
     ],
 }
+
+API_WORKERS = 6  # parallel GitHub calls; bounded to stay gentle on the API
+ERROR_RETRY_SECONDS = 15  # retry sooner while something is wrong (e.g. a new token)
 
 HOSTED_LABELS = re.compile(r"^(ubuntu|windows|macos)-", re.I)
 
@@ -264,6 +268,7 @@ class GitHub:
         self.token = token
         self.source = source
         self.kind = token_kind(token)
+        self.mu = threading.Lock()  # protects rate_remaining (calls run in parallel)
         self.rate_remaining: int | None = None
 
     def get(self, path: str, params: dict | None = None):
@@ -280,7 +285,8 @@ class GitHub:
             with urllib.request.urlopen(req, timeout=20) as resp:
                 remaining = resp.headers.get("X-RateLimit-Remaining")
                 if remaining is not None:
-                    self.rate_remaining = int(remaining)
+                    with self.mu:
+                        self.rate_remaining = int(remaining)
                 return json.loads(resp.read().decode())
         except urllib.error.HTTPError as exc:
             try:
@@ -303,24 +309,28 @@ class Poller:
         self.demo = demo
         self.stop = threading.Event()
         self.mu = threading.Lock()  # protects the fields below
-        self.state: dict = {"updated": None, "errors": ["Starting up, first poll pending."]}
+        self.state: dict = build_state({"loading": True}, cfg, utcnow())
         self.slow: dict = {}
         self.slow_at = 0.0
+        self.last: dict = {}
 
     def snapshot(self) -> dict:
         with self.mu:
             return self.state
 
-    def poll_once(self) -> None:
-        if self.demo:
-            raw = demo_raw()
-        else:
-            raw = self.fetch()
+    def poll_once(self) -> dict:
+        """One poll. Publishes partial results as they arrive so the page
+        paints within a couple of seconds instead of after the whole sweep."""
+        raw = demo_raw() if self.demo else self.fetch(self.publish)
+        self.publish(raw)
+        return raw
+
+    def publish(self, raw: dict) -> None:
         state = build_state(raw, self.cfg, utcnow())
         with self.mu:
             self.state = state
 
-    def fetch(self) -> dict:
+    def fetch(self, publish=lambda raw: None) -> dict:
         org = self.cfg["org"]
         errors: list[str] = []
         raw: dict = {"errors": errors}
@@ -335,25 +345,42 @@ class Poller:
             errors.append(f"No GitHub token: {self.token_source}. Put a read-only token there "
                           "(README step 1).")
         else:
+            raw["token"] = f"{gh.kind} from {gh.source}"
             try:
                 raw["runners"] = gh.get(f"/orgs/{org}/actions/runners",
                                         {"per_page": 100}).get("runners", [])
             except (urllib.error.URLError, OSError, ValueError) as exc:
                 errors.append(f"Runners: {exc}")
-            # Slow-changing data (repos, groups, workflows, billing) every 10 min.
-            if time.time() - self.slow_at > 600 or not self.slow:
-                self.slow = self.fetch_slow(gh, org, errors)
-                self.slow_at = time.time()
-            raw.update(self.slow)
-            raw["jobs"] = self.fetch_jobs(gh, org, raw.get("repos", []), errors)
-            raw["rate_remaining"] = gh.rate_remaining
-            raw["token"] = f"{gh.kind} from {gh.source}"
+            if self.slow:
+                raw.update(self.slow)  # last sweep's repos/groups/workflows
         raw["machine_stats"] = self.fetch_agents(errors)
+        if gh is None or errors:
+            return raw
+        if "jobs" not in self.last:
+            raw["loading"] = True  # first sweep: show runners + machines now
+            publish(dict(raw))
+        else:
+            raw["jobs"] = self.last["jobs"]
+        # Slow-changing data (repos, groups, workflows, billing) every 10 min.
+        stale = time.time() - self.slow_at > 600 or not self.slow
+        if stale:
+            self.slow.update(self.fetch_repos_groups(gh, org, errors))
+            raw.update(self.slow)
+        raw["jobs"] = self.fetch_jobs(gh, org, raw.get("repos", []), errors)
+        raw.pop("loading", None)
+        self.last = {"jobs": raw["jobs"]}
+        if stale:
+            publish(dict(raw))
+            self.slow.update(self.fetch_workflows_billing(gh, org, raw.get("repos", [])))
+            self.slow_at = time.time()
+            raw.update(self.slow)
+        with gh.mu:
+            raw["rate_remaining"] = gh.rate_remaining
         return raw
 
     @staticmethod
-    def fetch_slow(gh: GitHub, org: str, errors: list[str]) -> dict:
-        out: dict = {"repos": [], "groups": {}, "disabled_workflows": [], "billing": None}
+    def fetch_repos_groups(gh: GitHub, org: str, errors: list[str]) -> dict:
+        out: dict = {"repos": [], "groups": {}}
         try:
             repos = gh.get(f"/orgs/{org}/repos", {"per_page": 100, "type": "all"})
             out["repos"] = [r["name"] for r in repos if not r.get("archived")]
@@ -368,46 +395,63 @@ class Poller:
                     out["groups"][r["id"]] = g["name"]
         except (urllib.error.URLError, OSError, ValueError):
             pass  # needs org runner read; the runner list still works without it
-        for repo in out["repos"]:
+        return out
+
+    @staticmethod
+    def fetch_workflows_billing(gh: GitHub, org: str, repos: list[str]) -> dict:
+        def disabled(repo: str) -> list[dict]:
             try:
                 wfs = gh.get(f"/repos/{org}/{repo}/actions/workflows",
                              {"per_page": 100}).get("workflows", [])
             except (urllib.error.URLError, OSError, ValueError):
-                continue
-            for wf in wfs:
-                if wf.get("state", "active") != "active":
-                    out["disabled_workflows"].append(
-                        {"repo": repo, "name": wf.get("name"), "state": wf.get("state"),
-                         "url": wf.get("html_url")})
+                return []
+            return [{"repo": repo, "name": wf.get("name"), "state": wf.get("state"),
+                     "url": wf.get("html_url")}
+                    for wf in wfs if wf.get("state", "active") != "active"]
+
+        with ThreadPoolExecutor(max_workers=API_WORKERS) as pool:
+            found = [wf for chunk in pool.map(disabled, repos) for wf in chunk]
         try:
-            out["billing"] = gh.get(f"/orgs/{org}/settings/billing/actions")
+            billing = gh.get(f"/orgs/{org}/settings/billing/actions")
         except (urllib.error.URLError, OSError, ValueError):
-            out["billing"] = None  # needs billing access; the stall heuristic covers it
-        return out
+            billing = None  # needs billing access; the stall heuristic covers it
+        return {"disabled_workflows": found, "billing": billing}
 
     @staticmethod
     def fetch_jobs(gh: GitHub, org: str, repos: list[str], errors: list[str]) -> list[dict]:
-        jobs: list[dict] = []
-        for repo in repos:
-            for status in ("queued", "in_progress"):
-                try:
-                    runs = gh.get(f"/repos/{org}/{repo}/actions/runs",
-                                  {"status": status, "per_page": 50}).get("workflow_runs", [])
-                except (urllib.error.URLError, OSError, ValueError) as exc:
-                    errors.append(f"{repo} runs: {exc}")
-                    break
-                for run in runs:
-                    try:
-                        rjobs = gh.get(run["jobs_url"], {"per_page": 100}).get("jobs", [])
-                    except (urllib.error.URLError, OSError, ValueError):
-                        continue
-                    for j in rjobs:
-                        if j.get("status") in ("queued", "in_progress", "waiting", "pending"):
-                            j["repo"] = repo
-                            j["workflow"] = run.get("name")
-                            j["branch"] = run.get("head_branch")
-                            jobs.append(j)
-        return jobs
+        """Active jobs across repos, fetched by a small bounded pool."""
+        def runs_for(task):
+            repo, status = task
+            try:
+                runs = gh.get(f"/repos/{org}/{repo}/actions/runs",
+                              {"status": status, "per_page": 50}).get("workflow_runs", [])
+            except (urllib.error.URLError, OSError, ValueError) as exc:
+                return [], f"{repo} runs: {exc}"
+            return [(repo, r) for r in runs], None
+
+        def jobs_for(item):
+            repo, run = item
+            try:
+                rjobs = gh.get(run["jobs_url"], {"per_page": 100}).get("jobs", [])
+            except (urllib.error.URLError, OSError, ValueError):
+                return []
+            out = []
+            for j in rjobs:
+                if j.get("status") in ("queued", "in_progress", "waiting", "pending"):
+                    j["repo"] = repo
+                    j["workflow"] = run.get("name")
+                    j["branch"] = run.get("head_branch")
+                    out.append(j)
+            return out
+
+        tasks = [(repo, st) for repo in repos for st in ("queued", "in_progress")]
+        with ThreadPoolExecutor(max_workers=API_WORKERS) as pool:
+            runs = []
+            for found, err in pool.map(runs_for, tasks):
+                runs.extend(found)
+                if err and err not in errors:
+                    errors.append(err)
+            return [j for chunk in pool.map(jobs_for, runs) for j in chunk]
 
     def fetch_agents(self, errors: list[str]) -> dict:
         stats = {}
@@ -505,7 +549,7 @@ def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
 
     return {"updated": now.isoformat(), "org": cfg["org"], "machines": shown, "jobs": jobs,
             "alerts": alerts, "billing": billing, "rate_remaining": raw.get("rate_remaining"),
-            "token": raw.get("token"),
+            "token": raw.get("token"), "loading": bool(raw.get("loading")),
             "errors": list(dict.fromkeys(raw.get("errors", []))),
             "counts": {"queued": sum(j["status"] == "queued" for j in jobs),
                        "running": sum(j["status"] == "in_progress" for j in jobs)}}
@@ -575,8 +619,8 @@ function render(s){
   document.getElementById("meta").textContent=`${s.org||""} · updated ${s.updated?new Date(s.updated).toLocaleTimeString():"never"} · refreshes every 15s`;
   const a=s.alerts||[];document.getElementById("alerts").innerHTML=a.length?a.map(x=>`<div class="alert ${x.level}">${x.url?`<a href="${esc(x.url)}">${esc(x.text)}</a>`:esc(x.text)}</div>`).join(""):`<p class="allgood">All runners healthy, nothing stuck.</p>`;
   document.getElementById("machines").innerHTML=(s.machines||[]).map(machine).join("");
-  const c=s.counts||{queued:0,running:0};document.getElementById("jobs-title").textContent=`Jobs: ${c.queued} queued, ${c.running} running`;
-  const j=s.jobs||[];document.getElementById("jobs").innerHTML=j.length?`<table><tr><th>State</th><th>Age</th><th>Repo</th><th>Job</th><th>Wants</th><th>Runner</th></tr>`+
+  const c=s.counts||{queued:0,running:0};document.getElementById("jobs-title").textContent=s.loading?"Jobs: loading from GitHub…":`Jobs: ${c.queued} queued, ${c.running} running`;
+  const j=s.jobs||[];document.getElementById("jobs").innerHTML=s.loading?`<p class="muted">Checking every repo for queued and running jobs. Runners and machine stats above are already live.</p>`:j.length?`<table><tr><th>State</th><th>Age</th><th>Repo</th><th>Job</th><th>Wants</th><th>Runner</th></tr>`+
    j.map(x=>`<tr><td class="${x.status==="queued"?"queued":"running"}">${x.status==="in_progress"?"running":esc(x.status)}</td><td>${age(x.age_min)}</td><td>${esc(x.repo)}</td><td><a href="${esc(x.url)}">${esc(x.workflow)} / ${esc(x.name)}</a><br><span class="labels">${esc(x.branch)}</span></td><td class="labels">${esc(x.labels.join(", "))}${x.hosted?" (GitHub-hosted)":""}</td><td>${esc(x.runner||"–")}</td></tr>`).join("")+`</table>`:`<p class="muted">No queued or running jobs.</p>`;
   const e=s.errors||[];document.getElementById("foot").textContent=(s.token?`Using ${s.token}. `:"")+(s.rate_remaining!=null?`API calls left this hour: ${s.rate_remaining}. `:"")+(e.length?"Problems: "+e.join(" | "):"");
 }
@@ -634,9 +678,12 @@ def serve(args) -> None:
 
     def loop():
         while not poller.stop.is_set():
-            poller.poll_once()
+            raw = poller.poll_once()
             notifier.update(poller.snapshot().get("alerts", []))
-            poller.stop.wait(cfg["poll_seconds"])
+            wait = cfg["poll_seconds"]
+            if raw.get("errors"):
+                wait = min(wait, ERROR_RETRY_SECONDS)
+            poller.stop.wait(wait)
 
     threading.Thread(target=loop, daemon=True, name="poller").start()
 
