@@ -274,6 +274,35 @@ class PollerTest(unittest.TestCase):
         self.assertEqual(out[0]["rate"]["remaining"], 4999)
 
 
+    def test_job_pr_found_by_branch_when_run_lists_none(self):
+        class Fake(FakeGitHub):
+            def get(self, path, params=None):
+                with self.mu:
+                    self.calls.append(path)
+                if path.endswith("/actions/runs"):
+                    if params["status"] != "in_progress":
+                        return {"workflow_runs": []}
+                    return {"workflow_runs": [
+                        {"name": "Manet merge gate", "event": "pull_request",
+                         "head_branch": "feat", "head_repository": {"full_name": "o/docs"},
+                         "jobs_url": "jobs/docs/1", "pull_requests": []},
+                        {"name": "Docs", "event": "push", "head_branch": "main",
+                         "head_repository": {"full_name": "o/docs"},
+                         "jobs_url": "jobs/docs/2", "pull_requests": []}]}
+                if path.endswith("/pulls"):
+                    return [{"number": 96, "head": {"ref": "feat", "repo": {"full_name": "o/docs"}}},
+                            {"number": 7, "head": {"ref": "feat", "repo": {"full_name": "x/docs"}}}]
+                if path.startswith("jobs/"):
+                    return {"jobs": [job("in_progress", ["self-hosted"], 2)]}
+                raise rs.GitHubError("not available")
+
+        gh = Fake()
+        jobs = rs.Poller.fetch_jobs(gh, "o", ["docs"], [])
+        by_workflow = {j["workflow"]: j["prs"] for j in jobs}
+        self.assertEqual(by_workflow, {"Manet merge gate": [96], "Docs": []})
+        self.assertEqual(gh.calls.count("/repos/o/docs/pulls"), 1)
+
+
 class PushTest(unittest.TestCase):
     def setUp(self):
         self.cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))

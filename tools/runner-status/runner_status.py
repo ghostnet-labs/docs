@@ -559,8 +559,28 @@ class Poller:
                     j["branch"] = run.get("head_branch")
                     j["prs"] = [pr["number"] for pr in run.get("pull_requests") or []
                                 if isinstance(pr, dict) and "number" in pr]
+                    if not j["prs"]:
+                        j["prs"] = open_prs.get((repo, head_key(run)), [])
                     out.append(j)
             return out
+
+        def head_key(run):
+            head_repo = (run.get("head_repository") or {}).get("full_name")
+            return f"{head_repo}:{run.get('head_branch')}"
+
+        def pulls_for(repo):
+            # The runs list often leaves pull_requests empty, so match open PRs
+            # by head repo and branch. ETag caching makes unchanged lists free.
+            try:
+                pulls = gh.get(f"/repos/{org}/{repo}/pulls", {"state": "open", "per_page": 100})
+            except (urllib.error.URLError, OSError, ValueError):
+                return {}
+            found: dict = {}
+            for pr in pulls if isinstance(pulls, list) else []:
+                head = pr.get("head") or {}
+                key = (repo, f"{(head.get('repo') or {}).get('full_name')}:{head.get('ref')}")
+                found.setdefault(key, []).append(pr["number"])
+            return found
 
         tasks = [(repo, st) for repo in repos for st in ("queued", "in_progress")]
         with ThreadPoolExecutor(max_workers=API_WORKERS) as pool:
@@ -569,6 +589,11 @@ class Poller:
                 runs.extend(found)
                 if err and err not in errors:
                     errors.append(err)
+            lookup = sorted({repo for repo, run in runs if not run.get("pull_requests")
+                             and str(run.get("event", "")).startswith("pull_request")})
+            open_prs: dict = {}
+            for found in pool.map(pulls_for, lookup):
+                open_prs.update(found)
             return [j for chunk in pool.map(jobs_for, runs) for j in chunk]
 
     def fetch_agents(self, errors: list[str]) -> dict:
