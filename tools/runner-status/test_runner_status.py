@@ -695,6 +695,41 @@ class HygieneAlertTest(unittest.TestCase):
         self.assertEqual(out["runner_versions"][0]["version"], "2.1.0")
 
 
+class JitSlotTest(unittest.TestCase):
+    def test_missing_slot_alerts_after_grace_and_names_the_cause(self):
+        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        poller = rs.Poller(cfg, None)
+        t = 1_000_000.0
+        online = [runner(i, f"studio-ubuntu-{i}-17608{i}") for i in (1, 2, 3, 4)]
+        slots_up = online + [runner(6, "studio-build-1-1760800"), runner(7, "studio-build-2-1760801")]
+        self.assertEqual(poller.track_jit_slots(slots_up, t), {})  # studio-ubuntu-5 first seen
+        missing = poller.track_jit_slots(slots_up, t + 600)
+        self.assertEqual(list(missing), ["studio-ubuntu-5"])
+        self.assertAlmostEqual(missing["studio-ubuntu-5"]["minutes"], 10)
+        # a slot seen online recovers; gaps between jobs shorter than the grace are quiet
+        back = slots_up + [runner(5, "studio-ubuntu-5-1760900")]
+        self.assertEqual(poller.track_jit_slots(back, t + 660), {})
+        raw = {"jit_missing": missing, "machine_stats": {"Mac Studio": {"watchdog": {"runners": {
+            "studio-ubuntu-5": {"cause": "service-dead", "detail": "LaunchAgent has no process",
+                                "action": "launchctl kickstart -k x", "result": "ok"}}}}}}
+        texts = {a["text"]: a["level"] for a in rs.build_state(raw, cfg, NOW)["alerts"]}
+        self.assertEqual(texts["One-job slot studio-ubuntu-5 has had no online runner for 10m: "
+                              "LaunchAgent has no process; auto-recovery: launchctl kickstart "
+                              "-k x -> ok"], "warn")
+        quiet = {"jit_missing": {"studio-ubuntu-5": {"machine": "Mac Studio", "minutes": 1}}}
+        self.assertEqual(rs.build_state(quiet, cfg, NOW)["alerts"], [])
+
+    def test_jit_runner_names_map_to_their_vm(self):
+        st = {"vms": [{"name": "gh-ubuntu", "status": "Running"},
+                      {"name": "gh-build", "status": "Running"}]}
+        raw = {"runners": [runner(1, "studio-ubuntu-2-1760800", busy=True),
+                           runner(2, "studio-build-1-1760801")], "machine_stats": {"Mac Studio": st}}
+        state = rs.build_state(raw, json.loads(json.dumps(rs.DEFAULT_CONFIG)), NOW)
+        vms = {v["name"]: v["runners"] for v in state["machines"][0]["stats"]["vms"]}
+        self.assertEqual(vms["gh-ubuntu"], ["studio-ubuntu-2-1760800"])
+        self.assertEqual(vms["gh-build"], ["studio-build-1-1760801"])
+
+
 class PrStateTest(unittest.TestCase):
     def test_closed_pr_found_with_one_cached_call_per_pr(self):
         class Fake(FakeGitHub):

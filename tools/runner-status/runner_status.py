@@ -63,6 +63,7 @@ DEFAULT_CONFIG = {
     "disk_alert_free_pct": 10,      # warn when a disk has less than this share free
     "stuck_run_hours": 4,           # a job running longer than this is called stuck
     "offline_crit_minutes": 30,     # an offline runner turns red after this long
+    "jit_missing_alert_minutes": 3, # a one-job slot with no online runner this long
     "flap_changes_per_hour": 4,     # online/offline flips in an hour that count as flapping
     "swap_alert_gb": 4,             # swap in use above this many GiB
     "vm_disk_alert_pct": 85,        # Lima disk image filled past this share of its size
@@ -72,8 +73,13 @@ DEFAULT_CONFIG = {
         {"name": "Mac Studio", "agent": "local",
          "runner_pattern": r"(?i)studio|gh-ubuntu|gh-build",
          # Lima VM name -> pattern for the runners that live inside it.
-         "vms": {"gh-ubuntu": r"(?i)^gh-ubuntu", "gh-build": r"(?i)^studio-build-1$",
-                 "gh-build-2": r"(?i)^studio-build-2$"}},
+         # One-job (JIT) runners are named <slot>-<epoch> and deregister after a job.
+         "vms": {"gh-ubuntu": r"(?i)^(gh-ubuntu|studio-ubuntu)",
+                 "gh-build": r"(?i)^studio-build-1(-\d+)?$",
+                 "gh-build-2": r"(?i)^studio-build-2(-\d+)?$"},
+         "jit_slots": ["studio-ubuntu-1", "studio-ubuntu-2", "studio-ubuntu-3",
+                       "studio-ubuntu-4", "studio-ubuntu-5", "studio-build-1",
+                       "studio-build-2"]},
         {"name": "MacBook Pro", "agent": "push",
          "runner_pattern": r"(?i)macbook|mac-dev|\bdev\b",
          "vms": {"gh-build": r"(?i)^macbook-pro-build"}},
@@ -595,6 +601,7 @@ class Poller:
         self.last_raw: dict | None = None  # guarded by mu
         # Poller thread only: runner name -> {"status", "since", "flips": deque}.
         self.history: dict[str, dict] = {}
+        self.jit_seen: dict[str, float] = {}  # slot -> last time a runner of it was online
 
     def snapshot(self) -> dict:
         with self.mu:
@@ -645,6 +652,7 @@ class Poller:
                 raw["runners"] = gh.get(f"/orgs/{org}/actions/runners",
                                         {"per_page": 100}).get("runners", [])
                 raw["runner_history"] = self.track_runners(raw["runners"], time.time())
+                raw["jit_missing"] = self.track_jit_slots(raw["runners"], time.time())
             except (urllib.error.URLError, OSError, ValueError) as exc:
                 errors.append(f"Runners: {exc}")
             if self.slow:
@@ -699,6 +707,22 @@ class Poller:
                        .isoformat() if h["status"] == "offline" else None,
                        "flips_last_hour": len(h["flips"])}
                 for name, h in self.history.items()}
+
+    def track_jit_slots(self, runners: list[dict], now: float) -> dict:
+        """Minutes each configured one-job slot has had no online runner. Those
+        runners deregister after every job, so a dead slot never shows as
+        "offline"; it just stops appearing."""
+        slots = [(m["name"], s) for m in self.cfg["machines"] for s in m.get("jit_slots") or []]
+        online = [r.get("name") or "" for r in runners if r.get("status") == "online"]
+        missing = {}
+        for machine, slot in slots:
+            if any(re.fullmatch(re.escape(slot) + r"(-\d+)?", n) for n in online):
+                self.jit_seen[slot] = now
+                continue
+            first = self.jit_seen.setdefault(slot, now)  # grace from first sight
+            if now - first > 0:
+                missing[slot] = {"machine": machine, "minutes": (now - first) / 60}
+        return missing
 
     @staticmethod
     def fetch_repos_groups(gh: GitHub, org: str, errors: list[str]) -> dict:
@@ -924,6 +948,28 @@ def runner_alerts(runners: list[dict], cfg: dict) -> list[dict]:
     return alerts
 
 
+def jit_alerts(missing: dict, machines: list[dict], cfg: dict) -> list[dict]:
+    """A one-job slot without an online runner: say why when the watchdog knows."""
+    reports = {m["name"]: ((m.get("stats") or {}).get("watchdog") or {}).get("runners") or {}
+               for m in machines}
+    alerts = []
+    for slot, info in sorted(missing.items()):
+        if info["minutes"] < cfg["jit_missing_alert_minutes"]:
+            continue
+        why = reports.get(info["machine"], {}).get(slot) or {}
+        if why.get("cause") == "maintenance":
+            alerts.append({"level": "info", "text": f"Slot {slot} is draining: {why['detail']}"})
+            continue
+        text = f"One-job slot {slot} has had no online runner for {fmt_minutes(info['minutes'])}"
+        if why.get("detail"):
+            text += f": {why['detail']}"
+        if why.get("action"):
+            text += f"; auto-recovery: {why['action']} -> {why.get('result') or 'pending'}"
+        alerts.append({"level": "crit" if info["minutes"] >= cfg["offline_crit_minutes"]
+                       else "warn", "text": text})
+    return alerts
+
+
 def job_alerts(jobs: list[dict], cfg: dict) -> list[dict]:
     """Jobs stuck for hours, and runners held by a job whose PR is closed."""
     alerts = []
@@ -1065,6 +1111,7 @@ def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
     alerts = [{"level": "crit", "text": f"GitHub: {e}"}
               for e in dict.fromkeys(raw.get("errors", []))]
     alerts += runner_alerts([r for m in shown for r in m["runners"]], cfg)
+    alerts += jit_alerts(raw.get("jit_missing") or {}, shown, cfg)
     alerts += job_alerts(jobs, cfg)
     stuck = [j for j in jobs if j["status"] == "queued"
              and (j["age_min"] or 0) >= cfg["queued_alert_minutes"]]

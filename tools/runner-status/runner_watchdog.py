@@ -56,6 +56,7 @@ REPORT_FILE = os.path.join(STATE_DIR, "watchdog.json")
 ATTEMPTS_FILE = os.path.join(STATE_DIR, "watchdog-attempts.json")
 MAINTENANCE_FILE = os.path.join(STATE_DIR, "maintenance.json")
 LOCK_FILE = os.path.join(STATE_DIR, "watchdog.lock")
+JIT_PREFIX = "com.ghostnet.jit."
 MAX_TRIES_PER_HOUR = 3
 BACKOFF_MINUTES = (2, 4, 8)
 MIN_FREE_BYTES = 2 * 1024 ** 3
@@ -173,6 +174,8 @@ class Watchdog:
         self.dry_run = dry_run
         self.jit_command = jit_command
         mcfg = next((m for m in cfg["machines"] if m["name"] == machine), {})
+        self.jit_slots = list(mcfg.get("jit_slots") or [])
+        self.done: set[tuple] = set()  # commands already run in this pass
         self.vm_patterns = {vm: re.compile(p) for vm, p in (mcfg.get("vms") or {}).items()}
         self.runner_rx = re.compile(mcfg.get("runner_pattern", "$^"))
 
@@ -307,6 +310,43 @@ class Watchdog:
                     names.append(r["name"])
         return sorted(set(names))
 
+    def check_jit_slots(self, ctx: dict, attempts: dict, now: float) -> dict:
+        """One-job runners: each slot is a Mac LaunchAgent (com.ghostnet.jit.<slot>)
+        that mints a config, runs one job in a VM and loops. If that agent is
+        not running, kickstart it; if its VM is stopped, start the VM. The
+        watchdog never mints tokens or registers runners itself."""
+        out = {}
+        code, text = self.host.run(["launchctl", "list"], timeout=10)
+        jobs = {}
+        for line in text.splitlines() if code == 0 else []:
+            parts = line.split("\t") if "\t" in line else line.split()
+            if len(parts) == 3 and parts[2].startswith(JIT_PREFIX):
+                jobs[parts[2][len(JIT_PREFIX):]] = parts[0].strip().isdigit()
+        started: set[str] = set()
+        for slot in self.jit_slots:
+            reason = maintenance_reason(slot, ctx["maintenance"], now)
+            if reason:
+                out[slot] = {"cause": "maintenance", "detail": f"draining: {reason}",
+                             "action": None, "result": None, "at": utcnow_iso()}
+                continue
+            vm = next((v for v, rx in self.vm_patterns.items() if rx.search(slot)), None)
+            status = ctx["vms"].get(vm) if vm else None
+            if vm and status is not None and status != "Running":
+                diag = {"cause": "vm-stopped", "detail": f"VM {vm} is {status}",
+                        "action": None if vm in started else ["limactl", "start", vm]}
+                started.add(vm)
+                out[slot] = self.act(f"vm:{vm}", diag, attempts, now)
+            elif slot not in jobs:
+                out[slot] = {"cause": "no-service", "at": utcnow_iso(), "action": None,
+                             "result": None, "detail": f"LaunchAgent {JIT_PREFIX}{slot} is not "
+                             "loaded; the watchdog never registers runners, so load it by hand"}
+            elif not jobs[slot]:
+                diag = {"cause": "service-dead", "detail": f"{JIT_PREFIX}{slot} has no process",
+                        "action": ["launchctl", "kickstart", "-k",
+                                   f"gui/{self.host.uid()}/{JIT_PREFIX}{slot}"]}
+                out[slot] = self.act(f"jit:{slot}", diag, attempts, now)
+        return out
+
     def run_once(self) -> dict:
         now = time.time()
         report: dict = {"machine": self.machine, "checked_at": utcnow_iso(), "runners": {},
@@ -342,6 +382,11 @@ class Watchdog:
                 elif action[:2] == ["limactl", "start"]:
                     started_vms.add(action[2])
                 report["runners"][name] = self.act(name, diag, attempts, now)
+        if self.jit_slots:
+            maint = load_json(MAINTENANCE_FILE, {})
+            jit_ctx = {"vms": vms, "maintenance": maint.get("entries", [])
+                       if isinstance(maint, dict) else []}
+            report["runners"].update(self.check_jit_slots(jit_ctx, attempts, now))
         keep = {k: [t for t in v if t > now - 3600] for k, v in attempts.items()}
         if not self.dry_run:
             write_json(ATTEMPTS_FILE, {k: v for k, v in keep.items() if v})
@@ -353,6 +398,10 @@ class Watchdog:
         cmd = diag.get("action")
         if not cmd:
             return entry
+        if tuple(cmd) in self.done:  # e.g. one VM start covers every runner in it
+            entry["action"], entry["result"] = " ".join(cmd), "already done this pass"
+            return entry
+        self.done.add(tuple(cmd))
         ok, why = may_act(attempts.get(key, []), now)
         entry["action"] = " ".join(cmd)
         if not ok:

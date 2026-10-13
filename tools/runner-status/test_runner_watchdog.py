@@ -69,6 +69,7 @@ class WatchdogTest(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         self.cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        self.cfg["machines"][0]["jit_slots"] = []  # tests opt in
 
     def run_dog(self, host, dry_run=False, jit=None):
         return wd.Watchdog(self.cfg, "Mac Studio", host, dry_run=dry_run,
@@ -189,6 +190,32 @@ class WatchdogTest(unittest.TestCase):
                                                                  rs.utcnow())["alerts"]}
         self.assertEqual(alerts["Draining for maintenance: gh-ubuntu-1 (draining: JIT)"], "info")
         self.assertTrue(any("asleep, off, or off the network" in t for t in alerts))
+
+    def test_jit_slots_kickstarted_vm_started_never_registered(self):
+        launchd = ("PID\tStatus\tLabel\n501\t0\tcom.ghostnet.jit.studio-ubuntu-1\n"
+                   "-\t1\tcom.ghostnet.jit.studio-ubuntu-2\n")
+        host = FakeHost([], vms={"gh-ubuntu": "Running", "gh-build": "Stopped"}, launchd=launchd)
+        self.cfg["machines"][0]["jit_slots"] = ["studio-ubuntu-1", "studio-ubuntu-2",
+                                                "studio-ubuntu-3", "studio-build-1"]
+        rep = self.run_dog(host)["runners"]
+        self.assertNotIn("studio-ubuntu-1", rep)  # running: nothing to say
+        self.assertEqual(rep["studio-ubuntu-2"]["cause"], "service-dead")
+        self.assertEqual(rep["studio-ubuntu-3"]["cause"], "no-service")
+        self.assertIsNone(rep["studio-ubuntu-3"]["action"])
+        self.assertEqual(rep["studio-build-1"]["cause"], "vm-stopped")
+        self.assertEqual(host.ran, [
+            ["launchctl", "kickstart", "-k", "gui/501/com.ghostnet.jit.studio-ubuntu-2"],
+            ["limactl", "start", "gh-build"]])
+
+    def test_jit_slot_in_maintenance_is_draining(self):
+        with open(wd.MAINTENANCE_FILE, "w") as fh:
+            json.dump({"entries": [{"runner": "^studio-(ubuntu|build)-", "reason": "JIT conversion"}]},
+                      fh)
+        host = FakeHost([], vms={"gh-ubuntu": "Stopped"})
+        self.cfg["machines"][0]["jit_slots"] = ["studio-ubuntu-1"]
+        rep = self.run_dog(host)["runners"]
+        self.assertEqual(rep["studio-ubuntu-1"]["cause"], "maintenance")
+        self.assertEqual(host.ran, [])
 
     def test_plist(self):
         import contextlib
