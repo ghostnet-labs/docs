@@ -43,7 +43,9 @@ python3 tools/runner-status/runner_status.py serve --demo
 2. Name `runner-status`, expiration 1 year, **Resource owner: ghostnet-labs**.
 3. Repository access: **All repositories**.
 4. Repository permissions: **Actions: Read-only** (Metadata read-only is added
-   automatically).
+   automatically). Optional: **Pull requests: Read-only**, so a job whose run
+   doesn't name its PR still shows it (matched by branch). Without it, those
+   jobs show only the branch, and the page asks again every 10 minutes.
 5. Organization permissions: **Self-hosted runners: Read-only**.
 6. Generate, copy the token.
 7. If the org asks for approval, approve it at

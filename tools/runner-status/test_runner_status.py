@@ -194,6 +194,7 @@ class FakeGitHub:
         self.mu = threading.Lock()  # protects calls
         self.calls = []
         self.rate_remaining = 4999
+        self.pulls_denied = {}
 
     def get(self, path, params=None):
         with self.mu:
@@ -257,7 +258,6 @@ class PollerTest(unittest.TestCase):
         self.assertEqual(published, [])
         self.assertFalse(any(c.endswith("/workflows") for c in gh.calls[before:]))
 
-
     def test_sweep_finishes_while_usage_takes_the_client_lock(self):
         from unittest import mock
         cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
@@ -272,7 +272,6 @@ class PollerTest(unittest.TestCase):
             t.join(10)
         self.assertFalse(t.is_alive(), "fetch() deadlocked on the GitHub client lock")
         self.assertEqual(out[0]["rate"]["remaining"], 4999)
-
 
     def test_job_pr_found_by_branch_when_run_lists_none(self):
         class Fake(FakeGitHub):
@@ -300,6 +299,28 @@ class PollerTest(unittest.TestCase):
         jobs = rs.Poller.fetch_jobs(gh, "o", ["docs"], [])
         by_workflow = {j["workflow"]: j["prs"] for j in jobs}
         self.assertEqual(by_workflow, {"Manet merge gate": [96], "Docs": []})
+        self.assertEqual(gh.calls.count("/repos/o/docs/pulls"), 1)
+
+    def test_refused_pr_list_is_not_retried_every_poll(self):
+        class Fake(FakeGitHub):
+            def get(self, path, params=None):
+                with self.mu:
+                    self.calls.append(path)
+                if path.endswith("/actions/runs") and params["status"] == "in_progress":
+                    return {"workflow_runs": [
+                        {"name": "Gate", "event": "pull_request", "head_branch": "feat",
+                         "head_repository": {"full_name": "o/docs"},
+                         "jobs_url": "jobs/docs/1", "pull_requests": []}]}
+                if path.endswith("/actions/runs"):
+                    return {"workflow_runs": []}
+                if path.startswith("jobs/"):
+                    return {"jobs": [job("in_progress", ["self-hosted"], 2)]}
+                raise rs.GitHubError("missing permission")  # /pulls without the scope
+
+        gh = Fake()
+        for _ in range(3):
+            jobs = rs.Poller.fetch_jobs(gh, "o", ["docs"], [])
+            self.assertEqual(jobs[0]["prs"], [])
         self.assertEqual(gh.calls.count("/repos/o/docs/pulls"), 1)
 
 
@@ -434,6 +455,143 @@ class RateLimitTest(unittest.TestCase):
         cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
         st = rs.build_state({"rate": {"remaining": 100, "limit": 5000}}, cfg, NOW)
         self.assertTrue(any("API quota low" in a["text"] for a in st["alerts"]))
+
+
+class LocalGitHub:
+    """A local HTTP stand-in for api.github.com, driven through the real
+    GitHub client (ETags, rate headers, locks). `delay` slows the job
+    endpoints; `fail` maps a path fragment to an HTTP status to return."""
+
+    def __init__(self, test, delay=0.0, fail=None):
+        from http.server import BaseHTTPRequestHandler
+        fake = self
+        self.delay, self.fail = delay, dict(fail or {})
+        self.mu = threading.Lock()  # protects hits
+        self.hits = []
+
+        class H(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                path = self.path.split("?")[0]
+                with fake.mu:
+                    fake.hits.append(path)
+                for frag, code in fake.fail.items():
+                    if frag in path:
+                        return self.reply(code, {"message": "boom"})
+                if "/actions/runs" in path or path.startswith("/jobs/"):
+                    threading.Event().wait(fake.delay)
+                self.reply(200, fake.answer(path, self.path))
+
+            def reply(self, code, obj):
+                body = json.dumps(obj).encode()
+                etag = '"%x"' % (hash(body) & 0xffffffff)
+                headers = {"X-RateLimit-Remaining": "4900", "X-RateLimit-Limit": "5000",
+                           "X-RateLimit-Reset": "1760000000"}
+                if code == 200 and self.headers.get("If-None-Match") == etag:
+                    code, body = 304, b""
+                self.send_response(code)
+                for k, v in headers.items():
+                    self.send_header(k, v)
+                if code == 200:
+                    self.send_header("ETag", etag)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+
+        self.srv = rs.ThreadingHTTPServer(("127.0.0.1", 0), H)
+        t = threading.Thread(target=self.srv.serve_forever, daemon=True)
+        t.start()
+        test.addCleanup(t.join)
+        test.addCleanup(self.srv.server_close)
+        test.addCleanup(self.srv.shutdown)
+        self.url = f"http://127.0.0.1:{self.srv.server_port}"
+
+    def answer(self, path, full):
+        if path.endswith("/actions/runners"):
+            return {"runners": [runner(1, "studio-build-1", busy=True)]}
+        if path.endswith("/repos"):
+            return [{"name": "firmware"}]
+        if path.endswith("/runner-groups"):
+            return {"runner_groups": []}
+        if path == "/repos/o/firmware/actions/runs" and "status=in_progress" in full:
+            return {"workflow_runs": [{"name": "Build", "head_branch": "main",
+                                       "jobs_url": self.url + "/jobs/1",
+                                       "pull_requests": [{"number": 41}]}]}
+        if path.startswith("/jobs/"):
+            return {"jobs": [job("in_progress", ["self-hosted"], 2,
+                                 runner_name="studio-build-1")]}
+        if path.endswith("/workflows"):
+            return {"workflows": []}
+        return {}
+
+
+class StartupTest(unittest.TestCase):
+    """Runs the poller loop with the real GitHub client against a local fake,
+    so a hang in the startup path fails the test instead of the page."""
+
+    def run_polls(self, fake, polls=2, timeout=15):
+        from unittest import mock
+        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        cfg["org"] = "o"
+        for m in cfg["machines"]:
+            m["agent"] = ""
+        poller = rs.Poller(cfg, None)
+        snaps = []
+        orig = poller.publish
+
+        def publish(raw):
+            orig(raw)
+            snaps.append(poller.snapshot())
+
+        poller.publish = publish
+        raws = []
+        env = {"NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"}
+        with mock.patch.object(rs, "API", fake.url), \
+                mock.patch.object(rs, "read_token", return_value=("github_pat_x", "test")), \
+                mock.patch.dict(os.environ, env):
+            def loop():
+                for _ in range(polls):
+                    raws.append(poller.poll_once())
+            t = threading.Thread(target=loop, daemon=True)
+            t.start()
+            t.join(timeout)
+        self.assertFalse(t.is_alive(), "poller hung during startup")
+        return poller, snaps, raws
+
+    def test_startup_finishes_and_second_poll_is_free(self):
+        fake = LocalGitHub(self)
+        poller, snaps, raws = self.run_polls(fake)
+        self.assertTrue(snaps[0]["loading"])  # runners painted before jobs
+        st = poller.snapshot()
+        self.assertFalse(st["loading"])
+        self.assertEqual(st["counts"]["running"], 1)
+        self.assertEqual(st["machines"][0]["runners"][0]["job"]["prs"][0]["number"], 41)
+        self.assertEqual(st["rate"]["remaining"], 4900)
+        self.assertGreater(raws[1]["rate"]["free_304s"], 0)  # unchanged data cost nothing
+
+    def test_startup_with_slow_github_paints_runners_first(self):
+        fake = LocalGitHub(self, delay=0.5)
+        poller, snaps, _ = self.run_polls(fake, polls=1)
+        self.assertTrue(snaps[0]["loading"])
+        self.assertEqual(snaps[0]["machines"][0]["counts"]["busy"], 1)
+        self.assertFalse(poller.snapshot()["loading"])
+
+    def test_startup_with_failing_github_does_not_hang(self):
+        fake = LocalGitHub(self, fail={"/actions/runners": 401})
+        poller, _, raws = self.run_polls(fake)
+        self.assertTrue(raws[0]["blocked"])
+        st = poller.snapshot()
+        self.assertTrue(any("401" in e or "rejected" in e for e in st["errors"]), st["errors"])
+
+    def test_startup_with_failing_job_endpoints_does_not_hang(self):
+        fake = LocalGitHub(self, fail={"/actions/runs": 500})
+        poller, _, raws = self.run_polls(fake)
+        self.assertFalse(raws[0].get("blocked"))
+        st = poller.snapshot()
+        self.assertFalse(st["loading"])
+        self.assertTrue(st["errors"])
 
 
 class ParserTest(unittest.TestCase):
