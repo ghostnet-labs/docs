@@ -1,0 +1,424 @@
+{
+  "_comment": "Reviewed exceptions to project/scripts/check_runners.py. Each entry names the rules it waives and why. Remove an entry when its workflow is fixed; the check warns about entries nothing uses.",
+  "entries": [
+    {
+      "repo": "OpenVLM",
+      "workflow": "codeql.yml",
+      "job": "analyze",
+      "rules": [
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "Fix in flight: cancel superseded pull request runs and set timeout-minutes (hosted-runner thread, 2026-10-13)."
+    },
+    {
+      "repo": "OpenVLM",
+      "workflow": "manet-auto-merge.yml",
+      "job": "merge",
+      "rules": [
+        "hosted-cron",
+        "hosted-runner",
+        "pr-concurrency"
+      ],
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+    },
+    {
+      "repo": "OpenVLM",
+      "workflow": "release.yml",
+      "job": "release",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Tag-only release with a write-all token; stays on GitHub-hosted runners."
+    },
+    {
+      "repo": "OpenVLM",
+      "workflow": "test-go.yml",
+      "job": "lint",
+      "rules": [
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "Fix in flight: cancel superseded pull request runs and set timeout-minutes (hosted-runner thread, 2026-10-13)."
+    },
+    {
+      "repo": "OpenVLM",
+      "workflow": "test-go.yml",
+      "job": "test",
+      "rules": [
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "Fix in flight: cancel superseded pull request runs and set timeout-minutes (hosted-runner thread, 2026-10-13)."
+    },
+    {
+      "repo": "docs",
+      "workflow": "manet-auto-merge.yml",
+      "job": "merge",
+      "rules": [
+        "hosted-cron",
+        "hosted-runner",
+        "pr-concurrency"
+      ],
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "build-firmware.yml",
+      "job": "build",
+      "rules": [
+        "hosted-runner"
+      ],
+      "reason": "Firmware board build. Same-repo PRs move to [self-hosted, openwrt-build] after the Mac pilot passes (ci-health/hosted-runners/firmware-board-builds-on-mac.patch)."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "build-pr-bcm2710.yml",
+      "job": "build-ekh-bcm2710",
+      "rules": [
+        "pr-concurrency"
+      ],
+      "reason": "Board build callers. cancel-in-progress lands with the Mac board-build move (same patch) so it does not start 6 hosted builds on its own."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "build-pr-bcm2711.yml",
+      "job": "build-ekh-bcm2711",
+      "rules": [
+        "pr-concurrency"
+      ],
+      "reason": "Board build callers. cancel-in-progress lands with the Mac board-build move (same patch) so it does not start 6 hosted builds on its own."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "build-pr-bcm2712.yml",
+      "job": "build-ekh-bcm2712",
+      "rules": [
+        "pr-concurrency"
+      ],
+      "reason": "Board build callers. cancel-in-progress lands with the Mac board-build move (same patch) so it does not start 6 hosted builds on its own."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "build-pr-halowlink2.yml",
+      "job": "build-halowlink2",
+      "rules": [
+        "pr-concurrency"
+      ],
+      "reason": "Board build callers. cancel-in-progress lands with the Mac board-build move (same patch) so it does not start 6 hosted builds on its own."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "build-pr-hd01v2.yml",
+      "job": "build-hd01-v2",
+      "rules": [
+        "pr-concurrency"
+      ],
+      "reason": "Board build callers. cancel-in-progress lands with the Mac board-build move (same patch) so it does not start 6 hosted builds on its own."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "build-pr-venice.yml",
+      "job": "build-venice",
+      "rules": [
+        "pr-concurrency"
+      ],
+      "reason": "Board build callers. cancel-in-progress lands with the Mac board-build move (same patch) so it does not start 6 hosted builds on its own."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "build-release.yml",
+      "job": "publish-packages",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Tag-only firmware release with the package signing key; stays hosted."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "build-release.yml",
+      "job": "release",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Tag-only firmware release with the package signing key; stays hosted."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "hardware-qualification.yml",
+      "job": "qualification-tools",
+      "rules": [
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "Fix in flight: cancel superseded pull request runs and set timeout-minutes (hosted-runner thread, 2026-10-13)."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "kernel.yml",
+      "job": "build-kernels",
+      "rules": [
+        "pinned-reusable"
+      ],
+      "reason": "Upstream OpenWrt reusable workflow at @main. To be vendored, pinned and moved to openwrt-build after the board move."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "label-kernel.yml",
+      "job": "build-kernels-label",
+      "rules": [
+        "pinned-reusable",
+        "pr-concurrency"
+      ],
+      "reason": "Upstream label-triggered workflow at @main; its jobs skip unless a ci:kernel:* label is added."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "label-target.yml",
+      "job": "build-target-label",
+      "rules": [
+        "pinned-reusable",
+        "pr-concurrency"
+      ],
+      "reason": "Upstream label-triggered workflow at @main; its jobs skip unless a ci:target:* label is added."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "labeler.yml",
+      "job": "labeler",
+      "rules": [
+        "hosted-runner",
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "pull_request_target with a write token; removal is waiting on Justin."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "manet-auto-merge.yml",
+      "job": "merge",
+      "rules": [
+        "hosted-cron",
+        "hosted-runner",
+        "pr-concurrency"
+      ],
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "toolchain.yml",
+      "job": "build-toolchains",
+      "rules": [
+        "pinned-reusable"
+      ],
+      "reason": "Upstream OpenWrt reusable workflow at @main. To be vendored and pinned with kernel.yml."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "tools.yml",
+      "job": "build-tools",
+      "rules": [
+        "pinned-reusable"
+      ],
+      "reason": "Upstream OpenWrt reusable workflow at @main. To be vendored and pinned with kernel.yml."
+    },
+    {
+      "repo": "luci",
+      "workflow": "build.yml",
+      "job": "build",
+      "rules": [
+        "hosted-runner",
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "Uses the x86_64 OpenWrt SDK Docker image; moves when the Mac build VMs get Docker with amd64 emulation."
+    },
+    {
+      "repo": "luci",
+      "workflow": "jsdoc.yml",
+      "job": "deploy",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Upstream job guarded to openwrt/luci; never runs here."
+    },
+    {
+      "repo": "luci",
+      "workflow": "manet-auto-merge.yml",
+      "job": "merge",
+      "rules": [
+        "hosted-cron",
+        "hosted-runner",
+        "pr-concurrency"
+      ],
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+    },
+    {
+      "repo": "openmanetd",
+      "workflow": "build-frontend.yml",
+      "job": "build-frontend",
+      "rules": [
+        "hosted-runner",
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "Pushes built assets with contents:write; moving it is waiting on Justin."
+    },
+    {
+      "repo": "openmanetd",
+      "workflow": "codeql.yml",
+      "job": "analyze",
+      "rules": [
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "Fix in flight: cancel superseded pull request runs and set timeout-minutes (hosted-runner thread, 2026-10-13)."
+    },
+    {
+      "repo": "openmanetd",
+      "workflow": "e2e-frontend.yml",
+      "job": "e2e",
+      "rules": [
+        "hosted-runner",
+        "pr-concurrency"
+      ],
+      "reason": "Needs libpam and Playwright system libraries preinstalled on the Linux runner VM first."
+    },
+    {
+      "repo": "openmanetd",
+      "workflow": "manet-auto-merge.yml",
+      "job": "merge",
+      "rules": [
+        "hosted-cron",
+        "hosted-runner",
+        "pr-concurrency"
+      ],
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+    },
+    {
+      "repo": "openmanetd",
+      "workflow": "release.yml",
+      "job": "release",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Tag-only release with a write-all token; stays on GitHub-hosted runners."
+    },
+    {
+      "repo": "openmanetd",
+      "workflow": "test-frontend.yml",
+      "job": "frontend_test",
+      "rules": [
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "Fix in flight: cancel superseded pull request runs and set timeout-minutes (hosted-runner thread, 2026-10-13)."
+    },
+    {
+      "repo": "openmanetd",
+      "workflow": "test-go.yml",
+      "job": "lint",
+      "rules": [
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "Fix in flight: cancel superseded pull request runs and set timeout-minutes (hosted-runner thread, 2026-10-13)."
+    },
+    {
+      "repo": "openmanetd",
+      "workflow": "test-go.yml",
+      "job": "test",
+      "rules": [
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "Fix in flight: cancel superseded pull request runs and set timeout-minutes (hosted-runner thread, 2026-10-13)."
+    },
+    {
+      "repo": "openmanetd",
+      "workflow": "test-go.yml",
+      "job": "integration_test",
+      "rules": [
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "Fix in flight: cancel superseded pull request runs and set timeout-minutes (hosted-runner thread, 2026-10-13)."
+    },
+    {
+      "repo": "openmanetd",
+      "workflow": "test-go.yml",
+      "job": "benchmark",
+      "rules": [
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "Fix in flight: cancel superseded pull request runs and set timeout-minutes (hosted-runner thread, 2026-10-13)."
+    },
+    {
+      "repo": "packages",
+      "workflow": "build-packages.yml",
+      "job": "changes",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Uses the x86_64 OpenWrt SDK; moves when the Mac build VMs get Docker with amd64 emulation."
+    },
+    {
+      "repo": "packages",
+      "workflow": "build-packages.yml",
+      "job": "build",
+      "rules": [
+        "hosted-runner"
+      ],
+      "reason": "Uses the x86_64 OpenWrt SDK; moves when the Mac build VMs get Docker with amd64 emulation."
+    },
+    {
+      "repo": "packages",
+      "workflow": "manet-auto-merge.yml",
+      "job": "merge",
+      "rules": [
+        "hosted-cron",
+        "hosted-runner",
+        "pr-concurrency"
+      ],
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+    },
+    {
+      "repo": "protobufs",
+      "workflow": "buf-ci.yaml",
+      "job": "buf",
+      "rules": [
+        "job-timeout",
+        "pr-concurrency"
+      ],
+      "reason": "Fix in flight: cancel superseded pull request runs and set timeout-minutes (hosted-runner thread, 2026-10-13)."
+    },
+    {
+      "repo": "protobufs",
+      "workflow": "manet-auto-merge.yml",
+      "job": "merge",
+      "rules": [
+        "hosted-cron",
+        "hosted-runner",
+        "pr-concurrency"
+      ],
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+    },
+    {
+      "repo": "protobufs",
+      "workflow": "release.yml",
+      "job": "release",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Tag-only release with a write-all token; stays on GitHub-hosted runners."
+    }
+  ]
+}
