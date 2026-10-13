@@ -806,7 +806,10 @@ def push(args) -> None:
         except urllib.error.HTTPError as exc:
             print(f"push rejected: {exc.code} {exc.read().decode(errors='replace')}", flush=True)
         except (urllib.error.URLError, OSError) as exc:
-            print(f"push failed: {exc}", flush=True)
+            print(f"push failed: cannot reach the Studio page at {url} ({exc}). The page "
+                  "must listen on the network (serve --bind 0.0.0.0, the default), not "
+                  "only on 127.0.0.1, and the Studio must be awake and on the same LAN.",
+                  flush=True)
         try:
             stop.wait(args.interval)
         except KeyboardInterrupt:

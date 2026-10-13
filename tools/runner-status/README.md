@@ -84,6 +84,11 @@ already serves. The Studio accepts stats only for machines configured with
 fields, and shows "stats missing" if a pushing Mac goes quiet for 3 minutes.
 Its runners (`macbook-pro-build-1`) are matched by name.
 
+**Prerequisite:** the Studio page must listen on the network, not only on
+the Studio itself. `serve` binds `0.0.0.0` by default; if it was started with
+`--bind 127.0.0.1`, remove that and restart it first. Check from the Pro with
+`curl -sf http://<studio-name>.local:8090/api/state >/dev/null && echo reachable`.
+
 On the Pro:
 
 ```sh
@@ -94,8 +99,9 @@ python3 runner_status.py launchd push --to http://<studio-name>.local:8090 \
 launchctl load ~/Library/LaunchAgents/com.ghostnet.runner-status.push.plist
 ```
 
-Log: `~/Library/Logs/runner-status-push.log` ("push failed" means the Pro
-cannot reach the Studio page).
+Log: `~/Library/Logs/runner-status-push.log`. "push failed: cannot reach the
+Studio page" means the prerequisite above is not met or the Studio is asleep;
+the MacBook Pro card on the page then says "stats missing".
 
 Optional shared key, so nothing else on the LAN can post stats: put the same
 random string in `~/.config/runner-status/push-key` on both Macs
