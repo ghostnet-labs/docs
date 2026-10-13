@@ -5,7 +5,7 @@
 
 ## Why this exists
 
-B-03 is the AsiaRF AW7916-AED (MediaTek MT7916, `mt7915e`, M.2 3052 A+E key). Wi-Fi mesh backhaul is a hard requirement (D-026). The thermal update on docs branch `gho12-thermal-tray` ([v1-thermal-update-tray.md](https://github.com/ghostnet-labs/docs/blob/gho12-thermal-tray/project/hardware/v1-thermal-update-tray.md), commit 7a572a7, not merged) puts the card at about 97 °C at the D-028 hot endpoint (43.3 °C ambient, 18.5 W, finned lid). AsiaRF rates the card −10 to +70 °C. That is about 27 K over.
+B-03 is the AsiaRF AW7916-AED (MediaTek MT7916, `mt7915e`, M.2 3052 A+E key). Wi-Fi mesh backhaul is a hard requirement (D-026). The thermal update [v1-thermal-update-tray.md](v1-thermal-update-tray.md) puts the card at about 97 °C at the D-028 hot endpoint (43.3 °C ambient, 18.5 W, finned lid). AsiaRF rates the card −10 to +70 °C. That is about 27 K over.
 
 This file looks for M.2 Wi-Fi 6/6E cards that run on mainline OpenWrt `mt76` and carry an industrial or extended temperature rating. It also checks what AsiaRF's 70 °C means.
 
@@ -23,7 +23,7 @@ This file looks for M.2 Wi-Fi 6/6E cards that run on mainline OpenWrt `mt76` and
 - **Qualcomm QCN9074 has mesh point and industrial grades,** but it is not `mt76`. openmanetd's Wi-Fi backhaul runs only on MT7915/MT7916 (D-034). The industrial QCN9074 card found is Mini PCIe, and the M.2 one is 57 × 63 mm on 5 V. (Verified driver; card data partly Unverified)
 - **AsiaRF does not say what 70 °C means.** The product page and the one-page datasheet give "Operating: −10 °C ~ +70 °C" with no ambient, case or junction note. No AW7916 variant has a wider rating. (Verified, 2026-10-09)
 - **A higher rating alone would not close the gap.** An 85 °C card on today's 2.5 K/W pad still fails by about 12 K. It passes only with a pad path of 1.3 K/W or less. (Calculated, §4)
-- **Recommended default: keep the AW7916-AED.** Ask AsiaRF what the 70 °C is measured on and whether an extended grade or screening exists. Bench-test the card's own die sensor at the hot endpoint. Keep the AsiaRF AW7915-AED as a pin-compatible, same-driver second source for supply, not for heat.
+- **Recommended default: keep the AW7916-AED.** Ask AsiaRF what the 70 °C is measured on and whether an extended grade or screening exists. Bench-test the card's own die sensor at the hot endpoint. The AsiaRF AW7915-AED is a pin-compatible, same-driver second source for supply, not for heat, but naming it needs a new decision because R-07 retired MT7915 for V1.
 
 ## 1. Sources
 
@@ -149,7 +149,7 @@ The steps that follow from it:
 1. **Ask AsiaRF** (Justin's call; no vendor was contacted): what the 70 °C is measured on (ambient air, shield can, PCB); whether an extended or industrial grade, screening or a derating curve exists for the AW7916-AED; the heatsink's thermal resistance; whether the card has a shield can; and the FCC ID of the M.2 card.
 2. **Bench-test the card hot.** In thermal test T4 (hot endpoint) and T6 (Wi-Fi pad A/B) of [v1-thermal-rf-plan.md](v1-thermal-rf-plan.md), log the MT7916 die sensor (`temp1_input` under the card's hwmon node) and `throttle1`, plus a thermocouple on the shield or the hottest part. Run sustained mesh traffic at full TX power. Pass means no throttle state, no link loss and a die reading with margin to the 110 °C trip. This turns the unknown "70 °C" into a measured margin.
 3. **Treat the pad as the main lever.** §4 shows that even an 85 °C card needs a card-to-lid path of 1.3 K/W or less. The AsiaRF heatsink, a better pad, or a lid boss down to the card are worth sizing under [GHO-7](https://linear.app/ghostnet-labs/issue/GHO-7) whatever card is used.
-4. **Keep the AsiaRF AW7915-AED as a named second source.** Same vendor, same driver, same pins, same size. It drops 6 GHz and costs US$24.00. It is a supply backup, not a thermal fix.
+4. **The AsiaRF AW7915-AED as a second source would need a new decision.** R-07 in [../decisions.md](../decisions.md) retired MT7915 candidates for V1, so naming this MT7915 card takes a D row that reverses R-07 for it. Same vendor, same driver, same pins, same size. It drops 6 GHz and costs US$24.00. It is a supply backup, not a thermal fix.
 5. **Hold the Wallys DR7915** as the only MT79xx part with a −40 °C lower limit. It would need a Mini PCIe socket. It fixes D-028's cold endpoint (−17.8 °C, below AsiaRF's −10 °C), not the hot one.
 
 Switch to another card only if AsiaRF says the 70 °C is a die or shield limit with no extended grade, **and** the bench shows throttling at the hot endpoint. Even then there is no `mt76` M.2 card to switch to; the choice would be a QCN9074 card plus openmanetd work, or a Mini PCIe socket.
@@ -159,7 +159,7 @@ Switch to another card only if AsiaRF says the 70 °C is a die or shield limit w
 For the records owner to apply only if the project owner accepts. No IDs are assigned.
 
 **[v1-selections.md](v1-selections.md) B-03, Status column, append:**
-"Temperature: AsiaRF rates −10 to +70 °C operating with no ambient, case or junction basis (checked 2026-10-09). No `mt76` M.2 card with a wider rating was found ([v1-wifi-card-alternatives.md](v1-wifi-card-alternatives.md)). Second source: AsiaRF AW7915-AED (MT7915DAN, same driver and pins, no 6 GHz). Bench gate adds the MT7916 die temperature and throttle state at the D-028 hot endpoint (T4, T6)."
+"Temperature: AsiaRF rates −10 to +70 °C operating with no ambient, case or junction basis (checked 2026-10-09). No `mt76` M.2 card with a wider rating was found ([v1-wifi-card-alternatives.md](v1-wifi-card-alternatives.md)). Bench gate adds the MT7916 die temperature and throttle state at the D-028 hot endpoint (T4, T6)."
 
 **[v1-thermal-rf-plan.md](v1-thermal-rf-plan.md) §4, T4 and T6, add:**
 "Log the MT7916 hwmon `temp1_input` and `throttle1` with a shield thermocouple under sustained full-power mesh traffic."
@@ -173,7 +173,7 @@ Each has a recommended default. **Any purchase or vendor contact is Justin's dec
 
 1. **Card for V1.** (a) Keep the AW7916-AED and bench-test it hot; (b) switch now to a QCN9074 card and port the openmanetd backhaul; (c) redesign for a Mini PCIe socket and the Wallys DR7915. **Default: (a).** Nothing found beats it on rating within `mt76`.
 2. **Vendor question to AsiaRF.** Ask what the 70 °C means and whether an extended grade exists (§6 step 1). **Default: ask.** It costs nothing and decides whether the bench test is the whole answer.
-3. **Second source.** Name the AW7915-AED as an alternate for B-03, and buy one for the bench alongside the two AW7916-AED cards. **Default: name it; buying one is Justin's call** (US$24.00 at AsiaRF, recheck at checkout).
+3. **Second source.** Name the AW7915-AED as an alternate for B-03, and buy one for the bench alongside the two AW7916-AED cards. This needs a new decision, because R-07 retired MT7915 candidates for V1. **Recommendation: name it by a D row that reverses R-07 for this card; buying one is Justin's call** (US$24.00 at AsiaRF, recheck at checkout).
 4. **Heatsink and pad.** Size the card-to-lid path for 1.3 K/W or less, and decide whether to use AsiaRF's 30 × 30 × 10 mm heatsink inside it. **Default: size it under GHO-7** before the lid design freezes.
 
 ## Record conflicts
@@ -183,7 +183,6 @@ Found, not resolved. README rule 6 asks for a Linear issue for each. This file o
 1. **Key type.** The brief calls the card "M.2 3052 M-key". D-026, B-03, S1 and the firmware floorplan (S16) say A+E key in an E-key socket. This file follows the records.
 2. **FCC ID.** The AW7916-AED page shows a placeholder ("TKZXXXXXX-XXX") in its description and TKZAW7916-NPD (the Mini PCIe card) in its spec block. The audit notes the card photo label reads TKZAW7916-AED. Not checked against the FCC database, which was unreachable.
 3. **Power.** The AW7916-AED page gives both "10 W max, 8 W average, 3 A minimum" and "9 W max, 4 to 8 W average, 2.5 A minimum". Already noted in v1-gpio-and-m2-audit.md conflict 8 and the thermal update conflict 7.
-4. **Thermal update not on main.** §4 uses numbers from v1-thermal-update-tray.md on branch `gho12-thermal-tray` (7a572a7). If that file changes before merge, §4 must be rerun.
 
 ## What remains unverified
 

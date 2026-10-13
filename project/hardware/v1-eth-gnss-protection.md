@@ -29,7 +29,7 @@ This file proposes how to protect the 1000BASE-T MDI that runs from the CM5 to t
 | Pigtail | Not practical | The pigtail is Cat5e or Cat6 cable crimped to 504052 terminals at one end and a T568B plug at the other (B-06). It has no place for windings. |
 | Carrier | **Required** (B-06: "Discrete magnetics on the carrier") | Signal order: CM5 MDI → PHY-side ESD → magnetics → line side → Pico-Lock header. |
 
-**Floorplan fit.** The §18 placeholder is 14 x 9 mm at X 23 to 37, Y 12 to 21, under the RJ45 plug, and the part must be 3.5 mm tall or less (D-025). The header sits at X 41 to 54.5, Y 2 to 9.5, so the line-side run from the magnetics to the header is short, about 5 to 15 mm, which suits the isolated line-side region in [v1-stackup-routing.md](v1-stackup-routing.md) §4.
+**Floorplan fit.** The §18 placeholder is 14 x 9 mm at X 23 to 37, Y 12 to 21, under the RJ45 plug, and the part must be 3.5 mm tall or less (D-025). The header sits at the position D-049 records ([../decisions.md](../decisions.md)), so the line-side run from the magnetics to the header is short, about 5 to 15 mm, which suits the isolated line-side region in [v1-stackup-routing.md](v1-stackup-routing.md) §4.
 
 **The height limit is the hard constraint.** Common 24-pin SMD gigabit modules are tall. The Würth WE-LAN 7490220122 (a 1000BASE-T SMT transformer with PoE+) is 8.8 mm tall with a 17.55 x 14.7 mm body ([datasheet](https://www.we-online.com/components/products/datasheet/7490220122.pdf), fetched 2026-10-09). Low-profile parts exist:
 
