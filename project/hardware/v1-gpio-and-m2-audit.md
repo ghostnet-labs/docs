@@ -1,7 +1,7 @@
 # V1 GPIO and M.2 audit
 
 **Owner:** [GHO-9](https://linear.app/ghostnet-labs/issue/GHO-9), verify carrier pinouts, GPIO muxes and radio sequencing.  
-**Status:** Candidate, 2026-10-09. Desk research only. This file edits no record, selects no part and assigns no D, B or R number. The canonical GPIO ledger is [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md). Until the project owner accepts something here, the ledger and the other owning records win (README rule 6).
+**Status:** Desk research, 2026-10-09. Adopted as working default by D-046 in [../decisions.md](../decisions.md). The canonical GPIO ledger is [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md); it and the other owning records win over this file (README rule 6).
 
 It covers four desk items left on GHO-9:
 
@@ -10,7 +10,7 @@ It covers four desk items left on GHO-9:
 3. A real source for HALOW_FAULT_N and WIFI_FAULT_N, or their deletion (§4).
 4. RP1 / CM5 reset, firmware and device-tree defaults for every retained V1 GPIO (§5).
 
-Then come record conflicts (§6), proposed record text (§7), decisions for the project owner (§8) and what remains unverified (§9).
+Then come the record conflicts still open (§6), the applied record text and decisions (§7 and §8) and what remains unverified (§9).
 
 ## Tags
 
@@ -214,46 +214,20 @@ GPIO0/1 are left alone, because the firmware may probe them as the ID EEPROM bus
 
 ## 6. Record conflicts
 
-README rule 6 says conflicts go to a Linear issue for the project owner. None is resolved here.
+Conflicts 2 to 7 were resolved when D-046 and D-044 were applied to the records. These two remain; D-046 names both. README rule 6 says conflicts go to a Linear issue for the project owner.
 
 | # | Records | Conflict |
 |---|---|---|
 | 1 | Firmware PR #23 (S11) vs D-044 and the ledger | S11 sets `dtoverlay=dwc2,dr_mode=host` with the comment "CM5 USB 2.0 port (pins 103/105) feeds the carrier USB hub". D-044 moved the hub to the USB 2.0 pair of USB3-0 (pins 134/136), which needs no dwc2, and gave pins 103/105 to B-07 in the device role. The B-07 USB gadget console needs dwc2 in peripheral or OTG mode, not host |
-| 2 | Net plan 01_CM5 "Defaults and rules" vs D-044 | The net plan still says "USB 2.0 needs `dtoverlay=dwc2,dr_mode=host` (datasheet §2.4.2)" and ties it to USB_OTG_ID capture. After D-044 that is stale for the same reason as #1 |
-| 3 | Ledger "Electrical sources and boot evidence" vs S11 | The ledger cites PR #23 at 37f8e8d2. The PR head is now c77cd924. The GPIO lines the ledger lists are unchanged at the new head, so only the SHA is stale |
-| 4 | Ledger and v1-reference.md §6 vs S4 §2.3.1 / S5 Figure 6 | Carrier 220 nF capacitors on the card-to-CM5 pair vs Raspberry Pi's own M.2 socket, which has none (§2.2, item 1) |
-| 5 | Ledger sequence step 4 and v1-hw-telemetry-recovery.md §4 vs the M.2 connector | "Enable its USB VBUS" for an M.2 card that has no VBUS contact (§2.2, item 6) |
-| 6 | v1-hw-telemetry-recovery.md §4 vs PCIe behaviour | "`echo 1 > /sys/bus/pci/rescan`; kernel drives PERST#" is a generic assumption (§2.2, item 4) |
-| 7 | Net plan and v1-netplan-blocker-proposals.md K-8 vs S6 §3.1.3 | "An unpowered RP1 input's protection structures would hold GNSS_PPS near ground" vs RP1 pads that are fault-tolerant to 3.63 V with IOVDD at 0 V. The B-27 buffer is still justified by the CM5 no-voltage rule in S4 §4.2.1, so this changes the reasoning, not the part |
 | 8 | Records (D-026, v1-reference.md §5) vs S3 | The records quote "10 W maximum, 8 W average, at least 3 A". The same S3 page also says "9 W maximum, 4 – 8 W average, 3 A recommended, 2.5 A minimum". At 10 W and 3.135 V the card draws 3.19 A, above D-026's 3 A (§2.1) |
 
 ## 7. Proposed record text
 
-For the records owner, if the project owner accepts the defaults in §8. Each item names the file and the place.
-
-1. **v1-pinout-and-sequencing.md, GPIO table, rows 6 and 7.** Replace the function text with: "Planned input from TPS3780D OUT2 (row 6) / OUT1 (row 7): low when HALOW_3V3 / WIFI_3V3 is below about 2.92 V. 10 kΩ pull-up to CM5_3V3. Low while the matching PWR_EN is low is the normal off state, not a fault. Candidate (v1-gpio-and-m2-audit.md §4); bench verification open."
-2. **v1-pinout-and-sequencing.md, Electrical sources and boot evidence, HALOW_FAULT_N / WIFI_FAULT_N row.** Replace with: "TPS3780D dual voltage detector, SENSE1 from WIFI_3V3 and SENSE2 from HALOW_3V3 through 147 kΩ / 100 kΩ, VDD from +3V3_RADIO, open-drain outputs. The TPS22975 itself has no fault output; its thermal shutdown and any rail short show up as a collapsed rail."
-3. **v1-pinout-and-sequencing.md, GPIO table, rows 16 and 22.** Append: "Preferred pin for a future simple digital input such as BRIDGE_ACTIVE_N or PACK_PRESENT (GHO-13). No carrier connection until allocated." Row 22 also gets: "Cannot form an I2C bus: its I2C3_SCL partner, GPIO23, is USB_HUB_RESET_N."
-4. **v1-pinout-and-sequencing.md, AW7916-AED table.** Add 63, 69 and 75 to the GND row, with: "Pin 69 is labelled 'GNDX' in the drawing; it is wired to GND." Change the 41 / 43 row's carrier column to "CM5 PCIe RX P/N, pins 116 / 118, through 0 Ω links in capacitor footprints (220 nF fitted only if the bench shows the card has no TX AC coupling)". Add to the 56 row: "Card behaviour (RF kill, reset or ignored) is undocumented; Unverified."
-5. **v1-pinout-and-sequencing.md, the paragraph after the CM5 physical pin table.** Replace "the peripheral TX path needs the documented 220 nF series capacitors" with "Raspberry Pi's own M.2 socket (CM5 IO datasheet Figure 6) has no carrier capacitors on the card TX path, because add-in cards couple their own transmitters. V1 lays out 0 Ω links in capacitor footprints."
-6. **v1-pinout-and-sequencing.md, working sequence step 4.** Replace "then enable its USB VBUS and enumerate" with "then let it enumerate. An M.2 card takes no VBUS; its USB runs from HALOW_3V3."
-7. **v1-pinout-and-sequencing.md, Electrical sources, the firmware paragraph.** Change the PR #23 SHA to c77cd924 and add: "RP1 GPIO reset state: function NULL, output disabled, input disabled; per-pin pull Unverified (RP1 peripherals §3.1.4). `gpio=` directives apply a few seconds after power-up."
-8. **v1-schematic-netplan.md, 06_POWER TPS22975 table, ON row.** Replace "Proposed: pull-down to GND" with "Proposed: 4.7 kΩ pull-down to GND (holds ON under its 0.5 V VIL against a 35 kΩ RP1 pull-up at reset)". Make the same change in the 07_SYSTEM GPIO defaults row for HALOW_PWR_EN, WIFI_PWR_EN.
-9. **v1-schematic-netplan.md, 07_SYSTEM.** Add TPS3780D to the parts list and change the HALOW_FAULT_N, WIFI_FAULT_N row of the GPIO defaults table to "10 kΩ pull-up to CM5_3V3; source TPS3780D (option A)". Add a TP on PCIE_PWR_EN (CM5 pin 106) in 01_CM5.
-10. **v1-schematic-netplan.md, 01_CM5 Defaults and rules.** Remove the `dwc2,dr_mode=host` bullet, or replace it with "B-07 on pins 103/105 needs dwc2 in peripheral or OTG mode for the USB gadget console (GHO-19)".
-11. **v1-reference.md §13, radio load switches.** Replace "the planned radio-fault input sources remain unselected" with "a TPS3780D dual voltage detector on WIFI_3V3 and HALOW_3V3 supplies the radio fault inputs (candidate)".
-12. **v1-hw-telemetry-recovery.md §3, rows 6 and 7.** Replace the notes with "TPS3780D rail detector; a fault only when PWR_EN is high and the line stays low after the settle time". In §4, replace the rescan sentence with "Release PERST# and retrain the link: method to be chosen by bench test (rescan, host-controller unbind/bind, or reboot)", and delete the HaLow VBUS paragraph.
+Applied. The twelve edits proposed here are in the ledger, [v1-schematic-netplan.md](v1-schematic-netplan.md), [v1-reference.md](v1-reference.md) §6 and §13 and [v1-hw-telemetry-recovery.md](../software/v1-hw-telemetry-recovery.md).
 
 ## 8. Decisions for the project owner
 
-| # | Decision | Options | Recommended default | Why |
-|---|---|---|---|---|
-| 1 | GPIO16 and GPIO22 | Reserved; earmark for BRIDGE_ACTIVE_N / PACK_PRESENT; WIFI_PEWAKE_N input | **Reserved, no connection; earmarked for GHO-13 inputs** | No consumer today. A pin with no connection is harmless if a stock image bit-bangs I2C on GPIO22 |
-| 2 | Radio fault source | A: TPS3780D rail detector; B: resistor divider into the GPIO; C: delete both lines | **A** | One SOT-23-6. Detects thermal shutdown, rail shorts and a switch that never turns on. No back-feed into the CM5 |
-| 3 | TPS22975 ON pull-down value | 10 kΩ; 4.7 kΩ | **4.7 kΩ** | 10 kΩ does not hold ON under 0.5 V against a worst-case 35 kΩ RP1 pull-up during the seconds before firmware runs |
-| 4 | Card TX AC coupling on the carrier | 220 nF fitted; 0 Ω fitted in capacitor footprints | **0 Ω in footprints; decide on the bench card** | Matches Raspberry Pi's own M.2 socket, and keeps both builds possible without a respin |
-| 5 | PCIE_PWR_EN (CM5 pin 106) | No connect; test pad; use it as the Wi-Fi enable | **Test pad only; keep WIFI_PWR_EN** | Lets the bench see what the PCIe driver does with it without changing the power design |
-| 6 | Firmware boot directives | Leave as S11; add the §5.2 lines | **Add the §5.2 lines (GHO-19)** | Removes unknown RP1 pulls on eleven retained pins once firmware runs, and holds GPIO11 low explicitly |
+All six defaults (GPIO16 and GPIO22 reserved, the TPS3780D fault source, 4.7 kΩ ON pull-downs, 0 Ω TX links in capacitor footprints, PCIE_PWR_EN to a test pad, and the §5.2 boot lines) were adopted by D-046.
 
 ## 9. What remains unverified
 
