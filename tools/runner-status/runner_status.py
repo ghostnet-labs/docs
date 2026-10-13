@@ -45,6 +45,8 @@ PUSH_KEY_FILE = os.path.expanduser("~/.config/runner-status/push-key")
 PUSH_MAX_BYTES = 64 * 1024
 PUSH_STALE_SECONDS = 180  # a pushing Mac counts as silent after this long
 CONFIG_FILE = os.path.expanduser("~/.config/runner-status/config.json")
+WATCHDOG_FILE = os.path.expanduser("~/.config/runner-status/watchdog.json")
+WATCHDOG_MAX_AGE_SECONDS = 600  # an older watchdog report is ignored
 
 # Machines shown on the page. A runner belongs to the first machine whose
 # pattern matches its name; anything unmatched is listed under "Other runners"
@@ -58,14 +60,32 @@ DEFAULT_CONFIG = {
     "queued_alert_minutes": 20,
     "hosted_stall_minutes": 15,
     "disk_paths": ["/", "/Volumes/NAS"],
+    # Fleet hygiene alerts (see README "Alerts").
+    "disk_alert_free_pct": 10,      # warn when a disk has less than this share free
+    "stuck_run_hours": 4,           # a job running longer than this is called stuck
+    "offline_crit_minutes": 30,     # an offline runner turns red after this long
+    "jit_missing_alert_minutes": 3, # a one-job slot with no online runner this long
+    "flap_changes_per_hour": 4,     # online/offline flips in an hour that count as flapping
+    "swap_alert_gb": 4,             # swap in use above this many GiB
+    "vm_disk_alert_pct": 85,        # Lima disk image filled past this share of its size
+    "no_sleep_machines": ["Mac Studio", "MacBook Pro"],  # must not sleep on power
+    "runner_roots": ["~"],          # where to look for runner dirs (version check)
     "machines": [
         {"name": "Mac Studio", "agent": "local",
          "runner_pattern": r"(?i)studio|gh-ubuntu|gh-build",
          # Lima VM name -> pattern for the runners that live inside it.
-         "vms": {"gh-ubuntu": r"(?i)^gh-ubuntu", "gh-build": r"(?i)^studio-build-1$",
-                 "gh-build-2": r"(?i)^studio-build-2$"}},
+         # One-job (JIT) runners are named <slot>-<epoch> and deregister after a job.
+         "vms": {"gh-ubuntu": r"(?i)^(gh-ubuntu|studio-ubuntu)",
+                 "gh-build": r"(?i)^studio-build-1(-\d+)?$",
+                 "gh-build-2": r"(?i)^studio-build-2(-\d+)?$"},
+         # VM role for the drift check in tools/ci-hosts/verify-vm.sh.
+         "vm_roles": {"gh-ubuntu": "ubuntu", "gh-build": "build", "gh-build-2": "build"},
+         "jit_slots": ["studio-ubuntu-1", "studio-ubuntu-2", "studio-ubuntu-3",
+                       "studio-ubuntu-4", "studio-ubuntu-5", "studio-build-1",
+                       "studio-build-2"]},
         {"name": "MacBook Pro", "agent": "push",
          "runner_pattern": r"(?i)macbook|mac-dev|\bdev\b",
+         "vm_roles": {"gh-build": "build"},
          "vms": {"gh-build": r"(?i)^macbook-pro-build"}},
         {"name": "R620", "agent": "", "runner_pattern": r"(?i)r620"},
     ],
@@ -79,6 +99,10 @@ LOW_QUOTA_POLL_SECONDS = 300
 HISTORY_POINTS = 120  # sparkline samples kept per series (1 h at the spacing below)
 HISTORY_SPACING = 30  # seconds between kept samples
 PULLS_RETRY_SECONDS = 600  # after a refused PR list, wait this long before asking again
+PR_STATE_MAX = 20  # PRs whose open/closed state is checked per sweep (busy jobs only)
+RUNNER_SCAN_SECONDS = 600  # rescan local runner dirs for versions this often
+FLAP_WINDOW_SECONDS = 3600
+RUNNER_UPDATE_GRACE_MIN = 2 * 24 * 60  # how long a new runner release may go unapplied
 
 HOSTED_LABELS = re.compile(r"^(ubuntu|windows|macos)-", re.I)
 
@@ -169,12 +193,52 @@ def sanitize_stats(data: dict) -> dict:
                                                      for k in ("total", "used", "free")}}
                   for d in (data.get("disks") or [])[:8] if isinstance(d, dict)],
         "vms": None,
+        "pressure": _num(data.get("pressure")), "sleep_ac": _num(data.get("sleep_ac")),
     }
+    swap = data.get("swap")
+    if isinstance(swap, dict):
+        out["swap"] = {k: _num(swap.get(k)) for k in ("total", "used")}
     if isinstance(data.get("vms"), list):
         out["vms"] = [{"name": _text(v.get("name")), "status": _text(v.get("status")),
-                       **{k: _num(v.get(k)) for k in ("cpus", "memory", "disk")}}
+                       **{k: _num(v.get(k)) for k in ("cpus", "memory", "disk", "disk_used")}}
                       for v in data["vms"][:16] if isinstance(v, dict)]
+    if isinstance(data.get("runner_services"), list):
+        out["runner_services"] = [
+            {"label": _text(x.get("label")), "running": bool(x.get("running")),
+             "exit": _num(x.get("exit"))}
+            for x in data["runner_services"][:32] if isinstance(x, dict)]
+    if isinstance(data.get("runner_versions"), list):
+        out["runner_versions"] = [
+            {"dir": _text(x.get("dir")), "version": _text(x.get("version"), 32)}
+            for x in data["runner_versions"][:32] if isinstance(x, dict)]
+    orphans = data.get("orphans")
+    if isinstance(orphans, list):
+        out["orphans"] = [_text(x, 160) for x in orphans[:5]]
+    wd = data.get("watchdog")
+    if isinstance(wd, dict) and isinstance(wd.get("runners"), dict):
+        drift = wd.get("drift") if isinstance(wd.get("drift"), dict) else {}
+        out["watchdog"] = {
+            "drift": {str(k)[:32]: [_text(x, 200) for x in v[:8]]
+                      for k, v in list(drift.items())[:8] if isinstance(v, list)},
+            "checked_at": _text(wd.get("checked_at")), "error": _text(wd.get("error"), 300),
+            "runners": {str(k)[:64]: {**{f: _text(v.get(f), 300) for f in
+                                         ("cause", "detail", "action", "result", "at")},
+                                      "tries": _num(v.get("tries")),
+                                      "gave_up": bool(v.get("gave_up"))}
+                        for k, v in list(wd["runners"].items())[:64] if isinstance(v, dict)}}
     return out
+
+
+def read_watchdog(path: str = WATCHDOG_FILE) -> dict | None:
+    """The runner watchdog's last report on this machine, if recent."""
+    try:
+        if time.time() - os.path.getmtime(path) > WATCHDOG_MAX_AGE_SECONDS:
+            return None
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def token_kind(token: str) -> str:
@@ -279,11 +343,127 @@ def parse_lima(text: str) -> list[dict]:
         for vm in items:
             vms.append({"name": vm.get("name"), "status": vm.get("status"),
                         "cpus": vm.get("cpus"), "memory": vm.get("memory"),
-                        "disk": vm.get("disk")})
+                        "disk": vm.get("disk"), "dir": vm.get("dir")})
     return vms
 
 
-def collect_stats(disk_paths: list[str]) -> dict:
+def parse_swapusage(text: str) -> dict | None:
+    """`sysctl -n vm.swapusage`: total = 2048.00M  used = 1024.50M  free = ..."""
+    units = {"K": 1024, "M": 1024 ** 2, "G": 1024 ** 3, "T": 1024 ** 4}
+    out = {}
+    for key in ("total", "used"):
+        m = re.search(rf"{key} = ([\d.]+)([KMGT])", text)
+        if not m:
+            return None
+        out[key] = float(m.group(1)) * units[m.group(2)]
+    return out
+
+
+def parse_pmset_sleep(text: str) -> int | None:
+    """System sleep minutes on AC power from `pmset -g custom` (0 = never).
+    Desktops print one "AC Power:" block; laptops print battery and AC."""
+    block = re.split(r"(?m)^(?=\S.*Power:)", text)
+    for part in block:
+        if part.startswith("AC Power:"):
+            m = re.search(r"(?m)^\s+sleep\s+(\d+)", part)
+            return int(m.group(1)) if m else None
+    return None
+
+
+def parse_launchctl(text: str) -> list[dict]:
+    """Runner services from `launchctl list` (PID, last exit, label)."""
+    out = []
+    for line in text.splitlines():
+        parts = line.split("\t") if "\t" in line else line.split()
+        if len(parts) != 3 or not parts[2].startswith("actions.runner."):
+            continue
+        pid, status, label = parts
+        out.append({"label": label, "running": pid.strip().isdigit(),
+                    "exit": int(status) if status.strip().lstrip("-").isdigit() else None})
+    return out
+
+
+def etime_seconds(text: str) -> int:
+    """ps etime: [[dd-]hh:]mm:ss -> seconds."""
+    days, _, rest = text.strip().rpartition("-")
+    parts = [int(p) for p in rest.split(":") if p.isdigit()]
+    secs = 0
+    for p in parts:
+        secs = secs * 60 + p
+    return secs + (int(days) * 86400 if days.isdigit() else 0)
+
+
+def find_orphans(ps_text: str, min_age_s: int = 3600) -> list[str]:
+    """Job processes left behind by a finished job: re-parented to launchd or
+    init (ppid 1), running from a runner _work dir, older than min_age_s."""
+    found = []
+    for line in ps_text.splitlines()[1:]:
+        parts = line.split(None, 3)
+        if len(parts) < 4 or parts[1] != "1" or "/_work/" not in parts[3]:
+            continue
+        if "Runner." in parts[3] or etime_seconds(parts[2]) < min_age_s:
+            continue
+        found.append(f"pid {parts[0]} up {parts[2]}: {parts[3]}")
+    return found
+
+
+VERSION_RX = re.compile(rb"Version: (\d+\.\d+\.\d+)")
+_runner_scan = {"at": 0.0, "found": []}
+_runner_scan_mu = threading.Lock()  # protects _runner_scan
+
+
+def runner_versions(roots: list[str]) -> list[dict]:
+    """Version of each runner dir under roots (newest _diag/Runner_*.log).
+    Walks at most 4 levels, skips ~/Library, and is cached for 10 minutes."""
+    with _runner_scan_mu:
+        if time.time() - _runner_scan["at"] < RUNNER_SCAN_SECONDS:
+            return _runner_scan["found"]
+    found = []
+    for root in roots:
+        root = os.path.expanduser(root)
+        base = root.rstrip(os.sep).count(os.sep)
+        for dirpath, dirnames, filenames in os.walk(root):
+            depth = dirpath.count(os.sep) - base
+            dirnames[:] = [] if depth >= 4 else [
+                d for d in dirnames if d not in ("Library", "_work", "node_modules")
+                and not d.startswith(".")]
+            if ".runner" not in filenames:
+                continue
+            dirnames[:] = []
+            diag = os.path.join(dirpath, "_diag")
+            try:
+                logs = sorted((os.path.join(diag, f) for f in os.listdir(diag)
+                               if f.startswith("Runner_")), key=os.path.getmtime)
+            except OSError:
+                logs = []
+            version = None
+            if logs:
+                try:
+                    with open(logs[-1], "rb") as fh:
+                        m = VERSION_RX.search(fh.read(8192))
+                    version = m.group(1).decode() if m else None
+                except OSError:
+                    pass
+            found.append({"dir": dirpath.replace(os.path.expanduser("~"), "~"),
+                          "version": version})
+            if len(found) >= 32:
+                break
+    with _runner_scan_mu:
+        _runner_scan.update(at=time.time(), found=found)
+    return found
+
+
+def lima_disk_used(vm: dict) -> int | None:
+    """Bytes the VM's sparse disk image really takes on the host. It grows with
+    the guest's writes and only shrinks after fstrim inside the VM."""
+    vm_dir = vm.get("dir") or os.path.expanduser(f"~/.lima/{vm.get('name')}")
+    try:
+        return os.stat(os.path.join(vm_dir, "diffdisk")).st_blocks * 512
+    except OSError:
+        return None
+
+
+def collect_stats(disk_paths: list[str], runner_roots: list[str] | None = None) -> dict:
     stats: dict = {"host": platform.node(), "os": platform.system(),
                    "cores": os.cpu_count(), "collected_at": utcnow().isoformat()}
     try:
@@ -297,6 +477,11 @@ def collect_stats(disk_paths: list[str]) -> dict:
         boot = _run(["sysctl", "-n", "kern.boottime"]) or ""
         m = re.search(r"sec = (\d+)", boot)
         stats["uptime_s"] = int(time.time()) - int(m.group(1)) if m else None
+        stats["swap"] = parse_swapusage(_run(["sysctl", "-n", "vm.swapusage"]) or "")
+        level = (_run(["sysctl", "-n", "kern.memorystatus_vm_pressure_level"]) or "").strip()
+        stats["pressure"] = int(level) if level.isdigit() else None  # 1 ok, 2 warn, 4 critical
+        stats["sleep_ac"] = parse_pmset_sleep(_run(["pmset", "-g", "custom"]) or "")
+        stats["runner_services"] = parse_launchctl(_run(["launchctl", "list"]) or "")
     elif os.path.exists("/proc/meminfo"):
         with open("/proc/meminfo", encoding="utf-8") as fh:
             stats["memory"] = parse_meminfo(fh.read())
@@ -310,8 +495,14 @@ def collect_stats(disk_paths: list[str]) -> dict:
     stats["disks"] = disks
     lima = _run(["limactl", "list", "--json"], timeout=10)
     stats["vms"] = parse_lima(lima) if lima else None
-    ps = _run(["ps", "-axo", "command"]) or ""
+    for vm in stats["vms"] or []:
+        vm["disk_used"] = lima_disk_used(vm)
+        vm.pop("dir", None)
+    ps = _run(["ps", "-axo", "pid,ppid,etime,command"]) or ""
     stats["runner_processes"] = sum(1 for line in ps.splitlines() if "Runner.Listener" in line)
+    stats["orphans"] = find_orphans(ps)[:5]
+    stats["runner_versions"] = runner_versions(runner_roots or ["~"])
+    stats["watchdog"] = read_watchdog()
     return stats
 
 
@@ -462,9 +653,12 @@ class Poller:
         self.last: dict = {}
         self.pushed: dict = {}  # name -> (stats, received unix time); guarded by mu
         self.last_raw: dict | None = None  # guarded by mu
-        self.history = History()
+        self.series = History()
         if demo:
-            demo_history(self.history, cfg)
+            demo_history(self.series, cfg)
+        # Poller thread only: runner name -> {"status", "since", "flips": deque}.
+        self.history: dict[str, dict] = {}
+        self.jit_seen: dict[str, float] = {}  # slot -> last time a runner of it was online
 
     def snapshot(self) -> dict:
         with self.mu:
@@ -479,8 +673,8 @@ class Poller:
 
     def publish(self, raw: dict) -> None:
         state = build_state(raw, self.cfg, utcnow())
-        self.history.record(state, time.time())
-        state["history"] = self.history.export()
+        self.series.record(state, time.time())
+        state["history"] = self.series.export()
         with self.mu:
             self.state = state
             self.last_raw = raw
@@ -516,6 +710,8 @@ class Poller:
             try:
                 raw["runners"] = gh.get(f"/orgs/{org}/actions/runners",
                                         {"per_page": 100}).get("runners", [])
+                raw["runner_history"] = self.track_runners(raw["runners"], time.time())
+                raw["jit_missing"] = self.track_jit_slots(raw["runners"], time.time())
             except (urllib.error.URLError, OSError, ValueError) as exc:
                 errors.append(f"Runners: {exc}")
             if self.slow:
@@ -546,6 +742,46 @@ class Poller:
             raw.update(self.slow)
         raw["rate"] = gh.usage()  # takes gh.mu itself; never call it holding gh.mu
         return raw
+
+    def track_runners(self, runners: list[dict], now: float) -> dict:
+        """Remember when each runner went offline and how often it flipped
+        between online and offline in the last hour. No extra API calls."""
+        seen = set()
+        for r in runners:
+            name = r.get("name")
+            seen.add(name)
+            status = "online" if r.get("status") == "online" else "offline"
+            h = self.history.get(name)
+            if h is None:
+                self.history[name] = {"status": status, "since": now, "flips": deque(maxlen=64)}
+                continue
+            if h["status"] != status:
+                h.update(status=status, since=now)
+                h["flips"].append(now)
+            while h["flips"] and h["flips"][0] < now - FLAP_WINDOW_SECONDS:
+                h["flips"].popleft()
+        for name in set(self.history) - seen:  # deregistered (e.g. one-job runners)
+            del self.history[name]
+        return {name: {"offline_since": datetime.fromtimestamp(h["since"], timezone.utc)
+                       .isoformat() if h["status"] == "offline" else None,
+                       "flips_last_hour": len(h["flips"])}
+                for name, h in self.history.items()}
+
+    def track_jit_slots(self, runners: list[dict], now: float) -> dict:
+        """Minutes each configured one-job slot has had no online runner. Those
+        runners deregister after every job, so a dead slot never shows as
+        "offline"; it just stops appearing."""
+        slots = [(m["name"], s) for m in self.cfg["machines"] for s in m.get("jit_slots") or []]
+        online = [r.get("name") or "" for r in runners if r.get("status") == "online"]
+        missing = {}
+        for machine, slot in slots:
+            if any(re.fullmatch(re.escape(slot) + r"(-\d+)?", n) for n in online):
+                self.jit_seen[slot] = now
+                continue
+            first = self.jit_seen.setdefault(slot, now)  # grace from first sight
+            if now - first > 0:
+                missing[slot] = {"machine": machine, "minutes": (now - first) / 60}
+        return missing
 
     @staticmethod
     def fetch_repos_groups(gh: GitHub, org: str, errors: list[str]) -> dict:
@@ -584,7 +820,13 @@ class Poller:
             billing = gh.get(f"/orgs/{org}/settings/billing/actions")
         except (urllib.error.URLError, OSError, ValueError):
             billing = None  # needs billing access; the stall heuristic covers it
-        return {"disabled_workflows": found, "billing": billing}
+        try:  # public repo, one call per 10 min, 304 when unchanged
+            rel = gh.get("/repos/actions/runner/releases/latest")
+            latest = {"version": str(rel.get("tag_name", "")).lstrip("v"),
+                      "published_at": rel.get("published_at")}
+        except (urllib.error.URLError, OSError, ValueError, AttributeError):
+            latest = None
+        return {"disabled_workflows": found, "billing": billing, "runner_latest": latest}
 
     @staticmethod
     def fetch_jobs(gh: GitHub, org: str, repos: list[str], errors: list[str]) -> list[dict]:
@@ -616,6 +858,24 @@ class Poller:
                         j["prs"] = open_prs.get((repo, head_key(run)), [])
                     out.append(j)
             return out
+
+        def open_by_number(found: dict) -> set:
+            return {(repo, n) for (repo, _), nums in found.items() for n in nums}
+
+        def pr_state(repo, number):
+            with gh.mu:
+                denied_at = gh.pulls_denied.get(repo, 0)
+            if time.time() - denied_at < PULLS_RETRY_SECONDS:
+                return None
+            try:
+                pr = gh.get(f"/repos/{org}/{repo}/pulls/{number}")
+            except (urllib.error.URLError, OSError, ValueError):
+                with gh.mu:
+                    gh.pulls_denied[repo] = time.time()
+                return None
+            if not isinstance(pr, dict):
+                return None
+            return "merged" if pr.get("merged_at") else pr.get("state")
 
         def head_key(run):
             head_repo = (run.get("head_repository") or {}).get("full_name")
@@ -653,7 +913,19 @@ class Poller:
             open_prs: dict = {}
             for found in pool.map(pulls_for, lookup):
                 open_prs.update(found)
-            return [j for chunk in pool.map(jobs_for, runs) for j in chunk]
+            jobs = [j for chunk in pool.map(jobs_for, runs) for j in chunk]
+            # A busy runner working for a PR that already merged or closed is
+            # wasted (a gate waiting for checks that never come). One cached
+            # call per PR; unchanged PRs answer 304 for free.
+            known_open = open_by_number(open_prs)
+            check = sorted({(j["repo"], n) for j in jobs if j.get("status") == "in_progress"
+                            and j.get("runner_name") for n in j["prs"]
+                            if (j["repo"], n) not in known_open})[:PR_STATE_MAX]
+            states = dict(zip(check, pool.map(lambda rn: pr_state(*rn), check)))
+            for j in jobs:
+                j["closed_prs"] = [n for n in j["prs"] if states.get((j["repo"], n))
+                                   in ("closed", "merged")]
+            return jobs
 
     def fetch_agents(self, errors: list[str]) -> dict:
         stats = {}
@@ -662,7 +934,8 @@ class Poller:
             if not agent:
                 continue
             if agent == "local":
-                stats[m["name"]] = collect_stats(self.cfg["disk_paths"])
+                stats[m["name"]] = collect_stats(self.cfg["disk_paths"],
+                                                 self.cfg.get("runner_roots"))
                 continue
             if agent == "push":
                 with self.mu:
@@ -681,6 +954,162 @@ class Poller:
             except (urllib.error.URLError, OSError, ValueError) as exc:
                 stats[m["name"]] = {"error": str(exc)}
         return stats
+
+
+def offline_reason(runner: str, machine: str, st: dict, vms: dict) -> dict:
+    """Why a runner is offline: the watchdog's diagnosis when it has one,
+    else what the page itself can see (machine silent, VM stopped)."""
+    wd = (st.get("watchdog") or {}).get("runners") or {}
+    if runner in wd:
+        return {k: wd[runner].get(k) for k in
+                ("cause", "detail", "action", "result", "at", "tries", "gave_up")}
+    if st.get("error"):
+        return {"cause": "host-silent", "detail": f"{machine} is not reporting (asleep, off, or "
+                "off the network): " + str(st["error"])}
+    vm = next((v for v, p in vms.items() if re.search(p, runner)), None)
+    status = next((x.get("status") for x in st.get("vms") or [] if x.get("name") == vm), None)
+    if vm and status and status != "Running":
+        return {"cause": "vm-stopped", "detail": f"VM {vm} is {status}"}
+    if not st:
+        return {"cause": "unknown", "detail": "no stats from that machine"}
+    return {"cause": "unknown", "detail": "no watchdog report yet (is runner_watchdog.py "
+            "installed on that Mac?)"}
+
+
+def runner_alerts(runners: list[dict], cfg: dict) -> list[dict]:
+    """Offline (red once it has lasted), and flapping runners."""
+    alerts = []
+    offline = [r for r in runners if r["status"] == "offline"]
+    if offline:
+        def describe(r):
+            parts = [fmt_minutes(r["offline_min"])] if r.get("offline_min") else []
+            why = r.get("why") or {}
+            if why.get("detail"):
+                parts.append(why["detail"])
+            if why.get("action"):
+                parts.append(f"auto-recovery: {why['action']} -> {why.get('result') or 'pending'}")
+            if why.get("gave_up"):
+                parts.append("NEEDS A HUMAN: auto-recovery gave up")
+            return r["name"] + (f" ({'; '.join(parts)})" if parts else "")
+
+        drained = [r for r in offline if (r.get("why") or {}).get("cause") == "maintenance"]
+        faulty = [r for r in offline if r not in drained]
+        if faulty:
+            long_gone = [r for r in faulty
+                         if (r.get("offline_min") or 0) >= cfg["offline_crit_minutes"]]
+            alerts.append({"level": "crit" if long_gone else "warn",
+                           "text": "Offline runners: " + ", ".join(map(describe, faulty))})
+        if drained:
+            alerts.append({"level": "info",
+                           "text": "Draining for maintenance: " + ", ".join(map(describe, drained))})
+    flapping = [r["name"] for r in runners if r.get("flips", 0) >= cfg["flap_changes_per_hour"]]
+    if flapping:
+        alerts.append({"level": "warn", "text":
+                       f"Flapping runners (went offline and back {cfg['flap_changes_per_hour']}+ "
+                       f"times in an hour): {', '.join(flapping)}"})
+    return alerts
+
+
+def jit_alerts(missing: dict, machines: list[dict], cfg: dict) -> list[dict]:
+    """A one-job slot without an online runner: say why when the watchdog knows."""
+    reports = {m["name"]: ((m.get("stats") or {}).get("watchdog") or {}).get("runners") or {}
+               for m in machines}
+    alerts = []
+    for slot, info in sorted(missing.items()):
+        if info["minutes"] < cfg["jit_missing_alert_minutes"]:
+            continue
+        why = reports.get(info["machine"], {}).get(slot) or {}
+        if why.get("cause") == "maintenance":
+            alerts.append({"level": "info", "text": f"Slot {slot} is draining: {why['detail']}"})
+            continue
+        text = f"One-job slot {slot} has had no online runner for {fmt_minutes(info['minutes'])}"
+        if why.get("detail"):
+            text += f": {why['detail']}"
+        if why.get("action"):
+            text += f"; auto-recovery: {why['action']} -> {why.get('result') or 'pending'}"
+        alerts.append({"level": "crit" if info["minutes"] >= cfg["offline_crit_minutes"]
+                       else "warn", "text": text})
+    return alerts
+
+
+def job_alerts(jobs: list[dict], cfg: dict) -> list[dict]:
+    """Jobs stuck for hours, and runners held by a job whose PR is closed."""
+    alerts = []
+    limit = cfg["stuck_run_hours"] * 60
+    for j in jobs:
+        if j["closed_prs"] and j["runner"]:
+            prs = ", ".join(f"#{n}" for n in j["closed_prs"])
+            alerts.append({"level": "crit", "url": j["url"], "text":
+                           f"{j['runner']} is still running {j['repo']} / {j['workflow']} for "
+                           f"closed or merged PR {prs} ({fmt_minutes(j['age_min'])}); "
+                           "cancel the run to free the runner"})
+        elif j["status"] == "in_progress" and (j["age_min"] or 0) >= limit:
+            alerts.append({"level": "warn", "url": j["url"], "text":
+                           f"Stuck run: {j['repo']} / {j['workflow']} / {j['name']} running "
+                           f"{fmt_minutes(j['age_min'])} on {j['runner'] or '?'}"})
+    return alerts
+
+
+def _version_tuple(v: str | None) -> tuple:
+    return tuple(int(x) for x in re.findall(r"\d+", v or "")[:3])
+
+
+def machine_alerts(name: str, st: dict, cfg: dict, latest: dict | None) -> list[dict]:
+    """Disk, swap, memory pressure, sleep, VM disk growth, runner services,
+    orphan job processes and runner version drift for one machine."""
+    gib = 1024 ** 3
+    alerts = []
+
+    def warn(text, level="warn"):
+        alerts.append({"level": level, "text": f"{name} {text}"})
+
+    if st.get("error"):
+        warn(f"stats missing: {st['error']}")
+    for d in st.get("disks") or []:
+        if d["total"] and 100 * d["free"] / d["total"] < cfg["disk_alert_free_pct"]:
+            warn(f"disk {d['path']} low: {fmt_bytes(d['free'])} free")
+    swap = st.get("swap") or {}
+    if (swap.get("used") or 0) >= cfg["swap_alert_gb"] * gib:
+        warn(f"is swapping: {fmt_bytes(swap['used'])} of swap in use")
+    if st.get("pressure") in (2, 4):
+        warn("memory pressure is " + ("critical" if st["pressure"] == 4 else "high"),
+             "crit" if st["pressure"] == 4 else "warn")
+    if name in cfg["no_sleep_machines"] and st.get("sleep_ac"):
+        warn(f"sleeps after {st['sleep_ac']:.0f} min on power, which takes its runners "
+             "offline; fix with: sudo pmset -c sleep 0")
+    for vm in st.get("vms") or []:
+        if vm.get("status") != "Running":
+            warn(f"VM {vm['name']} is {vm.get('status')}")
+        if vm.get("disk") and vm.get("disk_used") and \
+                100 * vm["disk_used"] / vm["disk"] >= cfg["vm_disk_alert_pct"]:
+            warn(f"VM {vm['name']} disk image is {fmt_bytes(vm['disk_used'])} of "
+                 f"{fmt_bytes(vm['disk'])}; run the cleanup (it trims the VM disk)")
+    down = [s["label"].removeprefix("actions.runner.") for s in st.get("runner_services") or []
+            if not s.get("running")]
+    if down:
+        warn(f"runner service(s) not running: {', '.join(down)}")
+    if st.get("orphans"):
+        warn(f"has {len(st['orphans'])} leftover job process(es) from finished jobs: "
+             f"{st['orphans'][0]}")
+    for vm, problems in sorted(((st.get("watchdog") or {}).get("drift") or {}).items()):
+        if problems:
+            warn(f"VM {vm} drifted from the committed setup (tools/ci-hosts): "
+                 + "; ".join(p.removeprefix("FAIL: ") for p in problems[:4]))
+    newest = (latest or {}).get("version")
+    old = [v for v in st.get("runner_versions") or []
+           if newest and v.get("version") and _version_tuple(v["version"]) < _version_tuple(newest)]
+    if old:
+        warn(f"runner version behind {newest}: " +
+             ", ".join(f"{v['dir']} {v['version']}" for v in old[:5]))
+    return alerts
+
+
+def fmt_minutes(m: float | None) -> str:
+    if m is None:
+        return "?"
+    if m < 60:
+        return f"{m:.0f}m"
+    return f"{m // 60:.0f}h {m % 60:.0f}m" if m < 2880 else f"{m / 1440:.0f}d"
 
 
 def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
@@ -702,13 +1131,19 @@ def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
         jobs.append({"repo": j.get("repo"), "workflow": j.get("workflow"), "name": j.get("name"),
                      "status": j.get("status"), "labels": labels, "hosted": hosted,
                      "runner": j.get("runner_name"), "branch": j.get("branch"), "prs": prs,
+                     "closed_prs": list(j.get("closed_prs") or []),
                      "url": j.get("html_url"), "age_min": age_minutes(since, now)})
     jobs.sort(key=lambda j: (j["status"] != "queued", -(j["age_min"] or 0)))
     # What each runner is working on, from the job list already fetched (no extra calls).
     by_runner = {j["runner"]: j for j in jobs if j["runner"] and j["status"] == "in_progress"}
+    history = raw.get("runner_history") or {}
     for r in sorted(raw.get("runners", []), key=lambda r: r.get("name", "")):
         status = "offline" if r.get("status") != "online" else ("busy" if r.get("busy") else "idle")
+        hist = history.get(r.get("name")) or {}
         runner = {"name": r.get("name"), "status": status, "os": r.get("os"),
+                  "offline_min": age_minutes(hist.get("offline_since"), now)
+                  if status == "offline" else None,
+                  "flips": hist.get("flips_last_hour", 0),
                   "labels": [lbl["name"] for lbl in r.get("labels", [])],
                   "group": groups.get(r.get("id"), "unknown"),
                   "job": by_runner.get(r.get("name"))}
@@ -721,6 +1156,9 @@ def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
     for m in shown:
         m.pop("pattern", None)
         st = m.get("stats") or {}
+        for r in m["runners"]:
+            if r["status"] == "offline":
+                r["why"] = offline_reason(r["name"], m["name"], st, vm_cfg.get(m["name"], {}))
         if st.get("vms"):
             vms = []  # copies: stats dicts may be shared with the push thread
             for vm in st["vms"]:
@@ -738,9 +1176,9 @@ def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
 
     alerts = [{"level": "crit", "text": f"GitHub: {e}"}
               for e in dict.fromkeys(raw.get("errors", []))]
-    offline = [r["name"] for m in shown for r in m["runners"] if r["status"] == "offline"]
-    if offline:
-        alerts.append({"level": "warn", "text": f"Offline runners: {', '.join(offline)}"})
+    alerts += runner_alerts([r for m in shown for r in m["runners"]], cfg)
+    alerts += jit_alerts(raw.get("jit_missing") or {}, shown, cfg)
+    alerts += job_alerts(jobs, cfg)
     stuck = [j for j in jobs if j["status"] == "queued"
              and (j["age_min"] or 0) >= cfg["queued_alert_minutes"]]
     if stuck:
@@ -770,18 +1208,13 @@ def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
             alerts.append({"level": "crit" if pct >= 100 else "warn",
                            "text": f"Actions minutes {used:.0f} of {billing['included_minutes']} "
                                    f"({pct:.0f}%) used this month"})
+    # Idle runners update themselves only when their next job arrives, so a new
+    # release counts as drift only after it has been out for two days.
+    latest = raw.get("runner_latest") or {}
+    released = age_minutes(latest.get("published_at"), now)
+    latest = latest if released is not None and released >= RUNNER_UPDATE_GRACE_MIN else None
     for m in shown:
-        st = m.get("stats") or {}
-        if st.get("error"):
-            alerts.append({"level": "warn", "text": f"{m['name']} stats missing: {st['error']}"})
-        for d in st.get("disks", []) or []:
-            if d["total"] and d["free"] / d["total"] < 0.10:
-                alerts.append({"level": "warn", "text":
-                               f"{m['name']} disk {d['path']} low: {fmt_bytes(d['free'])} free"})
-        for vm in st.get("vms") or []:
-            if vm.get("status") != "Running":
-                alerts.append({"level": "warn", "text":
-                               f"{m['name']} VM {vm['name']} is {vm.get('status')}"})
+        alerts += machine_alerts(m["name"], m.get("stats") or {}, cfg, latest)
 
     return {"updated": now.isoformat(), "org": cfg["org"], "machines": shown, "jobs": jobs,
             "alerts": alerts, "billing": billing, "rate": raw.get("rate"),
@@ -1066,7 +1499,7 @@ const AG=[
  {id:"limits",name:"Limits and workflows",re:/quota|minutes|workflow/i,href:"#tiles"}];
 const OTHER={id:"other",name:"Other",href:""};
 const GAVE_FALLBACK=/gave up/i;      /* used only when why.gave_up is undefined */
-const RESULT_OK=/^ok\b/i;            /* a recovery result that is not "ok..." counts as failing */
+const RESULT_BAD=/^(failed|gave up)/i; /* "ok", "retrying:", "dry run" and "already done" are not failures */
 const CAUSE={maintenance:["Planned maintenance",""],"vm-stopped":["VM stopped","Start the VM by hand"],"service-dead":["Runner service died","Restart the runner service by hand"],network:["Network","Check the machine's network"],registration:["Registration lost","Re-register the runner with a new token"],"disk-full":["Disk full","Free up disk space"],"no-service":["No runner service","Install the runner service"],"host-silent":["Machine not reporting","Wake or reconnect the machine"],unknown:["Unknown cause","Check it by hand"]};
 /* ===== */
 const P={check:'<path d="M20 6 9 17l-5-5"/>',alert:'<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',x:'<circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',play:'<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>',pr:'<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V9a3 3 0 0 0-3-3h-4"/>',chev:'<path d="m9 6 6 6-6 6"/>',off:'<path d="M2 2l20 20M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 5.2-2.8M19 13a10 10 0 0 0-2-1.6M12 20h.01"/>',pause:'<circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/>',cloud:'<path d="M17.5 19H9a7 7 0 1 1 6.7-9h1.8a4.5 4.5 0 1 1 0 9z"/>',plug:'<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/>',refresh:'<path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/>'};
@@ -1128,7 +1561,7 @@ function flat(s){const a=[];for(const m of s.machines||[]){const vmOf={};for(con
 const locOf=x=>esc(x.m.name)+(x.vm?" › "+esc(x.vm):"");
 function kindOf(w){if(!w)return"unk";if(w.cause==="maintenance")return"plan";
  const gave=w.gave_up!==undefined&&w.gave_up!==null?w.gave_up===true:GAVE_FALLBACK.test(w.result||"");
- if(gave)return"gave";if(w.action)return w.result&&!RESULT_OK.test(w.result)?"fail":"rec";return"down"}
+ if(gave)return"gave";if(w.action)return w.result&&RESULT_BAD.test(w.result)?"fail":"rec";return"down"}
 const KIND={gave:["Gave up · needs you","alert",0,"off"],fail:["Fix failed · retrying","x",1,"off"],down:["No auto-fix","off",2,"q"],unk:["Offline","off",2.5,"off"],rec:["Recovering","refresh",3,"rec"],plan:["Planned","pause",4,""]};
 const blind=s=>(s.errors||[]).length&&!(s.machines||[]).some(m=>(m.runners||[]).length);
 const match=(txt)=>!FLT||txt.toLowerCase().includes(FLT);
@@ -1426,7 +1859,7 @@ def push(args) -> None:
     print(f"Pushing stats as {args.name!r} to {url} every {args.interval}s", flush=True)
     while not stop.is_set():
         payload = json.dumps({"name": args.name,
-                              "stats": collect_stats(cfg["disk_paths"])}).encode()
+                              "stats": collect_stats(cfg["disk_paths"], cfg.get("runner_roots"))}).encode()
         headers = {"Content-Type": "application/json"}
         key = read_push_key()
         if key:
@@ -1505,7 +1938,7 @@ def agent(args) -> None:
             return None, ""
         with mu:
             if time.time() - cache["at"] > 10:  # at most one collection per 10s
-                cache["body"] = json.dumps(collect_stats(cfg["disk_paths"]))
+                cache["body"] = json.dumps(collect_stats(cfg["disk_paths"], cfg.get("runner_roots")))
                 cache["at"] = time.time()
             return cache["body"], "application/json"
 
@@ -1584,6 +2017,7 @@ def demo_raw() -> dict:
         "vms": [{"name": "gh-ubuntu", "status": "Running", "cpus": 6, "memory": 6 * gib, "disk": 100 * gib},
                 {"name": "gh-build", "status": "Running", "cpus": 6, "memory": 9 * gib, "disk": 60 * gib},
                 {"name": "gh-build-2", "status": "Stopped", "cpus": 6, "memory": 9 * gib, "disk": 60 * gib}],
+        "swap": {"total": 3 * gib, "used": 1.2 * gib}, "pressure": 1, "sleep_ac": 0,
         "runner_processes": 12},
         "MacBook Pro": {
             "cores": 12, "load": [1.2, 1.5, 1.4],
