@@ -404,6 +404,8 @@ class Watchdog:
         self.done.add(tuple(cmd))
         ok, why = may_act(attempts.get(key, []), now)
         entry["action"] = " ".join(cmd)
+        entry["tries"] = len([t for t in attempts.get(key, []) if t > now - 3600])
+        entry["gave_up"] = not ok and why.startswith("auto-recovery gave up")
         if not ok:
             entry["result"] = why
             return entry

@@ -212,8 +212,10 @@ def sanitize_stats(data: dict) -> dict:
     if isinstance(wd, dict) and isinstance(wd.get("runners"), dict):
         out["watchdog"] = {
             "checked_at": _text(wd.get("checked_at")), "error": _text(wd.get("error"), 300),
-            "runners": {str(k)[:64]: {f: _text(v.get(f), 300) for f in
-                                      ("cause", "detail", "action", "result", "at")}
+            "runners": {str(k)[:64]: {**{f: _text(v.get(f), 300) for f in
+                                         ("cause", "detail", "action", "result", "at")},
+                                      "tries": _num(v.get("tries")),
+                                      "gave_up": bool(v.get("gave_up"))}
                         for k, v in list(wd["runners"].items())[:64] if isinstance(v, dict)}}
     return out
 
@@ -902,7 +904,8 @@ def offline_reason(runner: str, machine: str, st: dict, vms: dict) -> dict:
     else what the page itself can see (machine silent, VM stopped)."""
     wd = (st.get("watchdog") or {}).get("runners") or {}
     if runner in wd:
-        return {k: wd[runner].get(k) for k in ("cause", "detail", "action", "result", "at")}
+        return {k: wd[runner].get(k) for k in
+                ("cause", "detail", "action", "result", "at", "tries", "gave_up")}
     if st.get("error"):
         return {"cause": "host-silent", "detail": f"{machine} is not reporting (asleep, off, or "
                 "off the network): " + str(st["error"])}
@@ -928,6 +931,8 @@ def runner_alerts(runners: list[dict], cfg: dict) -> list[dict]:
                 parts.append(why["detail"])
             if why.get("action"):
                 parts.append(f"auto-recovery: {why['action']} -> {why.get('result') or 'pending'}")
+            if why.get("gave_up"):
+                parts.append("NEEDS A HUMAN: auto-recovery gave up")
             return r["name"] + (f" ({'; '.join(parts)})" if parts else "")
 
         drained = [r for r in offline if (r.get("why") or {}).get("cause") == "maintenance"]

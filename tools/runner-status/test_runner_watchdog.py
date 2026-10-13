@@ -125,9 +125,16 @@ class WatchdogTest(unittest.TestCase):
                                        "gui/501/actions.runner.ghostnet-labs.studio-mac-1"])
         e = self.run_dog(host)["runners"]["studio-mac-1"]  # right away: backoff
         self.assertIn("waiting", e["result"])
+        self.assertFalse(e["gave_up"])
         self.assertEqual(len(host.ran), 1)
         now = time.time()
         self.assertEqual(wd.may_act([now - 1000, now - 600, now - 300], now)[0], False)
+        with open(wd.ATTEMPTS_FILE, "w") as fh:
+            json.dump({"studio-mac-1":
+                       [now - 1000, now - 600, now - 300]}, fh)
+        e = self.run_dog(host)["runners"]["studio-mac-1"]
+        self.assertTrue(e["gave_up"])
+        self.assertEqual(e["tries"], 3)
         self.assertTrue(wd.may_act([now - 4000], now)[0])
 
     def test_network_disk_and_no_service(self):
