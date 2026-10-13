@@ -3,7 +3,7 @@
 A small always-on page that shows, without anyone asking:
 
 - every self-hosted runner in the `ghostnet-labs` org, grouped by machine
-  (Mac Studio, "Mac (dev)" once its runner exists, R620 only if it appears),
+  (Mac Studio, MacBook Pro, R620 only if it appears),
   with idle / busy / offline, labels and runner group;
 - every queued and running Actions job across the org's repos, oldest first,
   with its age, the runner labels it wants and the runner it got;
@@ -75,28 +75,49 @@ Logs: `~/Library/Logs/runner-status-serve.log`. Update with `git pull` and
 The page shows runner names and job titles to anyone on the LAN. It has no
 controls and holds no token in the page.
 
-## 3. Add another Mac (when "Mac (dev)" gets a runner)
+## 3. Show the MacBook Pro (or another Mac)
 
-On that Mac:
+The Pro sends its own stats to the Studio page every 30 seconds. Nothing
+listens on the Pro: it only makes outgoing requests to the page the Studio
+already serves. The Studio accepts stats only for machines configured with
+`"agent": "push"` (the MacBook Pro is, by default), keeps only the known
+fields, and shows "stats missing" if a pushing Mac goes quiet for 3 minutes.
+Its runners (`macbook-pro-build-1`) are matched by name.
+
+On the Pro:
 
 ```sh
-python3 runner_status.py launchd agent \
-  > ~/Library/LaunchAgents/com.ghostnet.runner-status.agent.plist
-launchctl load ~/Library/LaunchAgents/com.ghostnet.runner-status.agent.plist
+git clone --depth 1 https://github.com/ghostnet-labs/docs ~/runner-status-src
+cd ~/runner-status-src/tools/runner-status
+python3 runner_status.py launchd push --to http://<studio-name>.local:8090 \
+  > ~/Library/LaunchAgents/com.ghostnet.runner-status.push.plist
+launchctl load ~/Library/LaunchAgents/com.ghostnet.runner-status.push.plist
 ```
 
-Then on the Studio create `~/.config/runner-status/config.json` with the
-agent URL and restart the page:
+Log: `~/Library/Logs/runner-status-push.log` ("push failed" means the Pro
+cannot reach the Studio page).
+
+Optional shared key, so nothing else on the LAN can post stats: put the same
+random string in `~/.config/runner-status/push-key` on both Macs
+(`openssl rand -hex 24`). Once the Studio has the file, pushes without the
+matching key are refused.
+
+To give a machine a different name or runner pattern, create
+`~/.config/runner-status/config.json` on the Studio:
 
 ```json
 {
   "machines": [
     {"name": "Mac Studio", "agent": "local", "runner_pattern": "(?i)studio|gh-ubuntu|gh-build"},
-    {"name": "Mac (dev)", "agent": "http://<macbook-name>.local:8091", "runner_pattern": "(?i)macbook|mac-dev|\\bdev\\b"},
+    {"name": "MacBook Pro", "agent": "push", "runner_pattern": "(?i)macbook|mac-dev|\\bdev\\b"},
     {"name": "R620", "agent": "", "runner_pattern": "(?i)r620"}
   ]
 }
 ```
+
+A Mac can instead run `runner_status.py agent` (a read-only listener on
+:8091) and be configured with `"agent": "http://<name>.local:8091"`; push is
+preferred because it opens no port.
 
 A runner belongs to the first machine whose `runner_pattern` matches its
 name; unmatched runners show under "Other runners", so a wrong pattern never
