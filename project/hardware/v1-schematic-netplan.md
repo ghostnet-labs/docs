@@ -209,7 +209,7 @@ TP_WIFI_PEWAKE, TP_WIFI_LED1, TP_WIFI_LED2 (Record). Proposed: TP on WIFI_3V3 at
 
 **Scope (§17, D-023, D-026, GHO-13):** TUSB4041I with a 24 MHz crystal, CM5 USB2 upstream, GW16170 on port 1, port 2 spare, the external OpenVLM USB-C host (DFP) on port 3, port 4 reserved, switched and current-limited VBUS, CC termination, USB ESD, hub reset and per-port overcurrent. "AUDIO" means the host port only: no CM108B, no analog microphone or speaker circuit and no PTT switch on the carrier (D-023).
 
-**Parts:** B-04 (TI TUSB4041IPAPRG4, 64-HTQFP), B-02 (Gateworks GW16170) in a TE 2199119-6 socket (no B-ID; key type not recorded, PR #61 conflict C-11), B-23 (GCT USB4720-03-A) for the OpenVLM host port. Open parts: 24 MHz crystal, HUB_1V1 regulator (K-9), port-3 CC controller and VBUS switch (O-1, O-2 in PR #61), USB ESD (O-3). B-22 is the external accessory and has no carrier footprint.
+**Parts:** B-04 (TI TUSB4041IPAPRG4, 64-HTQFP), B-02 (Gateworks GW16170) in a B-25 socket (TE 2199119-6; key type not recorded), B-23 (GCT USB4720-03-A) for the OpenVLM host port. HUB_1V1 regulator: B-26 (K-9). Open parts: 24 MHz crystal, port-3 CC controller and VBUS switch (O-1, O-2 in PR #61), USB ESD (O-3). B-22 is the external accessory and has no carrier footprint.
 
 ### TUSB4041I pins (datasheet SLLSEK3F Table 4-1)
 
