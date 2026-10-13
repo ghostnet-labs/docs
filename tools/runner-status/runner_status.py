@@ -77,11 +77,14 @@ DEFAULT_CONFIG = {
          "vms": {"gh-ubuntu": r"(?i)^(gh-ubuntu|studio-ubuntu)",
                  "gh-build": r"(?i)^studio-build-1(-\d+)?$",
                  "gh-build-2": r"(?i)^studio-build-2(-\d+)?$"},
+         # VM role for the drift check in tools/ci-hosts/verify-vm.sh.
+         "vm_roles": {"gh-ubuntu": "ubuntu", "gh-build": "build", "gh-build-2": "build"},
          "jit_slots": ["studio-ubuntu-1", "studio-ubuntu-2", "studio-ubuntu-3",
                        "studio-ubuntu-4", "studio-ubuntu-5", "studio-build-1",
                        "studio-build-2"]},
         {"name": "MacBook Pro", "agent": "push",
          "runner_pattern": r"(?i)macbook|mac-dev|\bdev\b",
+         "vm_roles": {"gh-build": "build"},
          "vms": {"gh-build": r"(?i)^macbook-pro-build"}},
         {"name": "R620", "agent": "", "runner_pattern": r"(?i)r620"},
     ],
@@ -210,7 +213,10 @@ def sanitize_stats(data: dict) -> dict:
         out["orphans"] = [_text(x, 160) for x in orphans[:5]]
     wd = data.get("watchdog")
     if isinstance(wd, dict) and isinstance(wd.get("runners"), dict):
+        drift = wd.get("drift") if isinstance(wd.get("drift"), dict) else {}
         out["watchdog"] = {
+            "drift": {str(k)[:32]: [_text(x, 200) for x in v[:8]]
+                      for k, v in list(drift.items())[:8] if isinstance(v, list)},
             "checked_at": _text(wd.get("checked_at")), "error": _text(wd.get("error"), 300),
             "runners": {str(k)[:64]: {**{f: _text(v.get(f), 300) for f in
                                          ("cause", "detail", "action", "result", "at")},
@@ -1034,6 +1040,10 @@ def machine_alerts(name: str, st: dict, cfg: dict, latest: dict | None) -> list[
     if st.get("orphans"):
         warn(f"has {len(st['orphans'])} leftover job process(es) from finished jobs: "
              f"{st['orphans'][0]}")
+    for vm, problems in sorted(((st.get("watchdog") or {}).get("drift") or {}).items()):
+        if problems:
+            warn(f"VM {vm} drifted from the committed setup (tools/ci-hosts): "
+                 + "; ".join(p.removeprefix("FAIL: ") for p in problems[:4]))
     newest = (latest or {}).get("version")
     old = [v for v in st.get("runner_versions") or []
            if newest and v.get("version") and _version_tuple(v["version"]) < _version_tuple(newest)]

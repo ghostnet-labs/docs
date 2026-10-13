@@ -56,6 +56,8 @@ REPORT_FILE = os.path.join(STATE_DIR, "watchdog.json")
 ATTEMPTS_FILE = os.path.join(STATE_DIR, "watchdog-attempts.json")
 MAINTENANCE_FILE = os.path.join(STATE_DIR, "maintenance.json")
 LOCK_FILE = os.path.join(STATE_DIR, "watchdog.lock")
+DRIFT_FILE = os.path.join(STATE_DIR, "watchdog-drift.json")
+DRIFT_EVERY_SECONDS = 3600
 JIT_PREFIX = "com.ghostnet.jit."
 MAX_TRIES_PER_HOUR = 3
 BACKOFF_MINUTES = (2, 4, 8)
@@ -86,6 +88,15 @@ class Host:
 
     def vm(self, vm: str, script: str, timeout: float = 30) -> tuple[int, str]:
         return self.run(["limactl", "shell", vm, "--", "sh", "-c", script], timeout)
+
+    def vm_stdin(self, vm: str, role: str, script: str) -> tuple[int, str]:
+        try:
+            out = subprocess.run(["limactl", "shell", vm, "--", "bash", "-s", role],
+                                 input=script, capture_output=True, text=True, timeout=60,
+                                 check=False)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return 127, str(exc)
+        return out.returncode, out.stdout
 
     def free_bytes(self, path: str = "/") -> int | None:
         try:
@@ -175,6 +186,9 @@ class Watchdog:
         self.jit_command = jit_command
         mcfg = next((m for m in cfg["machines"] if m["name"] == machine), {})
         self.jit_slots = list(mcfg.get("jit_slots") or [])
+        self.vm_roles = dict(mcfg.get("vm_roles") or {})
+        self.drift_script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                         "..", "ci-hosts", "verify-vm.sh")
         self.done: set[tuple] = set()  # commands already run in this pass
         self.vm_patterns = {vm: re.compile(p) for vm, p in (mcfg.get("vms") or {}).items()}
         self.runner_rx = re.compile(mcfg.get("runner_pattern", "$^"))
@@ -347,6 +361,28 @@ class Watchdog:
                 out[slot] = self.act(f"jit:{slot}", diag, attempts, now)
         return out
 
+    def check_drift(self, vms: dict, now: float) -> dict | None:
+        """Run tools/ci-hosts/verify-vm.sh inside each running VM (hourly) and
+        return {vm: [problems]}. None when it is not due yet."""
+        state = load_json(DRIFT_FILE, {})
+        if not self.vm_roles or now - state.get("at", 0) < DRIFT_EVERY_SECONDS:
+            return state.get("drift") if isinstance(state.get("drift"), dict) else None
+        try:
+            with open(self.drift_script, encoding="utf-8") as fh:
+                script = fh.read()
+        except OSError:
+            return None
+        drift = {}
+        for vm, role in sorted(self.vm_roles.items()):
+            if vms.get(vm) != "Running":
+                continue
+            code, out = self.host.vm_stdin(vm, role, script)
+            drift[vm] = [ln for ln in out.splitlines() if ln.startswith("FAIL:")][:8] \
+                if code == 0 else [f"FAIL: drift check could not run (exit {code})"]
+        if not self.dry_run:
+            write_json(DRIFT_FILE, {"at": now, "drift": drift})
+        return drift
+
     def run_once(self) -> dict:
         now = time.time()
         report: dict = {"machine": self.machine, "checked_at": utcnow_iso(), "runners": {},
@@ -387,6 +423,9 @@ class Watchdog:
             jit_ctx = {"vms": vms, "maintenance": maint.get("entries", [])
                        if isinstance(maint, dict) else []}
             report["runners"].update(self.check_jit_slots(jit_ctx, attempts, now))
+        drift = self.check_drift(vms, now)
+        if drift is not None:
+            report["drift"] = drift
         keep = {k: [t for t in v if t > now - 3600] for k, v in attempts.items()}
         if not self.dry_run:
             write_json(ATTEMPTS_FILE, {k: v for k, v in keep.items() if v})

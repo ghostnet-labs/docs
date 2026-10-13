@@ -64,12 +64,13 @@ class WatchdogTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
-        for name in ("ATTEMPTS_FILE", "MAINTENANCE_FILE", "REPORT_FILE"):
+        for name in ("ATTEMPTS_FILE", "MAINTENANCE_FILE", "REPORT_FILE", "DRIFT_FILE"):
             p = mock.patch.object(wd, name, os.path.join(self.dir.name, name.lower()))
             p.start()
             self.addCleanup(p.stop)
         self.cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
         self.cfg["machines"][0]["jit_slots"] = []  # tests opt in
+        self.cfg["machines"][0]["vm_roles"] = {}
 
     def run_dog(self, host, dry_run=False, jit=None):
         return wd.Watchdog(self.cfg, "Mac Studio", host, dry_run=dry_run,
@@ -223,6 +224,33 @@ class WatchdogTest(unittest.TestCase):
         rep = self.run_dog(host)["runners"]
         self.assertEqual(rep["studio-ubuntu-1"]["cause"], "maintenance")
         self.assertEqual(host.ran, [])
+
+    def test_hourly_drift_check_reaches_the_page(self):
+        calls = []
+
+        class Host2(FakeHost):
+            def vm_stdin(self, vm, role, script):
+                calls.append((vm, role, "verify-vm" in script or "usage" in script))
+                return 0, ("FAIL: /usr/local/bin/runc exists (breaks the OpenWrt build)\n"
+                           if vm == "gh-build" else "")
+
+        self.cfg["machines"][0]["vm_roles"] = {"gh-ubuntu": "ubuntu", "gh-build": "build",
+                                               "gh-build-2": "build"}
+        host = Host2([], vms={"gh-ubuntu": "Running", "gh-build": "Running",
+                              "gh-build-2": "Stopped"})
+        rep = self.run_dog(host)
+        self.assertEqual(sorted(c[:2] for c in calls),
+                         [("gh-build", "build"), ("gh-ubuntu", "ubuntu")])  # stopped VM skipped
+        self.assertTrue(all(c[2] for c in calls))  # the real script was sent
+        self.assertEqual(rep["drift"]["gh-ubuntu"], [])
+        calls.clear()
+        self.assertEqual(self.run_dog(host)["drift"]["gh-build"][0][:5], "FAIL:")
+        self.assertEqual(calls, [])  # not due again within the hour
+        st = rs.sanitize_stats({"watchdog": rep})
+        alerts = rs.machine_alerts("Mac Studio", st, rs.DEFAULT_CONFIG, None)
+        self.assertEqual(len(alerts), 1)
+        self.assertIn("VM gh-build drifted from the committed setup", alerts[0]["text"])
+        self.assertIn("/usr/local/bin/runc exists", alerts[0]["text"])
 
     def test_plist(self):
         import contextlib

@@ -175,6 +175,7 @@ release.
 | VM disk image | A Lima VM's disk image on the Mac has filled past this share of its size (it only shrinks after `fstrim` in the VM, which the cleanup does) | `vm_disk_alert_pct` (85) |
 | Runner service not running | A `actions.runner.*` launchd service on the Mac has no process | always on |
 | Leftover job processes | A process from a runner `_work` dir outlived its job (re-parented to launchd) for over an hour | always on |
+| VM drift | `tools/ci-hosts/verify-vm.sh` (run hourly in each VM by the watchdog) reports a VM that no longer matches the committed setup, e.g. runc back in an OpenWrt build VM | `vm_roles` per machine |
 | Runner version behind | A runner dir under `runner_roots` logs an older version than the newest release, two days after that release | `runner_roots` (`["~"]`) |
 | Queued, hosted stall, disabled workflow, minutes, API quota | As before | `queued_alert_minutes`, `hosted_stall_minutes` |
 
