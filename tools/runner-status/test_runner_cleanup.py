@@ -343,6 +343,27 @@ class VMScriptRunTest(unittest.TestCase):
                 self.assertTrue(os.path.exists(os.path.join(r, p)), p)
             self.assertTrue(os.path.exists(os.path.join(victim, "precious")))
 
+    def test_newline_and_escaping_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = os.path.realpath(tmp)
+            r = make_runner(root)
+            outside = os.path.join(root, "outside")
+            touch(os.path.join(outside, "precious"), days_old=30)
+            # in-root path that a newline-split fragment of the nasty name would hit
+            keep = os.path.join(r, "_work/_temp/keep")
+            touch(os.path.join(keep, "file"), days_old=0)
+            nasty = os.path.join(r, "_work/_temp/x\n" + keep)
+            touch(nasty, days_old=0)
+            os.symlink(outside, os.path.join(r, "_work/_temp/link\nout"))
+            os.symlink(outside, os.path.join(r, "_work/_temp/plain-link"))
+            res = self.run_script(root, apply=True)
+            self.assertTrue(os.path.exists(os.path.join(outside, "precious")))
+            self.assertFalse(os.path.lexists(nasty))
+            self.assertFalse(os.path.lexists(os.path.join(r, "_work/_temp/link\nout")))
+            self.assertFalse(os.path.lexists(os.path.join(r, "_work/_temp/plain-link")))
+            for i in res["items"]:
+                self.assertNotIn("\n", i["path"])
+
 
 class LaunchdTest(unittest.TestCase):
     def test_plist(self):
