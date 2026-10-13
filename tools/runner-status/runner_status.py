@@ -32,6 +32,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from collections import OrderedDict, deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -66,7 +67,10 @@ DEFAULT_CONFIG = {
 }
 
 API_WORKERS = 6  # parallel GitHub calls; bounded to stay gentle on the API
-ERROR_RETRY_SECONDS = 15  # retry sooner while something is wrong (e.g. a new token)
+ERROR_RETRY_SECONDS = 15  # retry sooner while GitHub can't be read at all (e.g. a new token)
+ETAG_CACHE_MAX = 500  # cached responses kept for conditional requests
+LOW_QUOTA_FRACTION = 0.2  # below this share of the hourly limit, poll slowly
+LOW_QUOTA_POLL_SECONDS = 300
 
 HOSTED_LABELS = re.compile(r"^(ubuntu|windows|macos)-", re.I)
 
@@ -308,31 +312,78 @@ def collect_stats(disk_paths: list[str]) -> dict:
 # --------------------------------------------------------------------------
 
 class GitHub:
+    """Read-only API client. Sends If-None-Match with the last ETag for each
+    URL: GitHub answers 304 for unchanged data and does not count a 304
+    against the rate limit, so idle repos cost nothing per poll."""
+
     def __init__(self, token: str, source: str = "environment"):
         self.token = token
         self.source = source
         self.kind = token_kind(token)
-        self.mu = threading.Lock()  # protects rate_remaining (calls run in parallel)
+        self.mu = threading.Lock()  # protects the fields below (calls run in parallel)
         self.rate_remaining: int | None = None
+        self.rate_limit: int | None = None
+        self.rate_reset: int | None = None
+        self.etags: OrderedDict[str, tuple[str, object]] = OrderedDict()  # url -> (etag, body)
+        self.billed: deque[float] = deque(maxlen=20000)  # times of calls that counted
+        self.free = 0  # 304 answers since start
+
+    def _note_rate(self, headers) -> None:
+        with self.mu:
+            for attr, name in (("rate_remaining", "X-RateLimit-Remaining"),
+                               ("rate_limit", "X-RateLimit-Limit"),
+                               ("rate_reset", "X-RateLimit-Reset")):
+                value = headers.get(name) if headers else None
+                if value is not None and value.isdigit():
+                    setattr(self, attr, int(value))
+
+    def usage(self) -> dict:
+        """Rate-limit numbers for the page footer."""
+        cutoff = time.time() - 3600
+        with self.mu:
+            while self.billed and self.billed[0] < cutoff:
+                self.billed.popleft()
+            return {"remaining": self.rate_remaining, "limit": self.rate_limit,
+                    "reset": self.rate_reset, "used_by_page_last_hour": len(self.billed),
+                    "free_304s": self.free}
 
     def get(self, path: str, params: dict | None = None):
         url = path if path.startswith("http") else API + path
         if params:
             url += ("&" if "?" in url else "?") + "&".join(f"{k}={v}" for k, v in params.items())
-        req = urllib.request.Request(url, headers={
+        headers = {
             "Authorization": f"Bearer {self.token}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
             "User-Agent": "ghostnet-runner-status",
-        })
+        }
+        with self.mu:
+            cached = self.etags.get(url)
+        if cached:
+            headers["If-None-Match"] = cached[0]
+        req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=20) as resp:
-                remaining = resp.headers.get("X-RateLimit-Remaining")
-                if remaining is not None:
-                    with self.mu:
-                        self.rate_remaining = int(remaining)
-                return json.loads(resp.read().decode())
+                self._note_rate(resp.headers)
+                body = json.loads(resp.read().decode())
+                etag = resp.headers.get("ETag")
+            with self.mu:
+                self.billed.append(time.time())
+                if etag:
+                    self.etags[url] = (etag, body)
+                    self.etags.move_to_end(url)
+                    while len(self.etags) > ETAG_CACHE_MAX:
+                        self.etags.popitem(last=False)
+            return body
         except urllib.error.HTTPError as exc:
+            self._note_rate(exc.headers)
+            if exc.code == 304 and cached:
+                with self.mu:
+                    self.free += 1
+                    self.etags.move_to_end(url)
+                return cached[1]
+            with self.mu:
+                self.billed.append(time.time())
             try:
                 message = json.loads(exc.read().decode()).get("message", "")
             except (OSError, ValueError, AttributeError):
@@ -414,6 +465,9 @@ class Poller:
                 raw.update(self.slow)  # last sweep's repos/groups/workflows
         raw["machine_stats"] = self.fetch_agents(errors)
         if gh is None or errors:
+            raw["blocked"] = True  # GitHub unreadable: the loop retries soon
+            if gh is not None:
+                raw["rate"] = gh.usage()
             return raw
         if "jobs" not in self.last:
             raw["loading"] = True  # first sweep: show runners + machines now
@@ -434,7 +488,7 @@ class Poller:
             self.slow_at = time.time()
             raw.update(self.slow)
         with gh.mu:
-            raw["rate_remaining"] = gh.rate_remaining
+            raw["rate"] = gh.usage()
         return raw
 
     @staticmethod
@@ -596,6 +650,12 @@ def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
         alerts.append({"level": "warn", "text":
                        f"Workflow disabled: {wf['repo']} / {wf['name']} ({wf['state']})",
                        "url": wf.get("url")})
+    rate = raw.get("rate") or {}
+    if rate.get("remaining") is not None and rate.get("limit") and \
+            rate["remaining"] < rate["limit"] * LOW_QUOTA_FRACTION:
+        alerts.append({"level": "warn", "text":
+                       f"GitHub API quota low: {rate['remaining']} of {rate['limit']} calls left "
+                       f"this hour; polling every {LOW_QUOTA_POLL_SECONDS // 60} min until it resets"})
     billing = raw.get("billing")
     if billing and billing.get("included_minutes"):
         used = billing.get("total_minutes_used", 0)
@@ -618,7 +678,7 @@ def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
                                f"{m['name']} VM {vm['name']} is {vm.get('status')}"})
 
     return {"updated": now.isoformat(), "org": cfg["org"], "machines": shown, "jobs": jobs,
-            "alerts": alerts, "billing": billing, "rate_remaining": raw.get("rate_remaining"),
+            "alerts": alerts, "billing": billing, "rate": raw.get("rate"),
             "token": raw.get("token"), "loading": bool(raw.get("loading")),
             "errors": list(dict.fromkeys(raw.get("errors", []))),
             "counts": {"queued": sum(j["status"] == "queued" for j in jobs),
@@ -692,7 +752,7 @@ function render(s){
   const c=s.counts||{queued:0,running:0};document.getElementById("jobs-title").textContent=s.loading?"Jobs: loading from GitHub…":`Jobs: ${c.queued} queued, ${c.running} running`;
   const j=s.jobs||[];document.getElementById("jobs").innerHTML=s.loading?`<p class="muted">Checking every repo for queued and running jobs. Runners and machine stats above are already live.</p>`:j.length?`<table><tr><th>State</th><th>Age</th><th>Repo</th><th>Job</th><th>Wants</th><th>Runner</th></tr>`+
    j.map(x=>`<tr><td class="${x.status==="queued"?"queued":"running"}">${x.status==="in_progress"?"running":esc(x.status)}</td><td>${age(x.age_min)}</td><td>${esc(x.repo)}</td><td><a href="${esc(x.url)}">${esc(x.workflow)} / ${esc(x.name)}</a><br><span class="labels">${esc(x.branch)}</span></td><td class="labels">${esc(x.labels.join(", "))}${x.hosted?" (GitHub-hosted)":""}</td><td>${esc(x.runner||"–")}</td></tr>`).join("")+`</table>`:`<p class="muted">No queued or running jobs.</p>`;
-  const e=s.errors||[];document.getElementById("foot").textContent=(s.token?`Using ${s.token}. `:"")+(s.rate_remaining!=null?`API calls left this hour: ${s.rate_remaining}. `:"")+(e.length?"Problems: "+e.join(" | "):"");
+  const e=s.errors||[];document.getElementById("foot").textContent=(s.token?`Using ${s.token}. `:"")+(s.rate&&s.rate.remaining!=null?`GitHub API: ${s.rate.remaining} of ${s.rate.limit} calls left this hour${s.rate.reset?`, resets ${new Date(s.rate.reset*1000).toLocaleTimeString()}`:""}; this page used ${s.rate.used_by_page_last_hour} in the last hour (${s.rate.free_304s} more answered free from cache). `:"")+(e.length?"Problems: "+e.join(" | "):"");
 }
 async function tick(){try{const r=await fetch("api/state",{cache:"no-store"});render(await r.json())}catch(e){document.getElementById("meta").textContent="Status server unreachable, retrying"}}
 tick();setInterval(tick,15000);
@@ -817,6 +877,18 @@ def push(args) -> None:
             break
 
 
+def next_wait(raw: dict, poll_seconds: int) -> int:
+    """Seconds until the next poll: soon while GitHub is unreadable (one call
+    per try), slow when the hourly API quota is running low, else normal."""
+    if raw.get("blocked"):
+        return min(poll_seconds, ERROR_RETRY_SECONDS)
+    rate = raw.get("rate") or {}
+    if rate.get("remaining") is not None and rate.get("limit"):
+        if rate["remaining"] < rate["limit"] * LOW_QUOTA_FRACTION:
+            return max(poll_seconds, LOW_QUOTA_POLL_SECONDS)
+    return poll_seconds
+
+
 def serve(args) -> None:
     cfg = load_config(args.config)
     token, source = (None, "") if args.demo else read_token()
@@ -828,9 +900,7 @@ def serve(args) -> None:
         while not poller.stop.is_set():
             raw = poller.poll_once()
             notifier.update(poller.snapshot().get("alerts", []))
-            wait = cfg["poll_seconds"]
-            if raw.get("errors"):
-                wait = min(wait, ERROR_RETRY_SECONDS)
+            wait = next_wait(raw, cfg["poll_seconds"])
             poller.stop.wait(wait)
 
     threading.Thread(target=loop, daemon=True, name="poller").start()
@@ -952,7 +1022,9 @@ def demo_raw() -> dict:
             "runner_processes": 1}}
     return {"runners": runners, "jobs": jobs, "machine_stats": stats, "errors": [],
             "groups": {r["id"]: "Default" for r in runners}, "disabled_workflows": [],
-            "billing": None, "rate_remaining": 4710}
+            "billing": None,
+            "rate": {"remaining": 4890, "limit": 5000, "reset": int(now.timestamp()) + 1800,
+                     "used_by_page_last_hour": 64, "free_304s": 912}}
 
 
 def main(argv: list[str] | None = None) -> None:

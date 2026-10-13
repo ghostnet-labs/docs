@@ -15,7 +15,13 @@ A small always-on page that shows, without anyone asking:
   (`gh-ubuntu`, `gh-build`, `gh-build-2` on the Studio).
 
 The page refreshes itself every 15 seconds; GitHub is polled every 60
-seconds (about 1,500 API calls an hour, well under the 5,000 limit).
+seconds. Each request carries the ETag of its last answer, and GitHub does not
+count "304 not changed" answers against the 5,000-an-hour limit, so quiet
+repos cost nothing. Only changes are billed (typically a few hundred calls an
+hour). The footer shows the calls left, when the hour resets, and how many
+calls the page itself used. Below 20% left the page polls every 5 minutes and
+says so. While GitHub can't be read at all (bad token), it retries every 15 s
+with a single call.
 
 ![Desktop view, demo data](https://github.com/ghostnet-labs/docs/raw/main/tools/runner-status/screenshot.png)
 

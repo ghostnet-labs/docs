@@ -189,6 +189,10 @@ class FakeGitHub:
             return {"workflows": [{"name": "Old", "state": "disabled_manually"}]}
         raise rs.GitHubError("not available")
 
+    def usage(self):
+        return {"remaining": self.rate_remaining, "limit": 5000, "reset": None,
+                "used_by_page_last_hour": len(self.calls), "free_304s": 0}
+
 
 class PollerTest(unittest.TestCase):
     def test_first_sweep_paints_runners_before_jobs(self):
@@ -294,6 +298,66 @@ class PushTest(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as ctx:
                 opener.open(urllib.request.Request(url, data=big, method="POST"))
             self.assertEqual(ctx.exception.code, 413)
+
+
+class RateLimitTest(unittest.TestCase):
+    def test_etag_304_returns_cache_and_is_not_billed(self):
+        from http.server import BaseHTTPRequestHandler
+        hits = []
+
+        class H(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                hits.append(self.headers.get("If-None-Match"))
+                if self.headers.get("If-None-Match") == '"v1"':
+                    self.send_response(304)
+                    self.send_header("X-RateLimit-Remaining", "4000")
+                    self.end_headers()
+                    return
+                body = b'{"runners": [1]}'
+                self.send_response(200)
+                self.send_header("ETag", '"v1"')
+                self.send_header("X-RateLimit-Remaining", "4000")
+                self.send_header("X-RateLimit-Limit", "5000")
+                self.send_header("X-RateLimit-Reset", "1760000000")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+
+        srv = rs.ThreadingHTTPServer(("127.0.0.1", 0), H)
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        self.addCleanup(t.join)
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        from unittest import mock
+        gh = rs.GitHub("github_pat_x", "test")
+        url = f"http://127.0.0.1:{srv.server_port}/orgs/o/actions/runners"
+        with mock.patch.dict(os.environ, {"NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"}):
+            first = gh.get(url)
+            second = gh.get(url)
+        self.assertEqual(first, second)
+        self.assertEqual(hits, [None, '"v1"'])
+        usage = gh.usage()
+        self.assertEqual(usage["used_by_page_last_hour"], 1)
+        self.assertEqual(usage["free_304s"], 1)
+        self.assertEqual((usage["remaining"], usage["limit"], usage["reset"]),
+                         (4000, 5000, 1760000000))
+
+    def test_next_wait(self):
+        self.assertEqual(rs.next_wait({"blocked": True}, 60), rs.ERROR_RETRY_SECONDS)
+        # A per-repo error is not a reason to poll faster.
+        self.assertEqual(rs.next_wait({"errors": ["firmware runs: boom"]}, 60), 60)
+        low = {"rate": {"remaining": 900, "limit": 5000}}
+        self.assertEqual(rs.next_wait(low, 60), rs.LOW_QUOTA_POLL_SECONDS)
+        self.assertEqual(rs.next_wait({"rate": {"remaining": 4000, "limit": 5000}}, 60), 60)
+
+    def test_low_quota_alert(self):
+        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        st = rs.build_state({"rate": {"remaining": 100, "limit": 5000}}, cfg, NOW)
+        self.assertTrue(any("API quota low" in a["text"] for a in st["alerts"]))
 
 
 class ParserTest(unittest.TestCase):
