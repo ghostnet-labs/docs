@@ -157,6 +157,71 @@ class TokenErrorTest(unittest.TestCase):
         self.assertEqual(st["alerts"][0]["level"], "crit")
 
 
+class FakeGitHub:
+    """Answers the API paths the poller uses; records calls."""
+
+    def __init__(self):
+        self.token, self.kind, self.source = "github_pat_fake", "fine-grained", "test"
+        self.mu = threading.Lock()  # protects calls
+        self.calls = []
+        self.rate_remaining = 4999
+
+    def get(self, path, params=None):
+        with self.mu:
+            self.calls.append(path)
+        if path.endswith("/actions/runners"):
+            return {"runners": [runner(1, "studio-mac-1", busy=True)]}
+        if path.endswith("/repos"):
+            return [{"name": "firmware"}, {"name": "docs"}, {"name": "old", "archived": True}]
+        if path.endswith("/runner-groups"):
+            return {"runner_groups": [{"id": 1, "name": "Default"}]}
+        if "/runner-groups/1/runners" in path:
+            return {"runners": [{"id": 1}]}
+        if path.endswith("/actions/runs"):
+            if path.startswith("/repos/o/firmware") and params["status"] == "queued":
+                return {"workflow_runs": [{"name": "Build", "head_branch": "main",
+                                           "jobs_url": "jobs/firmware/1"}]}
+            return {"workflow_runs": []}
+        if path.startswith("jobs/"):
+            return {"jobs": [job("queued", ["ubuntu-latest"], 3), job("completed", [], 9)]}
+        if path.endswith("/actions/workflows"):
+            return {"workflows": [{"name": "Old", "state": "disabled_manually"}]}
+        raise rs.GitHubError("not available")
+
+
+class PollerTest(unittest.TestCase):
+    def test_first_sweep_paints_runners_before_jobs(self):
+        from unittest import mock
+        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        cfg["org"] = "o"
+        cfg["machines"][0]["agent"] = ""
+        gh = FakeGitHub()
+        poller = rs.Poller(cfg, gh)
+        self.assertTrue(poller.snapshot()["loading"])  # before any poll
+        published = []
+        with mock.patch.object(rs, "read_token", return_value=(gh.token, "test")):
+            raw = poller.fetch(lambda r: published.append(rs.build_state(r, cfg, NOW)))
+        first = published[0]
+        self.assertTrue(first["loading"])
+        self.assertEqual(first["machines"][0]["counts"]["busy"], 1)
+        self.assertEqual(first["jobs"], [])
+        final = rs.build_state(raw, cfg, NOW)
+        self.assertFalse(final["loading"])
+        self.assertEqual(final["counts"], {"queued": 1, "running": 0})
+        self.assertEqual(final["machines"][0]["runners"][0]["group"], "Default")
+        self.assertIn("Workflow disabled: firmware / Old (disabled_manually)",
+                      [a["text"] for a in final["alerts"]])
+        self.assertNotIn("/repos/o/old/actions/runs", gh.calls)
+
+        # Second sweep: no loading placeholder, cached repos, no workflow re-scan.
+        published.clear()
+        before = len(gh.calls)
+        with mock.patch.object(rs, "read_token", return_value=(gh.token, "test")):
+            poller.fetch(lambda r: published.append(r))
+        self.assertEqual(published, [])
+        self.assertFalse(any(c.endswith("/workflows") for c in gh.calls[before:]))
+
+
 class ParserTest(unittest.TestCase):
     def test_vm_stat(self):
         text = ('Mach Virtual Memory Statistics: (page size of 16384 bytes)\n'
