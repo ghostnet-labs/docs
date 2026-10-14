@@ -21,6 +21,7 @@ Rules that must hold (checked by `verify-vm.sh`):
 
 Files:
 
+- `provision/install-yq.sh`: installs the pinned mikefarah yq (checksum-verified) into a Linux runner VM; `verify-vm.sh` flags yq older than the minimum CI needs (`CI_TOOL_MINIMUMS`).
 - `verify-vm.sh <ubuntu|build>`: read-only drift check. The runner watchdog
   (`tools/runner-status/runner_watchdog.py`) runs it in each VM hourly and the
   status page alerts on drift.
