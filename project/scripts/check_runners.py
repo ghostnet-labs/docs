@@ -97,30 +97,42 @@ def is_self_hosted(runs_on) -> bool:
 
 _HEAD_IS_REPO = (r"(?:github\.event\.pull_request\.head\.repo\.full_name == github\.repository"
                  r"|github\.repository == github\.event\.pull_request\.head\.repo\.full_name)")
-_PICK = r"(?:fromJSON\('[^']*'\)|'[^']*')"
+# The label the guard selects for same-repository work must be self-hosted, and
+# the fallback for everything else a GitHub-hosted runner. Checking both stops
+# an inverted guard (`head == repo && 'ubuntu-latest' || 'self-hosted'`).
+_PICK = r"(?:fromJSON\('(?P<sel>[^']*)'\)|'(?P<lit>[^']*)')"
+_FALLBACK = r"'(?P<fb>(?:ubuntu|macos|windows)-[A-Za-z0-9._-]+)'"
 # `${{ HEAD && self-hosted-labels || 'hosted' }}`: forks never get the Macs.
-_GUARD_PLAIN = re.compile(r"^\$\{\{ " + _HEAD_IS_REPO + " && " + _PICK + r" \|\| '[^']+' \}\}$")
+_GUARD_PLAIN = re.compile(r"^\$\{\{ " + _HEAD_IS_REPO + " && " + _PICK + r" \|\| " + _FALLBACK + r" \}\}$")
 # `${{ (event_name != 'pull_request' || HEAD) && ... }}`: lets push events use
-# the Macs. Only safe when pull_request is the sole PR trigger, because a
-# pull_request_target run has event_name 'pull_request_target' and would pass.
+# the Macs. Only safe when every trigger is one where event_name cannot be a
+# pull_request_target-style event (see SAFE_FOR_EVENT_GUARD).
 _GUARD_EVENT = re.compile(r"^\$\{\{ \(github\.event_name != 'pull_request' \|\| " + _HEAD_IS_REPO
-                          + r"\) && " + _PICK + r" \|\| '[^']+' \}\}$")
+                          + r"\) && " + _PICK + r" \|\| " + _FALLBACK + r" \}\}$")
+SAFE_FOR_EVENT_GUARD = frozenset({"pull_request", "push", "schedule", "workflow_dispatch", "merge_group"})
 
 
-def has_fork_guard(runs_on, pr_target: bool = False) -> bool:
+def _guard_picks_self_hosted(m: "re.Match[str]") -> bool:
+    return "self-hosted" in (m.group("sel") or m.group("lit") or "")
+
+
+def has_fork_guard(runs_on, allow_event_form: bool = True) -> bool:
     """True when runs-on is a recognised fork guard.
 
     Only two exact forms pass (see _GUARD_PLAIN and _GUARD_EVENT); anything
     else, such as an inverted `!=` or a stray `||`, is rejected rather than
-    guessed at. pass pr_target=True for workflows that also trigger on
-    pull_request_target, which only accept the plain form.
+    guessed at. The guard must select self-hosted labels for same-repository
+    work and a GitHub-hosted label otherwise. Pass allow_event_form=False for
+    workflows with any trigger outside SAFE_FOR_EVENT_GUARD, which then only
+    accept the plain form.
     """
     if not isinstance(runs_on, str):
         return False
     text = " ".join(runs_on.split())
-    if _GUARD_PLAIN.match(text):
-        return True
-    return not pr_target and bool(_GUARD_EVENT.match(text))
+    m = _GUARD_PLAIN.match(text)
+    if m is None and allow_event_form:
+        m = _GUARD_EVENT.match(text)
+    return m is not None and _guard_picks_self_hosted(m)
 
 
 def _cancels(conc) -> bool:
@@ -160,7 +172,7 @@ def check_workflow(repo: str, name: str, doc: dict) -> list[Finding]:
                 out.append(Finding(repo, name, job_id, "hosted-runner",
                                    f"runs-on {_runs_on_text(job.get('runs-on'))!r}"))
             if (on_pr and is_self_hosted(job.get("runs-on"))
-                    and not has_fork_guard(job.get("runs-on"), "pull_request_target" in triggers)):
+                    and not has_fork_guard(job.get("runs-on"), set(triggers) <= SAFE_FOR_EVENT_GUARD)):
                 out.append(Finding(repo, name, job_id, "fork-pr-self-hosted",
                                    "pull request code can run on a self-hosted runner "
                                    f"(runs-on {_runs_on_text(job.get('runs-on'))!r} has no fork guard)"))

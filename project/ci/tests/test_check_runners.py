@@ -80,19 +80,33 @@ jobs:
             # the head check is only one side of an ||, so it never restricts
             f"${{{{ ({head} || github.event_name == 'pull_request') && {pick} || 'ubuntu-latest' }}}}",
             f"${{{{ {head} || {pick} }}}}",
+            # inverted selector: same-repo PRs get a hosted runner, forks get the Macs
+            f"${{{{ {head} && 'ubuntu-latest' || 'self-hosted' }}}}",
+            f"${{{{ {head} && fromJSON('[\"ubuntu-latest\"]') || 'ubuntu-latest' }}}}",
+            # fallback must be a GitHub-hosted label, never a self-hosted one
+            f"${{{{ {head} && {pick} || 'self-hosted' }}}}",
             # guard in the fallback position instead of the selector
             f"${{{{ true && {pick} || ({head} && 'a' || 'b') }}}}",
         ]
         for text in bad:
             self.assertFalse(cr.has_fork_guard(text), text)
 
+    def test_event_form_needs_only_safe_triggers(self):
+        head = "github.event.pull_request.head.repo.full_name == github.repository"
+        event_form = (f"${{{{ (github.event_name != 'pull_request' || {head}) && "
+                      "fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}")
+        doc = wf("on: [pull_request, workflow_run]\nconcurrency: {group: x, cancel-in-progress: true}\n"
+                 "jobs:\n  t:\n    runs-on: \"" + event_form.replace('"', '\\"') + "}\"\n"
+                 "    timeout-minutes: 5\n    steps: []\n")
+        self.assertIn("fork-pr-self-hosted", [f.rule for f in cr.check_workflow("r", "w.yml", doc)])
+
     def test_pull_request_target_rejects_event_name_disjunct(self):
         head = "github.event.pull_request.head.repo.full_name == github.repository"
         event_form = (f"${{{{ (github.event_name != 'pull_request' || {head}) && "
                       "fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}")
         plain = f"${{{{ {head} && fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}}}"
-        self.assertTrue(cr.has_fork_guard(plain, pr_target=True))
-        self.assertFalse(cr.has_fork_guard(event_form + "}", pr_target=True))
+        self.assertTrue(cr.has_fork_guard(plain, allow_event_form=False))
+        self.assertFalse(cr.has_fork_guard(event_form + "}", allow_event_form=False))
         doc = wf("on: pull_request_target\nconcurrency: {group: x, cancel-in-progress: true}\n"
                  "jobs:\n  t:\n    runs-on: \"" + event_form.replace('"', '\\"') + "}\"\n"
                  "    timeout-minutes: 5\n    steps: []\n")
