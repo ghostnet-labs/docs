@@ -95,14 +95,32 @@ def is_self_hosted(runs_on) -> bool:
     return "self-hosted" in _runs_on_text(runs_on)
 
 
-def has_fork_guard(runs_on) -> bool:
-    """True when runs-on compares the PR head repo with this repo.
+_HEAD_IS_REPO = (r"(?:github\.event\.pull_request\.head\.repo\.full_name == github\.repository"
+                 r"|github\.repository == github\.event\.pull_request\.head\.repo\.full_name)")
+_PICK = r"(?:fromJSON\('[^']*'\)|'[^']*')"
+# `${{ HEAD && self-hosted-labels || 'hosted' }}`: forks never get the Macs.
+_GUARD_PLAIN = re.compile(r"^\$\{\{ " + _HEAD_IS_REPO + " && " + _PICK + r" \|\| '[^']+' \}\}$")
+# `${{ (event_name != 'pull_request' || HEAD) && ... }}`: lets push events use
+# the Macs. Only safe when pull_request is the sole PR trigger, because a
+# pull_request_target run has event_name 'pull_request_target' and would pass.
+_GUARD_EVENT = re.compile(r"^\$\{\{ \(github\.event_name != 'pull_request' \|\| " + _HEAD_IS_REPO
+                          + r"\) && " + _PICK + r" \|\| '[^']+' \}\}$")
 
-    Matches the guard expression, not the exact spelling, so both
-    `head.repo.full_name == github.repository` orders pass.
+
+def has_fork_guard(runs_on, pr_target: bool = False) -> bool:
+    """True when runs-on is a recognised fork guard.
+
+    Only two exact forms pass (see _GUARD_PLAIN and _GUARD_EVENT); anything
+    else, such as an inverted `!=` or a stray `||`, is rejected rather than
+    guessed at. pass pr_target=True for workflows that also trigger on
+    pull_request_target, which only accept the plain form.
     """
-    text = _runs_on_text(runs_on)
-    return "head.repo.full_name" in text and "github.repository" in text
+    if not isinstance(runs_on, str):
+        return False
+    text = " ".join(runs_on.split())
+    if _GUARD_PLAIN.match(text):
+        return True
+    return not pr_target and bool(_GUARD_EVENT.match(text))
 
 
 def _cancels(conc) -> bool:
@@ -141,7 +159,8 @@ def check_workflow(repo: str, name: str, doc: dict) -> list[Finding]:
             if hosted:
                 out.append(Finding(repo, name, job_id, "hosted-runner",
                                    f"runs-on {_runs_on_text(job.get('runs-on'))!r}"))
-            if on_pr and is_self_hosted(job.get("runs-on")) and not has_fork_guard(job.get("runs-on")):
+            if (on_pr and is_self_hosted(job.get("runs-on"))
+                    and not has_fork_guard(job.get("runs-on"), "pull_request_target" in triggers)):
                 out.append(Finding(repo, name, job_id, "fork-pr-self-hosted",
                                    "pull request code can run on a self-hosted runner "
                                    f"(runs-on {_runs_on_text(job.get('runs-on'))!r} has no fork guard)"))

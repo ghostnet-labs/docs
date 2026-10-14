@@ -61,11 +61,42 @@ jobs:
 """)
         self.assertEqual(cr.check_workflow("r", "w.yml", doc), [])
 
-    def test_fork_guard_must_compare_head_repo(self):
-        self.assertTrue(cr.has_fork_guard(
-            "${{ github.repository == github.event.pull_request.head.repo.full_name && fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}"))
-        self.assertFalse(cr.has_fork_guard("${{ github.actor == 'x' && fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}"))
-        self.assertFalse(cr.has_fork_guard(["self-hosted", "Linux"]))
+    def test_fork_guard_accepts_only_exact_forms(self):
+        head = "github.event.pull_request.head.repo.full_name == github.repository"
+        pick = "fromJSON('[\"self-hosted\"]')"
+        ok = [
+            f"${{{{ {head} && {pick} || 'ubuntu-latest' }}}}",
+            f"${{{{ github.repository == github.event.pull_request.head.repo.full_name && {pick} || 'ubuntu-latest' }}}}",
+            f"${{{{ (github.event_name != 'pull_request' || {head}) && {pick} || 'ubuntu-latest' }}}}",
+        ]
+        for text in ok:
+            self.assertTrue(cr.has_fork_guard(text), text)
+        bad = [
+            ["self-hosted", "Linux"],
+            "self-hosted",
+            f"${{{{ github.actor == 'x' && {pick} || 'ubuntu-latest' }}}}",
+            # inverted: forks get the Macs
+            f"${{{{ github.event.pull_request.head.repo.full_name != github.repository && {pick} || 'ubuntu-latest' }}}}",
+            # the head check is only one side of an ||, so it never restricts
+            f"${{{{ ({head} || github.event_name == 'pull_request') && {pick} || 'ubuntu-latest' }}}}",
+            f"${{{{ {head} || {pick} }}}}",
+            # guard in the fallback position instead of the selector
+            f"${{{{ true && {pick} || ({head} && 'a' || 'b') }}}}",
+        ]
+        for text in bad:
+            self.assertFalse(cr.has_fork_guard(text), text)
+
+    def test_pull_request_target_rejects_event_name_disjunct(self):
+        head = "github.event.pull_request.head.repo.full_name == github.repository"
+        event_form = (f"${{{{ (github.event_name != 'pull_request' || {head}) && "
+                      "fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}")
+        plain = f"${{{{ {head} && fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}}}"
+        self.assertTrue(cr.has_fork_guard(plain, pr_target=True))
+        self.assertFalse(cr.has_fork_guard(event_form + "}", pr_target=True))
+        doc = wf("on: pull_request_target\nconcurrency: {group: x, cancel-in-progress: true}\n"
+                 "jobs:\n  t:\n    runs-on: \"" + event_form.replace('"', '\\"') + "}\"\n"
+                 "    timeout-minutes: 5\n    steps: []\n")
+        self.assertIn("fork-pr-self-hosted", [f.rule for f in cr.check_workflow("r", "w.yml", doc)])
 
     def test_fork_fallback_expression_counts_as_self_hosted(self):
         self.assertTrue(cr.is_self_hosted(FORK_FALLBACK))
