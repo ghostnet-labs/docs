@@ -29,6 +29,10 @@ Changes to merge policy and workflow inventories need source review and regressi
 
 ## Runner policy
 
-`project/scripts/check_runners.py` keeps CI on the self-hosted Mac runners and stops stale runs from piling up. It fails a workflow job that runs only on GitHub-hosted runners, a pull request workflow whose runs a newer push does not cancel, a schedule that fires more than hourly on a hosted runner, a reusable workflow from another repository that is not pinned to a commit SHA, and a job without `timeout-minutes`. Fork pull requests may fall back to `ubuntu-latest` through a `runs-on` expression that names `self-hosted` for same-repository work.
+`project/scripts/check_runners.py` keeps CI on the self-hosted Mac runners and stops stale runs from piling up. It fails a workflow job that runs only on GitHub-hosted runners, a pull request workflow whose runs a newer push does not cancel, a schedule that fires more than hourly on a hosted runner, a reusable workflow from another repository that is not pinned to a commit SHA, and a job without `timeout-minutes`. It also fails any job on a `pull_request` workflow that can run on a self-hosted runner without a fork guard, because a fork pull request could otherwise run its own code on the Macs. The guard is a `runs-on` expression that picks `self-hosted` only when the event is not a pull request or the pull request head repository is this repository, and falls back to a hosted runner otherwise:
+
+```yaml
+runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "Linux", "ARM64"]') || 'ubuntu-latest' }}
+```
 
 Exceptions live in `project/ci/runner-allowlist.json`, each with the rules it waives and the reason. Remove an entry when its workflow is fixed; the check warns about entries nothing uses. Docs runs the check on every PR in `Project record checks`, and `Runner policy audit` runs it hourly against every public repo's default branch.

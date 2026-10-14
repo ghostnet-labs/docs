@@ -19,6 +19,14 @@ runs. Each rule names a failure that already happened once:
                     (and runner choice) can change without a PR here.
   job-timeout       A job has no timeout-minutes, so a hung step holds a
                     runner for GitHub's 6-hour default.
+  fork-pr-self-hosted
+                    A workflow that runs on pull_request puts a job on a
+                    self-hosted runner with no fork guard. A fork PR could then
+                    run its own code on Justin's Macs. The runs-on must pick
+                    self-hosted only when the PR head repo is this repo, e.g.
+                    `${{ github.event.pull_request.head.repo.full_name ==
+                    github.repository && fromJSON('["self-hosted", ...]') ||
+                    'ubuntu-latest' }}`.
 
 Exceptions live in project/ci/runner-allowlist.json with a reason, so each
 one is reviewed in a docs PR. Usage:
@@ -41,7 +49,8 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_ALLOWLIST = HERE.parent / "ci" / "runner-allowlist.json"
-RULES = ("hosted-runner", "pr-concurrency", "hosted-cron", "pinned-reusable", "job-timeout")
+RULES = ("hosted-runner", "pr-concurrency", "hosted-cron", "pinned-reusable", "job-timeout",
+         "fork-pr-self-hosted")
 PR_EVENTS = ("pull_request", "pull_request_target")
 SHA_RE = re.compile(r"@[0-9a-f]{40}$")
 
@@ -86,6 +95,16 @@ def is_self_hosted(runs_on) -> bool:
     return "self-hosted" in _runs_on_text(runs_on)
 
 
+def has_fork_guard(runs_on) -> bool:
+    """True when runs-on compares the PR head repo with this repo.
+
+    Matches the guard expression, not the exact spelling, so both
+    `head.repo.full_name == github.repository` orders pass.
+    """
+    text = _runs_on_text(runs_on)
+    return "head.repo.full_name" in text and "github.repository" in text
+
+
 def _cancels(conc) -> bool:
     if isinstance(conc, dict):
         cip = conc.get("cancel-in-progress")
@@ -122,6 +141,10 @@ def check_workflow(repo: str, name: str, doc: dict) -> list[Finding]:
             if hosted:
                 out.append(Finding(repo, name, job_id, "hosted-runner",
                                    f"runs-on {_runs_on_text(job.get('runs-on'))!r}"))
+            if on_pr and is_self_hosted(job.get("runs-on")) and not has_fork_guard(job.get("runs-on")):
+                out.append(Finding(repo, name, job_id, "fork-pr-self-hosted",
+                                   "pull request code can run on a self-hosted runner "
+                                   f"(runs-on {_runs_on_text(job.get('runs-on'))!r} has no fork guard)"))
             if "timeout-minutes" not in job:
                 out.append(Finding(repo, name, job_id, "job-timeout", "no timeout-minutes"))
         if on_pr and not wf_cancels and not _cancels(job.get("concurrency")):
