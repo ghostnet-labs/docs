@@ -25,7 +25,31 @@ calls the page itself used. Below 20% left the page polls every 5 minutes and
 says so. While GitHub can't be read at all (bad token), it retries every 15 s
 with a single call.
 
-![Desktop view, demo data](https://github.com/ghostnet-labs/docs/raw/main/tools/runner-status/screenshot.png)
+![Desktop view with several problems (dark)](screenshots/after-desktop.png)
+
+On a phone the same page reads top to bottom: verdict, who needs you, a
+swipeable strip of counts, what every runner is doing, then each machine.
+
+![Phone view](screenshots/after-phone.png)
+
+### Reading the page
+
+- **Verdict:** one plain sentence at the top ("All clear", "3 problems"). It
+  counts distinct problems (one runner, one GitHub failure), not alert lines.
+  A runner whose auto-recovery gave up is called out as needing a human.
+- **Activity:** offline runners first, most urgent on top, then running jobs
+  (longest first), jobs waiting for a runner (oldest first) and idle runners
+  (collapsed). Every row shows the job, its repo, PR link and a live timer.
+- **Machines:** one card per machine with RAM, CPU and disk bars (tick marks
+  show the warn and critical levels, a text label says HIGH or CRITICAL so
+  colour is never the only signal), 1-hour CPU and RAM charts (hover, tap or
+  use the arrow keys for values), and its VMs.
+- **Freshness:** the pill in the top bar says Live, Stale or Connection lost,
+  and a banner appears when the data is more than 10 minutes old.
+- **Keys:** `/` filter, `t` theme, `a` alerts, `i` idle runners, `?` help.
+
+The 1-hour charts come from samples the server keeps in memory (one every 30
+seconds, 120 per series); they cost no GitHub calls and reset on restart.
 
 It is one file, `runner_status.py`, Python 3 standard library only. Nothing to
 install. It only reads: it calls GitHub `GET` endpoints with a read-only token

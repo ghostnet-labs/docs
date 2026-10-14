@@ -1,0 +1,51 @@
+name: Runner policy audit
+
+# Hourly read-only audit of every Manet repo's default-branch workflows
+# against project/scripts/check_runners.py: GitHub-hosted jobs, pull request
+# runs that a newer push does not cancel, sub-hourly hosted crons, unpinned
+# reusable workflows and jobs without a timeout. A failure here means a
+# workflow change slipped past review; GitHub emails the failure.
+# No pull_request trigger, so it never adds a check to a PR.
+
+on:
+  schedule:
+    - cron: '41 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Audit runner policy
+    runs-on: [self-hosted, Linux, ARM64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: docs
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+          check-latest: true
+      - name: Fetch each repo's workflows
+        # Public repos only; setup is private and checked by its own CI.
+        run: |
+          mkdir -p repos
+          for spec in OpenVLM:main firmware:24.10 luci:mm-23.05 openmanetd:main packages:24.10 protobufs:main; do
+            repo=${spec%%:*}; ref=${spec#*:}
+            git clone --quiet --depth 1 --branch "$ref" --filter=blob:none --sparse \
+              "https://github.com/ghostnet-labs/$repo.git" "repos/$repo"
+            git -C "repos/$repo" sparse-checkout set .github/workflows
+          done
+          mkdir -p repos/docs/.github
+          cp -r docs/.github/workflows repos/docs/.github/
+      - name: Check runner policy
+        run: |
+          python -m pip install --quiet pyyaml==6.0.2
+          python docs/project/scripts/check_runners.py --root repos --allowlist docs/project/ci/runner-allowlist.json

@@ -26,3 +26,9 @@ The always-running read-only gate excludes itself to avoid waiting forever. The 
 Strict up-to-date checks can require updating a PR after another merges. This intentionally demands fresh CI against the new base. Merge protections must be installed and verified before the handler will merge anything; workflow YAML alone does not enforce manual merges.
 
 Changes to merge policy and workflow inventories need source review and regression tests. Pinned callers must be updated to the reviewed policy commit when publishing a policy change.
+
+## Runner policy
+
+`project/scripts/check_runners.py` keeps CI on the self-hosted Mac runners and stops stale runs from piling up. It fails a workflow job that runs only on GitHub-hosted runners, a pull request workflow whose runs a newer push does not cancel, a schedule that fires more than hourly on a hosted runner, a reusable workflow from another repository that is not pinned to a commit SHA, and a job without `timeout-minutes`. Fork pull requests may fall back to `ubuntu-latest` through a `runs-on` expression that names `self-hosted` for same-repository work.
+
+Exceptions live in `project/ci/runner-allowlist.json`, each with the rules it waives and the reason. Remove an entry when its workflow is fixed; the check warns about entries nothing uses. Docs runs the check on every PR in `Project record checks`, and `Runner policy audit` runs it hourly against every public repo's default branch.
