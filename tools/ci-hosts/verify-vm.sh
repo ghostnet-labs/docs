@@ -8,11 +8,14 @@ fail() { echo "FAIL: $*"; }
 
 case "$role" in
   build)
-    # openwrt-build VMs: the Lima containerd/runc must stay off so the
-    # firmware pilot's check for /usr/local/bin/runc passes.
+    # openwrt-build VMs: the firmware pilot fails if /usr/local/bin/runc exists.
+    # Docker (Ubuntu docker.io, with its own containerd and runc in /usr/bin) is
+    # allowed here since Justin approved it for gh-build and gh-build-2.
     [ -e /usr/local/bin/runc ] && fail "/usr/local/bin/runc exists (breaks the OpenWrt build)"
-    if systemctl is-active --quiet containerd 2>/dev/null; then fail "containerd is running"; fi
-    command -v docker >/dev/null 2>&1 && fail "docker is installed in an openwrt-build VM"
+    if command -v docker >/dev/null 2>&1; then
+      dpkg -s docker.io >/dev/null 2>&1 || fail "docker is not the Ubuntu docker.io package (runc could land in /usr/local/bin)"
+      [ -e /usr/bin/runc ] || fail "docker is installed but /usr/bin/runc is missing"
+    fi
     for c in make gcc git python3; do
       command -v "$c" >/dev/null 2>&1 || fail "missing build tool: $c"
     done
