@@ -11,7 +11,7 @@ Every figure here is **paper** evidence: a datasheet or vendor figure, a third-p
 | GW16167 HaLow (MM8108) on the Pier42 USB carrier | 0.5 W | about 1.2 W | [Gateworks GW16167](https://trac.gateworks.com/wiki/expansion/gw16167), same figures as the CM5 track |
 | MAX-M10S + ANN-MB1, MAX3232 | about 0.15 W | about 0.2 W | [MAX-M10S data sheet](https://content.u-blox.com/sites/default/files/MAX-M10S_DataSheet_UBX-20035208.pdf) plus the ANN-MB1 LNA and the MAX3232 supply current |
 | MCP2221A + INA228 | under 0.1 W | under 0.1 W | Estimate |
-| **Total at 12 V** | **about 13 W** | **about 36 W** (design bound: 45 W, Protectli's rating) | |
+| **Total at 12 V** | **about 13 W** | **about 33 W** (sum of the peaks above; design bound: 45 W, Protectli's rating) | |
 
 The typical row assumes a node that is meshing with light traffic. The peak row adds every load's maximum at once, which is a design bound and not an expected operating point. The 9 W idle figure may or may not include a Wi-Fi card; the bench measurement settles it.
 
@@ -22,7 +22,7 @@ The Victron Orion-Tr 12/12-9 isolated converter is 87% efficient and draws under
 | Case | At 12 V | From the pack | 3S at 9.0 V (empty) | 3S at 11.1 V (nominal) | 3S at 12.6 V (full) |
 |---|---|---|---|---|---|
 | Typical | 13 W | about 15 W | 1.7 A | 1.35 A | 1.2 A |
-| Peak | 36 W | about 41 W | 4.6 A | 3.7 A | 3.3 A |
+| Peak | 33 W | about 38 W | 4.2 A | 3.4 A | 3.0 A |
 | Box rating | 45 W | about 52 W | 5.7 A | 4.7 A | 4.1 A |
 
 What these numbers mean for the bench parts:
