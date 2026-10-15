@@ -1,11 +1,11 @@
 # V1 battery pack latch options (replacement for B-13)
 
 **Owner:** [GHO-8](https://linear.app/ghostnet-labs/issue/GHO-8). This file supports the B-13 pack-latch question in that issue.
-**Status:** Research proposal, 2026-10-09. Nothing here changes a register. B-13 in [v1-selections.md](v1-selections.md), D-012 in [../decisions.md](../decisions.md) and M-20 in [v1-battery-pack.md](v1-battery-pack.md) stay as they are until the project owner decides. Every part below is a **Candidate**, not Selected.
+**Status:** Research, 2026-10-09. Option B was adopted as the working default by D-050 in [../decisions.md](../decisions.md); B-13 in [v1-selections.md](v1-selections.md) and M-20 in [v1-battery-pack.md](v1-battery-pack.md) own the result. The other options below were not chosen.
 
 ## Why B-13 needs a replacement
 
-The first CAD gate pass ([v1-battery-pack-gates.md on branch `gho8-pack-gates`](https://github.com/ghostnet-labs/docs/blob/gho8-pack-gates/project/hardware/v1-battery-pack-gates.md), gates 1 and 4) found two problems with the Southco C3-99-107-055 grabber catch:
+The first CAD gate pass ([v1-battery-pack-gates.md](v1-battery-pack-gates.md), gates 1 and 4) found two problems with the Southco C3-99-107-055 grabber catch:
 
 1. **Envelope.** The C3 family catch body is about 26.6 x 43 x 17 mm, taken from the family drawing because the C3-99-107-055 drawing could not be retrieved. That body cannot fit the 7 mm X span of the M-20 latch zone (X 134 to 141) in any orientation.
 2. **Retention.** B-13 is a 5 lbf-class (about 22 N) catch, and it releases by pulling rather than by a positive lock. The gate-4 moment balance says the latch must hold about 24 to 41 N of gasket and probe preload before any shock load.
@@ -93,15 +93,9 @@ Reasons:
 - It is the symmetric two-catch arrangement the design rule names, so it settles the uneven-compression question up front instead of waiting for CAD.
 - The pockets keep out of the gasket's Y span, and the pack length stays at 145 mm.
 
-What it changes, if adopted (each is a register change for the project owner, not made here):
+D-050 applied this recommendation: it superseded D-012 and retired the C3 catch (R-25), and B-13 and M-20 now record the latches and pockets. Whether the freed top-face zone removes the need for gate-1 option 1 is for the model to confirm.
 
-- B-13 and D-012 would be superseded (a new D row, and an R row for the C3).
-- M-20 would be redefined from "X 134 to 141 near Y 37" to two end-face latch pockets.
-- The radio enclosure (GHO-11) gains two keeper mounting areas on its end face.
-
-The gasket gland can then use the freed top-face zone near X 134 to 141. Gate-1 option 1 may no longer be needed, which the model should confirm.
-
-Before release, check these items in CAD and on the bench:
+Before release, check these items in CAD and on the bench ([GHO-8](https://linear.app/ghostnet-labs/issue/GHO-8)):
 
 - **Keeper and latch geometry.** The keeper position against the latch spring, which the catalog shows as 0.9 mm (.035 in) door/frame separation; how far the pack-side latch extends below the parting line and the keeper above it (about 16 and 17 mm, estimated); and glove access to the lever tab in a 16 mm-wide pocket.
 - **Accidental release.** Whether the lever stays closed under drop and brush snag. The 97-30 has no secondary catch, unlike the 97-50.

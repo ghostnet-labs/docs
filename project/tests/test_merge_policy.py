@@ -129,6 +129,7 @@ class GateTests(unittest.TestCase):
             self.assertTrue(check_blockers([dict(check, **changes)]))
         self.assertEqual(check_blockers([dict(check, name="Upload ccache cache to s3", conclusion="skipped")]), [])
         self.assertTrue(check_blockers([dict(check, name="test", conclusion="skipped")]))
+        self.assertEqual(check_blockers([dict(check, name="Pull Request Labeler", status="queued", conclusion=None)]), [])
 
 
 class FakeExternalAPI:

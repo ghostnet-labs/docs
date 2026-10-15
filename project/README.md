@@ -2,7 +2,7 @@
 
 This folder holds the engineering records for the ghostnet-labs OpenMANET field node. It lives outside `docs/`, so the public OpenMANET website does not publish it. It replaces the Google Drive folder "Manet", which was retired on 2026-10-01.
 
-**The project.** A compact, rugged, headless, battery-powered field mesh node built around a Raspberry Pi CM5 running OpenMANET (OpenWrt, 802.11s, batman-adv). Each node has a 900 MHz Wi-Fi HaLow radio, a 2.4/5 GHz Wi-Fi radio, GNSS, Ethernet and battery telemetry, and is managed entirely from an end-user device (EUD). The size reference is the Persistent Systems MPU5 (4.6 x 2.6 x 1.5 in, 117 x 67 x 38 mm).
+**The project.** A compact, rugged, headless, battery-powered field mesh node built around a Raspberry Pi CM5 running OpenMANET (OpenWrt, 802.11s, batman-adv). Each node has a 900 MHz Wi-Fi HaLow radio, a 2.4/5/6 GHz Wi-Fi radio, GNSS, Ethernet and battery telemetry, and is managed entirely from an end-user device (EUD). The size reference is the Persistent Systems MPU5 (4.6 x 2.6 x 1.5 in, 117 x 67 x 38 mm).
 
 **Two tracks.**
 - Track A is an off-the-shelf proof of concept, tracked in the Linear project [OpenMANET POC](https://linear.app/ghostnet-labs/project/openmanet-poc-66239aa64a35).
@@ -47,6 +47,7 @@ Every fact has exactly one owner. Everywhere else refers to it by ID or link and
 | Unified UI repository boundaries, local lab vs. physical-node modes and release procedure | [software/unified-ui-developer-guide.md](software/unified-ui-developer-guide.md) |
 | LuCI-only tasks and the criteria for migrating or retiring each | [software/luci-only-tasks.md](software/luci-only-tasks.md) |
 | Unified UI physical-node acceptance checklist (results go on [GHO-79](https://linear.app/ghostnet-labs/issue/GHO-79)) | [software/unified-ui-acceptance-plan.md](software/unified-ui-acceptance-plan.md) |
+| Stage 2 bench compute tracks: per-track carrier notes, power budget, bring-up procedure, scorecard, and a dated screening snapshot of node parts (purchase quantities, prices and status stay in the Linear Purchase BOM and [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36)) | [bench-tracks/](bench-tracks/) (one folder per track, e.g. [bench-tracks/cm5/](bench-tracks/cm5/README.md)) |
 | Firmware source, board target, CI and build evidence | [ghostnet-labs/firmware](https://github.com/ghostnet-labs/firmware) and its PRs |
 | History of the 2026-09-29 Track A options | [poc/history-2026-09-29.md](poc/history-2026-09-29.md) (historical, never authoritative) |
 

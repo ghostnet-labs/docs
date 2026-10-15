@@ -1,7 +1,7 @@
 # V1 net-plan blocker proposals (K-3, K-6, K-8, K-9)
 
 **Owner:** [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10), with [GHO-9](https://linear.app/ghostnet-labs/issue/GHO-9) and [GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11) for the parts they own.  
-**Status:** Candidate, 2026-10-09. This file proposes circuits for four blockers that the GHO-13 schematic net plan raised (`v1-schematic-netplan.md`, branch `gho13-schematic-netplan`, [PR #67](https://github.com/ghostnet-labs/docs/pull/67), conflicts K-3, K-6, K-8 and K-9). It edits no record, selects no part and assigns no D-number. Each proposal ends with record text the records owner can apply if the project owner accepts it. Until then the owning records win (README rule 6).
+**Status:** Desk review, 2026-10-09. Adopted as working default by D-044 in [../decisions.md](../decisions.md); each default is reversible until layout and is revisited at schematic review. This file holds the circuits behind it for the four blockers that the GHO-13 schematic net plan raised ([v1-schematic-netplan.md](v1-schematic-netplan.md), conflicts K-3, K-6, K-8 and K-9). Its proposed record text has been applied; the owning records win over this file (README rule 6).
 
 ## Conventions
 
@@ -11,7 +11,7 @@ The status words follow the net plan.
 - **Calculated:** derived here from datasheet values. The arithmetic is shown. Nobody has measured it.
 - **Proposed:** a value or connection this file suggests, so capture has a starting point.
 - **Unverified:** not checked against a primary source or hardware. Every Unverified item is listed in [What is unverified](#what-is-unverified).
-- **Owner decision:** only the project owner can settle it. These are collected in [Decisions for the project owner](#decisions-for-the-project-owner).
+- **Owner decision:** only the project owner can settle it. D-044 took a working default for each; see [Decisions](#decisions).
 
 GPIO numbers are not restated here. Signals use the canonical ledger's names ([v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md)), and any new signal is named once and marked Proposed.
 
@@ -120,13 +120,9 @@ Use this only if the owner keeps the hub on pins 103/105.
 
 Option B costs a part, a GPIO and HS margin, and still needs software to select. Option A is recommended.
 
-### Proposed record text (K-3)
+### Record text (K-3)
 
-- **v1-pinout-and-sequencing.md, "CM5 physical carrier pins":** replace the row "USB2 D-/D+ | 103 / 105" with two rows. "USB2 D-/D+ (B-07 service port, device role; rpiboot) | 103 / 105" and "USB3-0 USB 2.0 pair DP/DM (TUSB4041I upstream) | 134 / 136". Add the sentence: "USB_OTG_ID (101) is left unconnected (internal pull-up, device role) with a DNP 0 Ω to GND."
-- **v1-reference.md §3 and §8:** "USB: CM5 USB3-0's USB 2.0 pair to the four-port TUSB4041I hub … The CM5's dedicated USB 2.0 port (pins 103/105) connects only to B-07 as a USB device (console and network gadget, rpiboot)."
-- **v1-reference.md §4:** replace "debug uses internal test pads and an internal debug UART/test points" with "The service console is a USB gadget on B-07. The CM5 debug UART is reachable only on the module's own TP35/TP36, on a bench carrier."
-- **decisions.md:** a new D row when accepted (number assigned by the records owner). Text: "B-07 data connects directly to the CM5 USB 2.0 OTG port; the hub moves to a USB 3.0 port's USB 2.0 pair; rpiboot entry by software request, BOOT_ORDER (owner choice) and TP_NBOOT." It settles net plan K-3 and open item 20.
-
+Applied under D-044.
 ---
 
 ## K-6. Supervisor topology against CM5 power-up
@@ -199,13 +195,9 @@ One unchecked window: until supervisor VDD reaches 0.9 V, the RESET outputs are 
 | +3V3_RADIO buck fails, +5V_SYS good | The supervisor has no VDD. Its open-drain outputs float, so the CM5 runs unsupervised. The LDO-from-+5V_SYS alternative avoids this |
 | +5V_SYS dips under 4.80 V | RESET2 powers the CM5 off and back on 20 ms after recovery. The margin to the 4.95 V setpoint minimum is about 90 mV (Calculated); bench-check it against CM5 load steps |
 
-### Proposed record text (K-6)
+### Record text (K-6)
 
-- **v1-reference.md §13, supervisor paragraph:** "Rails: SVS1 = CM5_3V3, SVS2 = +5V_SYS, SVS3 = +3V3_RADIO, SVS4 = +VBUS_HOLD (VBAT_PROTECTED without B-24). VDD = +3V3_RADIO, because WDI and MR use 0.7 x VDD thresholds that a 3.3 V GPIO meets only with a 3.3 V VDD. RESET2 and RESET4 drive SYS_PMIC_EN (open drain, wired-OR); RESET1 does not. MR is the watchdog arm: the CM5 drives SUPERVISOR_ARM high once its watchdog service runs, and a 10 kΩ pull-down disarms it whenever the CM5 is off or in reset. WDO pulls the SENSE4L tap, so a timeout asserts RESET4 and holds PMIC_Enable low for the CT4 delay (300 ms nominal). The latch clears when CM5_3V3 falls (SENSE1) or the arm drops (MR)." Keep the existing verified watchdog timing sentence.
-- **v1-pinout-and-sequencing.md:** GHO-9 adds SUPERVISOR_ARM, either by repurposing the SUPERVISOR_WDO row (option a) or in a Reserved row (option b). The "Electrical sources" row for SUPERVISOR_WDI / SUPERVISOR_WDO is updated to match.
-- **v1-hot-swap-bridge.md §4, supervisor row:** "SVS4 senses +VBUS_HOLD with a threshold below the backup regulation point (proposal: 6.0 V)."
-- **Net plan 07_SYSTEM:** this replaces the VDD = +5V_SYS proposal.
-
+Applied under D-044.
 ---
 
 ## K-8. GNSS TIMEPULSE, SAFEBOOT_N and the PPS input
@@ -237,11 +229,9 @@ The buffer also removes the TIMEPULSE back-feed into an unpowered CM5 (TIMEPULSE
 - An external pull-up alone. It cannot beat a pin clamped by an unpowered input.
 - Moving PPS to EXTINT. That does not exist: TIMEPULSE is the only time-pulse output (integration manual §3.2.3.3).
 
-### Proposed record text (K-8)
+### Record text (K-8)
 
-- **v1-reference.md §9:** "TIMEPULSE shares SAFEBOOT_N through 1 kΩ inside the module, and a low at start-up forces safeboot (u-blox data sheet R08 Table 10; integration manual R05 §3.2.3.3). GNSS_PPS reaches the CM5 through an Ioff-rated buffer powered from CM5_3V3, so the module pin sees no load at start-up whatever the CM5 state. The CM5 PPS input is configured as an input with no pull."
-- **Net plan, 05_GNSS pin 4 and 07_SYSTEM GPIO defaults:** "GNSS_TIMEPULSE to the buffer input; GNSS_PPS from the buffer output." This closes K-8 and open item 30.
-
+Applied under D-044.
 ---
 
 ## K-9. TUSB4041I 1.1 V core rail
@@ -301,12 +291,9 @@ LDO fallback, if the owner rejects a switcher near the hub: TLV75712PDYDR (1.2 V
 
 CM5_3V3 budget for the hub (Calculated): VDD33 at most 88 mA, plus the buck input at most about 0.16 A. That is under about 0.25 A in global reset and about 0.13 A active, out of the CM5's 600 mA (CM5 datasheet §3.4). GHO-10 should add the INA228, buffers and pull-ups to the same tally.
 
-### Proposed record text (K-9)
+### Record text (K-9)
 
-- **v1-selections.md (records owner assigns the next B-ID when accepted):** "Hub core regulator: TI TLV62568DBVR buck, CM5_3V3 to HUB_1V1 1.10 V, sized for the TUSB4041I global-reset current (370 mA max, SLLSEK3F §5.7). Candidate."
-- **v1-reference.md §17, 03_USB_HALOW_AUDIO:** add "HUB_1V1 buck (TLV62568) from CM5_3V3; HUB_3V3 = CM5_3V3; GRSTz held low by 2.2 kΩ until firmware release."
-- **v1-pinout-and-sequencing.md, working sequence step 6:** "Deassert TUSB4041I reset only after CM5_3V3, HUB_1V1 and 24 MHz are stable (at least 3 ms after both supplies, SLLSEK3F §5.6); the 2.2 kΩ pull-down holds it until then."
-
+Applied under D-044.
 ---
 
 ## How the four proposals fit together
@@ -315,17 +302,11 @@ CM5_3V3 budget for the hub (Calculated): VDD33 at most 88 mA, plus the buck inpu
 - K-6 sets the start-up gap that K-8 depends on: the GNSS always starts before the CM5.
 - K-6 needs one ledger row (SUPERVISOR_ARM), and K-3 option B would need another. Option A needs none. Both are GHO-9 allocations.
 
-## Decisions for the project owner
+## Decisions
 
-The V1 thread picked a working default for each item below, recorded as D-044 in [decisions.md](../decisions.md): option A, TP_NBOOT only with a DNP Hall footprint, the standard BOOT_ORDER retry loop, +3V3_RADIO, repurposing the row, arming after boot, and the buck. Justin has not been asked. Each stays reversible until layout and is revisited at schematic review.
+D-044 took a working default for each item: option A for K-3 (no TS3USB221A switch), TP_NBOOT only with a DNP DRV5032FC Hall footprint, the standard BOOT_ORDER retry loop with no indefinite RPIBOOT fallback, supervisor VDD from +3V3_RADIO, the SUPERVISOR_WDO row repurposed as SUPERVISOR_ARM, the external watchdog armed by software after boot, and the TLV62568 buck for HUB_1V1 (B-26). Justin has not been asked.
 
-1. **K-3 architecture:** option A (re-home the hub to a USB 3.0 port's USB 2.0 pair; B-07 direct to the OTG port), recommended, or option B (TS3USB221A switch). This changes the ledger's USB pin rows and the stackup routing plan (GHO-9, GHO-14).
-2. **Hardware rpiboot entry without opening the enclosure:** TP_NBOOT only (enclosure open; the default proposal), or a sealed DRV5032FC Hall input behind a marked spot on the wall. The question is whether a magnet-actuated service input is acceptable under "no physical buttons" (§30 rule 9).
-3. **BOOT_ORDER RPIBOOT fallback:** whether a node whose eMMC fails should wait indefinitely in rpiboot (field-recoverable over B-07), or keep retrying the eMMC (it cannot be recovered without the enclosure open or a software request).
-4. **Supervisor VDD:** +3V3_RADIO (no new part), or a dedicated LDO from +5V_SYS (survives a 3.3 V buck failure).
-5. **SUPERVISOR_WDO:** repurpose its ledger row as SUPERVISOR_ARM, or keep it as an input with a Schottky diode, a buffer and a separate arm GPIO (GHO-9).
-6. **External watchdog arming policy:** armed by software after boot (proposed: no boot loops, no coverage before the daemon starts), against an always-armed design that needs a boot time guaranteed under about 10 s.
-7. **K-9 regulator type:** a buck near the hub (proposed), or the LDO fallback with a firmware rule never to hold the hub in reset.
+Still open: whether the Hall footprint is ever fitted, which waits on Justin's call on v1-reference.md §30 rule 9 ("no physical buttons") under [GHO-10](https://linear.app/ghostnet-labs/issue/GHO-10).
 
 ## What is unverified
 

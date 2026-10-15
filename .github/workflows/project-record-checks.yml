@@ -8,18 +8,31 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   records:
     name: Project record validation
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64]
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
+          # Self-hosted runners keep a tool cache; without this "3.x" can
+          # resolve to an old cached Python (3.8 from another repo's job).
+          check-latest: true
       - name: GPIO allocation consistency
         run: python project/scripts/check_gpio_allocations.py
       - name: Agent instruction links
         run: python project/scripts/check_agents.py
       - name: Merge policy regression tests
         run: python -m unittest discover -s project/tests -v
+      - name: Runner policy (docs workflows)
+        run: |
+          python -m pip install --quiet pyyaml==6.0.2
+          python -m unittest discover -s project/ci/tests -v
+          python project/scripts/check_runners.py --repo docs

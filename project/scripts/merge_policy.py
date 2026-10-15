@@ -13,6 +13,8 @@ import urllib.request
 GATE = "Manet merge gate"
 AUTOMATION = "Handle passing PRs"
 MAX_GATE_ATTEMPTS = 3
+# Adds labels only and runs from the base branch, so it is not a test to wait on.
+LABELER = "Pull Request Labeler"
 
 
 def matches(path, pattern):
@@ -176,7 +178,7 @@ def reviews_clear(reviews):
 def check_blockers(checks):
     latest = {}
     for check in checks:
-        if check["name"] in {GATE, AUTOMATION}:
+        if check["name"] in {GATE, AUTOMATION, LABELER}:
             continue
         key = (check["name"], check["app"]["id"])
         if key not in latest or check["id"] > latest[key]["id"]:

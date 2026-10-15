@@ -1,7 +1,7 @@
 # V1 pack-swap bridge: working-default selection (GHO-38)
 
 **Owner:** [GHO-38](https://linear.app/ghostnet-labs/issue/GHO-38), sizing the bridge energy for pack changes.
-**Status:** Candidate, 2026-10-09. This file proposes one concrete bridge design: cells, sense resistors, inductor, current limits, placement and interconnect. Only bench measurement should be able to change it. It edits no record, selects no part and assigns no D or B number. The owning records still win (README rule 6): B-24 in [v1-selections.md](v1-selections.md) and the sizing study [v1-hot-swap-bridge.md](v1-hot-swap-bridge.md). Each section ends with text the records owner can apply if the project owner accepts it.
+**Status:** Adopted as working default by D-047 (the design) and D-048 (the bank tray) in [../decisions.md](../decisions.md), 2026-10-09. B-24 in [v1-selections.md](v1-selections.md) owns the selection and wins over this file (README rule 6). This file holds the design and calculations behind it: cells, sense resistors, inductor, current limits, placement and interconnect. Only bench measurement should be able to change it.
 
 Requirements used: D-008 (swap without reboot), D-027 (full node and mesh links for at least 10 s, no deliberate load reduction) and D-028 (0 to 110 °F, −17.8 to +43.3 °C ambient, no throttling), from [decisions.md](../decisions.md). The energy target is the bridge study's "25 W peak held throughout gap" row: 25 W × 10 s / 0.9 = 278 J, plus the 56 J shutdown reserve, gives **334 J**.
 
@@ -31,7 +31,7 @@ Coordinates: "pack frame" is the frame of [v1-battery-pack.md](v1-battery-pack.m
 | Placement | Bank in a **bridge tray under the carrier** (the battery-side bay of the radio body). Power stage on the carrier top side at board X 55 to 85, Y 1.5 to 23. | The bank fits nowhere in the present body. The tray adds **23.0 mm** of under-board depth (§3). |
 | Interconnect | Würth WR-MPC4 8-pin dual row (4.2 mm pitch). Two 16 AWG wires per pole, a fuse at the bank. | 14 A per pole against a 7.94 A average and a 10.94 A peak (§3.4). |
 
-This design meets the 25 W case. It does **not** cover the 35 W stress case at −20 °C and end of life (−337.9 J). The break-even sustained load is **26.3 W**. See owner decision 4.
+This design meets the 25 W case. It does **not** cover the 35 W stress case at −20 °C and end of life (−337.9 J). The break-even sustained load is **26.3 W**. D-047 sizes for 25 W.
 
 ## 1. Cells
 
@@ -44,7 +44,7 @@ The LTC3350 charges the stack with a step-down converter. It starts charging onl
 | 4S1P SCCV60B107SRB or SCCW45B107SSB | 4 | 8.0 V | 2.0 V | Negative (bridge study, before cold derating) | Fits | Rejected: fails 25 W |
 | 4S2P SCCV60B107SRB | 8 | 8.0 V (7.84 V min) | 2.0 V | +193.3 J | 8 cells need two layers (+42 mm) | Rejected: volume. The stack also sits within 0.4 V of the pack-cutoff bus, so charging stops on a weak pack. |
 | **3S2P SCCV60B107SRB** | **6** | **6.525 V (6.39 V min)** | **2.175 V** | **+47.0 J** | One layer (+23 mm) | **Default** |
-| 3S2P at code 13 | 6 | 6.75 V (6.62 V min) | 2.25 V | +103.6 J | Same | End-of-life step, owner decision 3 |
+| 3S2P at code 13 | 6 | 6.75 V (6.62 V min) | 2.25 V | +103.6 J | Same | End-of-life step (D-047) |
 | 3S1P SCCY62B307SSB (300 F, Ø35 × 62) | 3 | 6.525 V | 2.175 V | More than 3S2P (same ESR, 1.5 × C) | Ø36 mm layer, +40 mm | Rejected: height |
 
 3S2P uses each cell harder (2.175 V against 2.0 V, so 1.18 × the energy per cell), and the stack stays 1.7 V or more below pack cutoff. Charging then completes from any pack above cutoff.
@@ -78,7 +78,7 @@ These stack the worst cases on purpose. The cold factors come from typical curve
 
 - **VCAP divider:** RFBC1 = 499 kΩ, RFBC2 = 100 kΩ, so VCAP = 5.99 × CAPFBREF. The DAC steps from 0.6375 V to 1.2 V in 37.5 mV steps (Verified, p17). Code 12 = 1.0875 V gives 6.51 V, and code 13 = 1.125 V gives 6.74 V. (The ideal 6.0 ratio gives 6.525 and 6.75 V, the values used below.) Calculated.
 - **Worst-case cell voltage at code 12:** CAPFB reference ±2 % over temperature (1.176 to 1.224 V, Verified, p4) gives 6.66 V, or 2.22 V per cell. The balancer adds up to 10 mV (Verified, p17). That stays under the 2.3 V that permits 85 °C. Calculated.
-- **Code 13:** 6.885 V worst case, 2.295 V per cell. That just meets 2.3 V before imbalance. Keep it for end of life only (owner decision 3).
+- **Code 13:** 6.885 V worst case, 2.295 V per cell. That just meets 2.3 V before imbalance. Keep it for end of life only (D-047).
 - **Minimum initial charge used in §4:** 6.525 × 1.176 / 1.2 = **6.394 V**. Calculated.
 - **CAP_SLCT:** three cells. Tie CAP4 to CAP3 and strap CAP_SLCT1 = 1, CAP_SLCT0 = 0 (num_caps = 2) (Verified, p21).
 - **Balancer:** the internal balancer discharges the highest cell at about 10 mA until all cells are within about 10 mV. It is disabled in backup (Verified, pp17 and 18). Within a 2P group the cells share voltage, so only the three groups need balancing.
@@ -91,7 +91,7 @@ These stack the worst cases on purpose. The cold factors come from typical curve
 |---|---|
 | A different controller (LTC3351, LTC3643, MAX38888 and others) | No datasheet was obtained in this pass. The bridge study already rejects TPS61094 and LTC4041 for current. Nothing here shows a controller that removes the step-down charging limit at 25 W. Not evaluated. |
 | Protected Li-ion or LiFePO4 bridge cell (bridge study S4) | It adds a second charger and protector. Charging is limited to about 0 to 45 °C, which conflicts with D-028's cold endpoint and the warm interior. It also adds a second lithium cell to transport. Unchanged: not recommended. |
-| Hybrid lithium-ion capacitor cells (3.8 V class) | Much higher energy per volume, so the bank might fit the present body without the tray. No datasheet was obtained, so cold ESR, the minimum-voltage limit and the shipping class are unknown. The LTC3350 has no backup cut-off voltage, so it would need added overdischarge protection. Owner decision 1 asks whether to fund a study. |
+| Hybrid lithium-ion capacitor cells (3.8 V class) | Much higher energy per volume, so the bank might fit the present body without the tray. No datasheet was obtained, so cold ESR, the minimum-voltage limit and the shipping class are unknown. The LTC3350 has no backup cut-off voltage, so it would need added overdischarge protection. D-047 did not fund a study. |
 
 ## 2. Power stage: RSNSC, inductor and current limits
 
@@ -167,23 +167,23 @@ The radio body grows downward. A tray holds the bank between the carrier's botto
 | Radio interior (2.0 mm wall, from parts.yaml) | X 2 to 143, Y 2 to 72 | X −1.5 to 139.5, Y −1.5 to 68.5 | Unverified (parts.yaml assumption) |
 | Row A (Y 13), row B (Y 37), row C (Y 61); cells Ø19, gaps 5.0 mm between rows and 1.5 mm to the walls | Y 3.5–22.5, 27.5–46.5, 51.5–70.5 | Y 0–19, 24–43, 48–67 | Calculated |
 | Left and right cell of each row, leads facing the centre | X 3.5–65.5 and 79.5–141.5 | X 76–138 and 0–62 | Calculated |
-| Bank board (vertical, cells soldered through, series bus, fuse, NTC, harness exit) | X 65.5–79.5 (14 mm gap) | X 62–76 | Proposed |
+| Bank board (vertical, cells soldered through, series bus, fuse, harness exit) | X 65.5–79.5 (14 mm gap) | X 62–76 | Proposed |
 | Bank envelope | 138 × 67 × 19 mm | the board outline | Calculated |
 | Pogo daughterboard column (M-10, M-14; 10.4 mm, from parts.yaml) | X 105–129, Y 29–45, under row B right | X 12.5–36.5, Y 25.5–41.5 | Unverified (pack-to-board mapping assumed in parts.yaml) |
 
 **Groups.** Each row is one 2P group: A-left with A-right, and so on. The bank board connects A to B to C in series. All bus links are short and lie on one board. Proposed.
 
-**Height.** Row B's board-frame X 0 to 62 cell sits over the pogo column and under the bottom-side charger block (board X 38 to 60, Y 26 to 42, to Z −4.6). The stack below the board is: 3.0 mm bottom-side parts (parts.yaml assumption), 0.5 mm clearance, 19.0 mm cell, 0.5 mm clearance and the 10.4 mm pogo column. That is **33.4 mm under the board, against 10.4 mm today: +23.0 mm.** If the charger block moved off row B, it would be +20.0 mm. Calculated.
+**Height.** Row B's board-frame X 0 to 62 cell sits over the pogo column and under the bottom-side charger block (board X 38 to 60, Y 26 to 42, to Z −4.6). The stack below the board is: 3.0 mm bottom-side parts (parts.yaml assumption), 0.5 mm clearance, 19.0 mm cell, 0.5 mm clearance and the 10.4 mm pogo column. That is **33.4 mm under the board, against 10.4 mm today: +23.0 mm.** If the charger block moved off row B, it would be +20.0 mm. Calculated. The 1 mm insulating sheet under the bottom-side power parts (D-051) needs its own layer in this stack: +0.5 to +1.0 mm, so 33.9 to 34.4 mm under the board.
 
 **Clearances that pass.** Locating-boss recesses (X 117, Y 12 and 60, M-18) and the latch keeper (X 134 to 141 near Y 37, M-20) are in the interface plate below the tray. Every cell is clear of the hook bay (X 0 to 6) by its own 1.5 mm end clearance. These checks use the envelope only, and the plate thickness is not recorded (Unverified).
 
-**Thermal.** The tray puts the cells next to the pack and away from the finned lid. That is the coolest internal location this body offers. Fit a 1 mm insulating sheet between the carrier's bottom-side power parts and the cells. Bottom-side parts that need a chassis path ([v1-thermal-rf-plan.md](v1-thermal-rf-plan.md) §2) must reach it through the side walls. The tray also lengthens the radio's side walls by 23 mm, which adds shedding area. Neither effect is modelled (B7).
+**Thermal.** The tray puts the cells next to the pack and away from the finned lid. That is the coolest internal location this body offers. Fit a 1 mm insulating sheet between the carrier's bottom-side power parts and the cells. Bottom-side parts that need a chassis path ([v1-thermal-rf-plan.md](v1-thermal-rf-plan.md) §2) must reach it through the side walls. The tray also lengthens the radio's side walls by 23 mm, which adds shedding area. Modelled in [v1-thermal-update-tray.md](v1-thermal-update-tray.md): hottest cells 75 to 82 °C at the hot endpoint and 18.5 W; B7 measures it.
 
 **Service.** The pogo daughterboard is replaced by lifting out the tray. That is acceptable for depot service. It is not a field operation.
 
 ### 3.3 Alternative: move the contact array into the bank's centre gap (option B)
 
-The bank board splits to the two outer ends, so the centre gap becomes X 67.5 to 77.5 (10 mm). Turn the 4 × 2 probe array 90° so that its 4 mm span runs along X. The pogo board (about 8.5 mm by 24 mm) then fits in the gap, and no cell sits over it. The depth below the board becomes 3.0 + 0.5 + 19.0 + 0.5 = 23.0 mm, which is **+12.6 mm**. This changes M-10 (centre and orientation), M-11 make and break order, M-15 to M-18 and the gate-1 latch work. That is GHO-8 rework, so it is owner decision 2, not the default.
+The bank board splits to the two outer ends, so the centre gap becomes X 67.5 to 77.5 (10 mm). Turn the 4 × 2 probe array 90° so that its 4 mm span runs along X. The pogo board (about 8.5 mm by 24 mm) then fits in the gap, and no cell sits over it. The depth below the board becomes 3.0 + 0.5 + 19.0 + 0.5 = 23.0 mm, which is **+12.6 mm**. This changes M-10 (centre and orientation), M-11 make and break order, M-15 to M-18 and the gate-1 latch work. That is GHO-8 rework, so D-048 took option A instead.
 
 ### 3.4 Interconnect
 
@@ -192,8 +192,8 @@ The bank board splits to the two outer ends, so the centre gap becomes X 67.5 to
 | VCAP+ and CAPRTN (stack power) | 2 × 16 AWG per pole, about 150 mm, soldered at the bank board | 13.17 mΩ/m per wire, so about 1.0 mΩ per pole for two wires in parallel. The worst-case average is 7.94 A (4 A per wire) and the peak 10.94 A. | Calculated |
 | Carrier connector | Würth WR-MPC4 dual row, 8 pins, 4.2 mm pitch: header 649008227222 (right angle), housing 649008113322, crimp 64900113722 (16 AWG) | Header 7 A max per contact at 8 pins, crimp 9 A, contact 10 mΩ max, −40 to +105 °C (Verified, Würth datasheets 002.001 2019-12-20 and 001.001 2025-02-18). Two contacts per pole give 14 A. | Verified ratings. The vertical header variant and the crimp for 20 to 24 AWG are not chosen (Unverified). |
 | Pin map | 1–2 VCAP+, 3–4 CAPRTN, 5 CAP1, 6 CAP2, 7 CAP3 Kelvin, 8 CAPRTN Kelvin | The Kelvin taps feed the CAP pins through the 2.4 Ω ballasts and carry at most 0.48 A, so 22 to 24 AWG is enough. | Proposed |
-| Bank NTC | 10 kΩ NTC on the bank board to the LTC3350 GPI (a thermistor input the datasheet supports, p14), 2-pin link | Lets firmware tie the DAC code to cell temperature | Proposed. Circuit values Unverified. |
-| Bank fuse | One fuse at the bank board in series with VCAP+: about 15 A slow-blow, ≥ 32 V, cold resistance ≤ 5 mΩ | Stack short-circuit current is about 6.5 V / 27 mΩ = 240 A. Without a fuse a harness short dumps the full bank (about 1.4 kJ). | MPN open (Unverified). Owner decision 5. |
+| Bank NTC | 10 kΩ NTC on the row A right cell (board X 0 to 62, Y 0 to 19, the hottest cell, under the bucks) to the LTC3350 GPI (a thermistor input the datasheet supports, p14), 2-pin link | Lets firmware step the charge from code 12 to code 11 (6.30 V) while it reads 60 °C or more (D-051) | Proposed. Circuit values Unverified. |
+| Bank fuse | One fuse at the bank board in series with VCAP+: about 15 A slow-blow, ≥ 32 V, cold resistance ≤ 5 mΩ | Stack short-circuit current is about 6.5 V / 27 mΩ = 240 A. Without a fuse a harness short dumps the full bank (about 1.4 kJ). | MPN open (Unverified). Fitted by D-047. |
 | Path ESR budget | Connector pairs 2 × 5 mΩ max, wires 2 mΩ, bank bus about 2 mΩ: **14 mΩ**. 15 mΩ is used in §4; with a fuse, about +5 mΩ. | Calculated, B6 |
 
 The bus side needs no new harness: the input and output ideal diodes and +VBUS_HOLD stay on the carrier.
@@ -202,7 +202,7 @@ The bus side needs no new harness: the input and output ideal diodes and +VBUS_H
 
 **Default: carrier top side, board X 55 to 85, Y 1.5 to 23 (645 mm²).** Nothing in parts.yaml at 3ac1495 occupies that area. It is clear of the CM5 underside keepout (Y ≥ 24) and outside the XY shadow of both radio cards (HaLow X 7 to 29; Wi-Fi from X 88). It is 35.5 mm edge to edge from the GNSS block, against the 15 mm rule. The 6.5 mm maximum inductor height is under the CM5's 7.51 mm. The stage needs room for the IC (5 × 7 mm), the inductor (14.0 × 12.8 mm max), four 5 × 6 mm FETs, two 2512 sense resistors, CCAP and part of COUT: about 450 mm². Calculated. The radio load switches and the hub 1.1 V buck are not modelled yet and may claim the same area (Unverified). The WR-MPC4 header goes on the bottom side at about board X 80.5 to 90, Y 2 to 19, beside the shunt block (CAD-verify).
 
-This places the stage on the top side. [v1-rf-coexistence.md](v1-rf-coexistence.md) §3.2 and [v1-stackup-routing.md](v1-stackup-routing.md) (L8 list) place it on the bottom side. That is a record conflict (see [Record conflicts](#record-conflicts)). The RF rules themselves are met. The bottom-side alternative uses SRP1245A-4R7M at 5.0 mm. Cells under the power band would then have to clear Z −6.6 instead of −4.6, which adds up to 2 mm of tray depth. The stackup's 10 A supercapacitor-path row still covers this design (7.94 A average, 10.94 A peak).
+This places the stage on the top side (D-047); [v1-rf-coexistence.md](v1-rf-coexistence.md) §3.2 and [v1-stackup-routing.md](v1-stackup-routing.md) (L8 list) record the same. The RF rules are met. The bottom-side alternative uses SRP1245A-4R7M at 5.0 mm. Cells under the power band would then have to clear Z −6.6 instead of −4.6, which adds up to 2 mm of tray depth. The stackup's 10 A supercapacitor-path row still covers this design (7.94 A average, 10.94 A peak).
 
 ## 4. Calculator run
 
@@ -271,7 +271,7 @@ Inputs: `--cells 3` is the series group count. `--cell-f 200` is one 2P group. T
 
 **Shutdown trigger.** Firmware should start `poweroff` when meas_vcap reaches the level that still holds the reserve at end of life and −20 °C. That level is ½ × 39.48 × (V² − 4.283²) = 58 J, which gives V = 4.61 V. Allowing for ADC error (1.5 %, Verified, p6), set the trigger at **4.75 V**. Calculated.
 
-Verification of the tool: `python3 -m unittest discover -s project/scripts -p 'test_bridge_budget.py'` passes at 73368aa.
+Verification of the tool: `python3 -m unittest discover -s project/tests -p 'test_bridge_budget.py'`; the project record checks workflow runs it on every PR.
 
 ## 5. Balancing, charge time and the eFuse
 
@@ -288,7 +288,7 @@ These figures assume 93 % charger efficiency (Unverified), nominal C = 66.7 F (s
 | Bank drained to the 4.28 V floor (pack left out, then refitted), +30 % C | 194 C or 1,050 J | 5.12 A min (38 s), or 8.7 W input-limited (120 s) | **38 to 120 s** |
 | First charge from 0 V, nominal / +30 % C | 435 C / 565 C | 5.33 A / 5.12 A, longer under heavy load | **82 to 110 s**; up to about 210 s at 25 W on a weak pack |
 
-A second swap inside these times gets a partly charged bridge (owner decision 6). Software reads CAPGD (asserted at 92 % of the regulated level, Verified, p5) or meas_vcap before it reports the bridge ready.
+A second swap inside these times gets a partly charged bridge (D-047). Software reads CAPGD (asserted at 92 % of the regulated level, Verified, p5) or meas_vcap before it reports the bridge ready.
 
 ### 5.3 Input current limit and the eFuse
 - **Total input current.** The LTC3350 limits load plus charger current to IIN(MAX), but only by reducing charge current. It never limits the load (Verified, p15). With 7.5 mΩ the worst case is 32.96 mV / 7.425 mΩ = 4.44 A. Quiescent and gate-drive currents (about 22 mA) are not included (p22). The total is 4.46 A, against the eFuse's 5.17 A minimum limit (bridge study §4). That leaves 0.71 A of margin. Calculated.
@@ -302,25 +302,9 @@ A second swap inside these times gets a partly charged bridge (owner decision 6)
 - The stack (≤ 6.66 V) is always below the 7.0 V backup point. Backup therefore starts in step-up mode straight away, and the output-ideal-diode and body-diode phase described on p30 does not occur.
 - BRIDGE_ACTIVE_N (PFO), PACK_PRESENT and the LTC3350 SMBALERT need GPIOs. Those allocations belong to GHO-9 and are not proposed here.
 
-## Proposed record text
+## Floorplan model update (not yet applied)
 
-For the records owner to apply only if the project owner accepts the defaults. The numbers are left blank.
-
-**[v1-selections.md](v1-selections.md), B-24 row:**
-"Pack-swap bridge | Analog Devices LTC3350IUHF#PBF backup controller. 6 × KYOCERA AVX SCCV60B107SRB (100 F, 2.7 V) as 3S2P, charged to 6.525 V (VCAP DAC code 12). RSNSC 6 mΩ, RSNSI 7.5 mΩ, Bourns SRP1265A-4R7M, 500 kHz, +VBUS_HOLD 7.0 V in backup. Bank in a tray under the carrier. Design and calculations: [v1-bridge-selection.md](v1-bridge-selection.md). | Selected working default, not frozen. Bench gates in v1-bridge-selection.md (B1 to B10); GHO-30 load and shutdown energy can change the population."
-
-**[decisions.md](../decisions.md), new row (number assigned by the records owner):**
-"D-0xx | 2026-10-xx | B-24 working default: LTC3350 (I grade) with 6 × AVX SCCV60B107SRB in 3S2P at 6.525 V, RSNSC 6 mΩ, RSNSI 7.5 mΩ, SRP1265A-4R7M, bank in a tray under the carrier (+23 mm radio-body depth). | Closes GHO-38's desk gates. The conservative budget at −20 °C, end of life and 25 W has +47 J of margin (445 J usable against 334 J). Supersedes the 4S2P/8.0 V screen and the 4 × 50 F population. The 35 W stress case is not covered; break-even is 26.3 W. Reopen if GHO-30 measures more than 24 W sustained."
-
-**[v1-hot-swap-bridge.md](v1-hot-swap-bridge.md):**
-- Result table, "Evaluated population" row: "Working default 3S2P SCCV60B107SRB at 6.525 V; see v1-bridge-selection.md."
-- §S2, charge voltage paragraph: replace "held at 8.0 V, 2.0 V per cell" with "held at 6.525 V, 2.175 V per cell, three cells (v1-bridge-selection.md §1)". Keep the reasoning about the step-down charger.
-- §4, Stack recharge row: "RSNSC 6 mΩ (5.33 A charge, 7.94 A backup ceiling). RSNSI 7.5 mΩ limits total input to 4.44 A worst case, under the eFuse's 5.17 A minimum."
-- BOM table: "LTC3350IUHF#PBF"; "N-MOSFET 40 V: 2 × CSD18514Q5A switches, 2 × CSD18512Q5B ideal diodes"; "Inductor Bourns SRP1265A-4R7M"; "RSNSC 6 mΩ, RSNSI 7.5 mΩ, WSL2512 ±1 %"; "Supercapacitors 6 × SCCV60B107SRB, matched ±5 % per group".
-
-**[v1-rf-coexistence.md](v1-rf-coexistence.md) §3.2, LTC3350 row:** add "Top-side alternative: board X 55 to 85, Y 1.5 to 23 meets the same rules (v1-bridge-selection.md §3.5)". The owner chooses the side.
-
-**[v1-stackup-routing.md](v1-stackup-routing.md), supercapacitor-path row:** "7.94 A average ceiling at 6 mΩ RSNSC, 10.94 A peak" in place of "9.4 A average screening ceiling at 5 mOhm RSNSC, 13.1 A peak".
+The register, decision and record edits this file proposed are applied (B-24, D-047, D-048, [v1-hot-swap-bridge.md](v1-hot-swap-bridge.md), [v1-rf-coexistence.md](v1-rf-coexistence.md) §3.2, [v1-stackup-routing.md](v1-stackup-routing.md)). The firmware floorplan model is not updated yet; that change belongs to [GHO-7](https://linear.app/ghostnet-labs/issue/GHO-7).
 
 **Firmware `docs/hardware/v1-mechanical/parts.yaml` (GHO-7):**
 
@@ -353,17 +337,9 @@ For the records owner to apply only if the project owner accepts the defaults. T
 
 Also move `pack_contacts` to `z0: -35.0` (option A) and add a WR-MPC4 header envelope at about X 80.5, Y 2 once the vertical-header drawing is read.
 
-## Decisions for the project owner
+## Decisions taken
 
-Each decision has a recommended default.
-
-1. **Bank technology and population.** Choices: 3S2P EDLC (6 cells); 4S2P EDLC (8 cells, two layers); or fund a hybrid lithium-ion-capacitor study that might avoid the tray. **Default: 3S2P EDLC.** It is the only option with verified data that fits in one layer and passes 25 W at −20 °C and end of life.
-2. **Where the bank goes.** Choices: A, a tray under the carrier with the pogo column under one cell (+23 mm radio-body depth, no pack change); or B, move and rotate the contact array into the bank's centre gap (+12.6 mm, GHO-8 rework of M-10, M-11 and M-15 to M-18). **Default: A.** It changes no pack record. Choose B only if the 10 mm saved is worth reopening the pack gates.
-3. **Charge level.** Choices: code 12 (6.525 V, 2.175 V per cell) with firmware stepping to code 13 (6.75 V) when the measured capacitance falls; or code 13 from the start. **Default: code 12, then step to 13 at end of life.** Code 13 adds 57 J but runs at 2.295 V worst case, right at the 85 °C voltage limit.
-4. **Sizing load.** Choices: size for 25 W (the bridge study's peak-held row), with 26.3 W break-even and the 35 W stress case not covered; or size for 35 W, which needs roughly two to three times the cells. **Default: 25 W.** D-019 calls 35 W a capability target, not a load. Reopen if GHO-30 measures more than 24 W sustained at the bus.
-5. **Bank fuse.** Choices: fit a fuse at the bank board (costs about 20 J of margin through +10 mΩ), or leave it unfused. **Default: fit it.** An unfused 1.4 kJ bank on a harness inside a sealed radio is a fire risk.
-6. **Back-to-back swaps.** Choices: accept a partly charged bridge for a second swap within about 40 s (worst case), or size for two swaps. **Default: accept.** Software shows bridge state before the operator pulls the pack.
-7. **Power-stage side.** Choices: top side at board X 55 to 85, Y 1.5 to 23 (lower loss, no tray-depth cost); or bottom side per the RF and stackup records (SRP1245A, about +2 mm). **Default: top side.** It meets every RF rule. The side is the only difference from the records.
+D-047 took this file's defaults for bank technology and population (3S2P EDLC), charge level (code 12, stepping to 13 at end of life), sizing load (25 W), the bank fuse (fitted), back-to-back swaps (a partly charged bridge is accepted) and the power-stage side (top). D-048 took the bank placement (option A, the tray under the carrier). Option B and the hybrid lithium-ion-capacitor study were not chosen.
 
 ## Bench measurements that can still change the selection
 
@@ -371,7 +347,7 @@ The first two belong to [GHO-30](https://linear.app/ghostnet-labs/issue/GHO-30).
 
 | ID | Measurement | Selection holds if | If not |
 |---|---|---|---|
-| B1 | **GHO-30:** full-node plus accessory power at +VBUS_HOLD, the highest 10 s mean, at the D-028 endpoints | ≤ 26.3 W (code 12) or ≤ 27.9 W (code 13) | Add cells (4S2P or a second layer), or decision 1's study |
+| B1 | **GHO-30:** full-node plus accessory power at +VBUS_HOLD, the highest 10 s mean, at the D-028 endpoints | ≤ 26.3 W (code 12) or ≤ 27.9 W (code 13) | Add cells (4S2P or a second layer), or a hybrid lithium-ion-capacitor study (§1.4) |
 | B2 | **GHO-30:** clean-shutdown energy and time | ≤ about 90 J (break-even 18.1 s at 5 W) | Raise the poweroff trigger; at worst add cells |
 | B3 | Gloved swap time, 95th percentile (bridge study test 1) | ≤ 11.4 s at 25 W (longer at the measured B1 load) | As B1 |
 | B4 | Capacitance and DC-5 s ESR of the six cells at −20 °C and 25 °C, plus aged-cell emulation | Stack factor ≥ 0.530; total stack ESR ≤ 122 mΩ including path | Change the cell or add a group cell |
@@ -386,14 +362,8 @@ The first two belong to [GHO-30](https://linear.app/ghostnet-labs/issue/GHO-30).
 
 These were found, not resolved. README rule 6 asks for a Linear issue for each one. This file opens none.
 
-1. **Controller grade.** The bridge study BOM lists LTC3350**E**UHF#PBF. Rev. D guarantees the E grade only from 0 °C junction, and D-028 reaches −17.8 °C. The I grade is needed.
-2. **FET voltage.** The bridge study BOM says "30 V class". The eFuse output can reach its 32.8 V clamp (B-15), and the output ideal diode sees the highest VIN (Rev. D p30). 40 V is needed.
-3. **RSNSI.** The bridge study's 6.4 mΩ gives up to 5.20 A worst case, above the 5.17 A eFuse minimum it was meant to stay under.
-4. **Stack voltage and cell count.** The bridge study holds a 4-cell stack at 8.0 V. This file proposes 3 cells at 6.525 V. D-027's rationale still names "four 50 F cells" as a candidate, and the bridge study already calls that superseded.
-5. **Power-stage side.** [v1-rf-coexistence.md](v1-rf-coexistence.md) §3.2 and [v1-stackup-routing.md](v1-stackup-routing.md) (L8) place the LTC3350 stage on the bottom side. This file's default is the top side (decision 7).
-6. **Radio-body height.** [v1-thermal-rf-plan.md](v1-thermal-rf-plan.md) models a 27 mm body. The floorplan already needs more than 26.66 mm above the PCB for the feed-through, and option A adds 23 mm below. The thermal model's area and height inputs need updating (GHO-7, GHO-12).
-7. **Bottom-side height.** parts.yaml assumes 3 mm for every bottom-side part. The 5.0 to 6.5 mm bridge inductor (if on the bottom) and probably the LM76005 inductors exceed that. The tray depth above uses 3 mm.
-8. **LTC3350 frequency.** [v1-rf-coexistence.md](v1-rf-coexistence.md) says the nominal frequency is not recorded. Rev. D gives 500 kHz nominal, 495 to 505 kHz at 25 °C and 490 to 510 kHz over temperature (p4). This is informational and needs no change to the analysis.
+1. **Radio-body height.** The thermal model ([v1-thermal-update-tray.md](v1-thermal-update-tray.md)) uses a 50 mm body: 27 mm plus option A's 23 mm. The floorplan already needs more than 26.66 mm above the PCB for the feed-through, so the real body may be taller; 66 mm is run as a sensitivity case. The body height is not recorded yet (GHO-7).
+2. **Bottom-side height.** parts.yaml assumes 3 mm for every bottom-side part. The LM76005 inductors probably exceed that. (The bridge inductor is on the top side, D-047.) The tray depth above uses 3 mm.
 
 ## What remains unverified
 

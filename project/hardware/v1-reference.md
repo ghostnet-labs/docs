@@ -67,7 +67,7 @@ CM5 electrical decisions:
 
 ## 5. Wi-Fi 6E: AsiaRF AW7916-AED
 
-Decision (B-03, D-026): the Wi-Fi card is the [AsiaRF AW7916-AED](https://asiarf.com/product/wi-fi-6e-m-2-ae-key-module-mt7916-aw7916-aed/) ([datasheet](https://asiarf.com/wp-content/uploads/2026/07/260709_Datasheet_AW7916-AED_V1-1P.pdf)). Wi-Fi as an optional mesh backhaul is a hard requirement, and OpenMANET needs an 802.11s mesh point. The earlier Advantech AIW-170BQ is retired (R-19): its Qualcomm WCN6855/QCA2066 firmware does not offer mesh point, and the ath11k driver lists only station, AP and P2P for that chip ([GHO-37](https://linear.app/ghostnet-labs/issue/GHO-37)).
+Decision (B-03, D-026): the Wi-Fi card is the [AsiaRF AW7916-AED](https://asiarf.com/product/wi-fi-6e-m-2-ae-key-module-mt7916-aw7916-aed/) ([datasheet](https://asiarf.com/wp-content/uploads/2026/07/260709_Datasheet_AW7916-AED_V1-1P.pdf)). Wi-Fi as an optional mesh backhaul is a hard requirement, and OpenMANET needs an 802.11s mesh point. The earlier Advantech AIW-170BQ is retired (R-19): its Qualcomm WCN6856/QCA2066 firmware does not offer mesh point, and the ath11k driver lists only station, AP and P2P for that chip ([GHO-37](https://linear.app/ghostnet-labs/issue/GHO-37)).
 
 Characteristics: MediaTek MT7916, Linux mt7915e driver (mt76, mesh point and AP plus mesh supported in the driver), Wi-Fi 6E (2.4 GHz plus 5 or 6 GHz), M.2 3052 A+E key, 30 x 52 mm, three IPEX antenna connectors (type to confirm on arrival), PCIe WLAN, no Bluetooth.
 
@@ -103,7 +103,7 @@ Topology: CM5 USB3-0's USB 2.0 pair (pins 134/136) upstream to TUSB4041I (D-044)
 
 The OpenVLM module presents CM108B USB audio and HID PTT controls, and its Kenwood accessory jack connects to the supported handset/PTT. It removes analog audio and physical PTT circuitry from the carrier. Do not route the external VLM into the B-07 charging/service port.
 
-Power/fault: switched VBUS is independent of the two radio 3.3 V switches. Keep HALOW_USB_FAULT_N; BT_USB_FAULT_N has no device since Bluetooth was dropped (D-026) and is revisited under GHO-9; route VLM_USB_FAULT_N on GPIO25 per D-024 and the canonical [GPIO/pin allocation record](v1-pinout-and-sequencing.md). Port 4 remains unused until a separately reviewed need exists.
+Power/fault: switched VBUS is independent of the two radio 3.3 V switches. Keep HALOW_USB_FAULT_N; BT_USB_FAULT_N was removed when Bluetooth was dropped (D-026), and its GPIO16 is a reserved spare with no carrier connection (D-046; see the [pinout ledger](v1-pinout-and-sequencing.md)); route VLM_USB_FAULT_N on GPIO25 per D-024 and the canonical [GPIO/pin allocation record](v1-pinout-and-sequencing.md). Port 4 remains unused until a separately reviewed need exists.
 
 Open BOM details: exact VBUS current-limit switch, USB-C CC implementation, USB ESD array, per-port power fault wiring, VLM supplier ordering/availability, and enclosure connector CAD model are to be verified in GHO-11 and GHO-7.
 
@@ -252,7 +252,7 @@ The per-load peak estimate for the 3.3 V rail is HaLow 1.0 A, Wi-Fi 3.03 A (the 
 ## 15. Fanless thermal strategy
 
 - Aluminum enclosure as heat spreader, with external fins on the lid and thermal interface pads from the CM5 and the Wi-Fi card to the lid (D-035)
-- Copper thermal areas and thermal vias, with power converters coupled through copper pours and vias to the chassis
+- Copper thermal areas and thermal vias, with power converters coupled through copper pours and vias to a side-wall contact; the bridge tray covers the underside (D-048, D-051)
 - A concentrated power island, kept away from GNSS and RF
 - No fan and no switching regulators beneath RF modules
 
