@@ -69,8 +69,13 @@ jobs:
             f"${{{{ github.repository == github.event.pull_request.head.repo.full_name && {pick} || 'ubuntu-latest' }}}}",
             f"${{{{ (github.event_name != 'pull_request' || {head}) && {pick} || 'ubuntu-latest' }}}}",
         ]
+        pr_only = f"${{{{ github.event_name == 'pull_request' && {head} && {pick} || 'ubuntu-latest' }}}}"
+        ok.append(pr_only)
         for text in ok:
             self.assertTrue(cr.has_fork_guard(text), text)
+        # the pull-request-only form never matches pull_request_target, so it is
+        # fine for workflows that also trigger on it
+        self.assertTrue(cr.has_fork_guard(pr_only, allow_event_form=False))
         bad = [
             ["self-hosted", "Linux"],
             "self-hosted",
@@ -80,6 +85,8 @@ jobs:
             # the head check is only one side of an ||, so it never restricts
             f"${{{{ ({head} || github.event_name == 'pull_request') && {pick} || 'ubuntu-latest' }}}}",
             f"${{{{ {head} || {pick} }}}}",
+            f"${{{{ github.event_name != 'pull_request' && {head} && {pick} || 'ubuntu-latest' }}}}",
+            f"${{{{ github.event_name == 'pull_request' && {pick} || 'ubuntu-latest' }}}}",
             # inverted selector: same-repo PRs get a hosted runner, forks get the Macs
             f"${{{{ {head} && 'ubuntu-latest' || 'self-hosted' }}}}",
             f"${{{{ {head} && fromJSON('[\"ubuntu-latest\"]') || 'ubuntu-latest' }}}}",

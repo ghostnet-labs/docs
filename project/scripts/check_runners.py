@@ -109,6 +109,12 @@ _GUARD_PLAIN = re.compile(r"^\$\{\{ " + _HEAD_IS_REPO + " && " + _PICK + r" \|\|
 # pull_request_target-style event (see SAFE_FOR_EVENT_GUARD).
 _GUARD_EVENT = re.compile(r"^\$\{\{ \(github\.event_name != 'pull_request' \|\| " + _HEAD_IS_REPO
                           + r"\) && " + _PICK + r" \|\| " + _FALLBACK + r" \}\}$")
+# `${{ event_name == 'pull_request' && HEAD && ... }}`: only a same-repository
+# pull_request run gets the Macs; push, delete and every other event stay on the
+# hosted fallback. Safe whatever else the workflow triggers on, because a
+# pull_request_target event never matches the first term.
+_GUARD_PR_ONLY = re.compile(r"^\$\{\{ github\.event_name == 'pull_request' && " + _HEAD_IS_REPO + " && " + _PICK
+                            + r" \|\| " + _FALLBACK + r" \}\}$")
 SAFE_FOR_EVENT_GUARD = frozenset({"pull_request", "push", "schedule", "workflow_dispatch", "merge_group"})
 
 
@@ -119,7 +125,8 @@ def _guard_picks_self_hosted(m: "re.Match[str]") -> bool:
 def has_fork_guard(runs_on, allow_event_form: bool = True) -> bool:
     """True when runs-on is a recognised fork guard.
 
-    Only two exact forms pass (see _GUARD_PLAIN and _GUARD_EVENT); anything
+    Only three exact forms pass (see _GUARD_PLAIN, _GUARD_EVENT and
+    _GUARD_PR_ONLY); anything
     else, such as an inverted `!=` or a stray `||`, is rejected rather than
     guessed at. The guard must select self-hosted labels for same-repository
     work and a GitHub-hosted label otherwise. Pass allow_event_form=False for
@@ -129,7 +136,7 @@ def has_fork_guard(runs_on, allow_event_form: bool = True) -> bool:
     if not isinstance(runs_on, str):
         return False
     text = " ".join(runs_on.split())
-    m = _GUARD_PLAIN.match(text)
+    m = _GUARD_PLAIN.match(text) or _GUARD_PR_ONLY.match(text)
     if m is None and allow_event_form:
         m = _GUARD_EVENT.match(text)
     return m is not None and _guard_picks_self_hosted(m)
