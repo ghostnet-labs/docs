@@ -36,3 +36,5 @@ runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.h
 ```
 
 Exceptions live in `project/ci/runner-allowlist.json`, each with the rules it waives and the reason. Remove an entry when its workflow is fixed; the check warns about entries nothing uses. Docs runs the check on every PR in `Project record checks`, and `Runner policy audit` runs it hourly against every public repo's default branch.
+
+Every repo's `Manet merge gate` job also runs the check, before it waits for the other checks, against the workflows of the PR's merge result. The gate checks out `project/scripts/check_runners.py` and the allowlist from a docs commit pinned in its own `runner-policy` step, separate from the policy pin, so a runner policy change reaches a repo only through a PR that bumps that pin.
