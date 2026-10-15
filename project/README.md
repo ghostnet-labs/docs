@@ -2,7 +2,7 @@
 
 This folder holds the engineering records for the ghostnet-labs OpenMANET field node. It lives outside `docs/`, so the public OpenMANET website does not publish it. It replaces the Google Drive folder "Manet", which was retired on 2026-10-01.
 
-**The project.** A compact, rugged, headless, battery-powered field mesh node built around a Raspberry Pi CM5 running OpenMANET (OpenWrt, 802.11s, batman-adv). Each node has a 900 MHz Wi-Fi HaLow radio, a 2.4/5 GHz Wi-Fi radio, GNSS, Ethernet and battery telemetry, and is managed entirely from an end-user device (EUD). The size reference is the Persistent Systems MPU5 (4.6 x 2.6 x 1.5 in, 117 x 67 x 38 mm).
+**The project.** A compact, rugged, headless, battery-powered field mesh node built around a Raspberry Pi CM5 running OpenMANET (OpenWrt, 802.11s, batman-adv). Each node has a 900 MHz Wi-Fi HaLow radio, a 2.4/5/6 GHz Wi-Fi radio, GNSS, Ethernet and battery telemetry, and is managed entirely from an end-user device (EUD). The size reference is the Persistent Systems MPU5 (4.6 x 2.6 x 1.5 in, 117 x 67 x 38 mm).
 
 **Two tracks.**
 - Track A is an off-the-shelf proof of concept, tracked in the Linear project [OpenMANET POC](https://linear.app/ghostnet-labs/project/openmanet-poc-66239aa64a35).
