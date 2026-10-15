@@ -83,6 +83,30 @@ jobs:
         self.assertTrue(cr.is_self_hosted(FORK_FALLBACK))
         self.assertTrue(cr.is_self_hosted({"group": "ci", "labels": ["self-hosted", "Linux"]}))
 
+    def test_canonical_arc_fork_fallback_is_recognized(self):
+        route = ("${{ (github.event_name != 'pull_request' || "
+                 "github.event.pull_request.head.repo.full_name == github.repository) "
+                 "&& 'ghostnet-linux-arm64' || 'ubuntu-latest' }}")
+        for value in (route, route.replace(" || ", "\n  ||\t")):
+            with self.subTest(route=value):
+                doc = {"on": "pull_request", "jobs": {"test": {"runs-on": value}}}
+                self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)),
+                                 [("test", "job-timeout"), ("test", "pr-concurrency")])
+
+    def test_modified_arc_fork_expressions_are_rejected(self):
+        canonical = cr.ARC_FORK_FALLBACK
+        for route in (canonical.replace("!= 'pull_request'", "== 'pull_request'"),
+                      canonical.replace("full_name ==", "full_name !="),
+                      canonical.replace("|| 'ubuntu-latest'", "|| 'ghostnet-linux-arm64'"),
+                      canonical.replace("&& 'ghostnet-linux-arm64'", "&& 'ubuntu-latest'"),
+                      canonical.replace("github.repository", "'attacker/repository'"),
+                      canonical.replace("ghostnet-linux-arm64", "ghostnet-linux-arm64-spoof"),
+                      canonical.replace("ghostnet-linux-arm64", "ghostnet- linux-arm64"),
+                      canonical.replace("|| 'ubuntu-latest'", "|| 'ubuntu-24.04'"),
+                      "${{ inputs.note == 'ghostnet-linux-arm64' && 'ubuntu-latest' }}"):
+            with self.subTest(route=route):
+                self.assertFalse(cr.is_self_hosted(route))
+
     def test_arc_cron_is_not_hosted_cron(self):
         doc = {"on": {"schedule": [{"cron": "*/15 * * * *"}]},
                "jobs": {"test": {"runs-on": "ghostnet-linux-arm64", "timeout-minutes": 10}}}

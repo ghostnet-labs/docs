@@ -46,6 +46,12 @@ PR_EVENTS = ("pull_request", "pull_request_target")
 SHA_RE = re.compile(r"@[0-9a-f]{40}$")
 # ARC scale sets route by their exact name rather than the self-hosted label.
 ARC_RUNNER_LABELS = frozenset({"ghostnet-linux-arm64"})
+# Only this reviewed expression sends trusted events to ARC and forks to hosted.
+ARC_FORK_FALLBACK = (
+    "${{ (github.event_name != 'pull_request' || "
+    "github.event.pull_request.head.repo.full_name == github.repository) "
+    "&& 'ghostnet-linux-arm64' || 'ubuntu-latest' }}"
+)
 
 
 @dataclass(frozen=True)
@@ -84,10 +90,17 @@ def is_self_hosted(runs_on) -> bool:
     A fork-PR fallback expression such as
     `${{ head.repo.full_name == github.repository && fromJSON('["self-hosted", ...]') || 'ubuntu-latest' }}`
     counts as self-hosted: same-repo work goes to the Macs. ARC scale-set
-    names are recognized only as exact static labels, never substrings or
-    expression text; dynamic ARC routes need separate policy review.
+    names are recognized as exact static labels or the canonical trusted-event
+    ARC/fork-hosted fallback. Other dynamic ARC routes need policy review.
     """
     if "self-hosted" in _runs_on_text(runs_on):
+        return True
+    def expression_tokens(value):
+        # Normalize layout without changing quoted runner names or event values.
+        return re.sub(r"'(?:[^']|'')*'|\s+",
+                      lambda match: match[0] if match[0].startswith("'") else "", value)
+
+    if isinstance(runs_on, str) and expression_tokens(runs_on) == expression_tokens(ARC_FORK_FALLBACK):
         return True
     labels = runs_on.get("labels") if isinstance(runs_on, dict) else runs_on
     if isinstance(labels, str):
