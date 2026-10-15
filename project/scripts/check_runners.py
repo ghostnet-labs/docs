@@ -44,6 +44,8 @@ DEFAULT_ALLOWLIST = HERE.parent / "ci" / "runner-allowlist.json"
 RULES = ("hosted-runner", "pr-concurrency", "hosted-cron", "pinned-reusable", "job-timeout")
 PR_EVENTS = ("pull_request", "pull_request_target")
 SHA_RE = re.compile(r"@[0-9a-f]{40}$")
+# ARC scale sets route by their exact name rather than the self-hosted label.
+ARC_RUNNER_LABELS = frozenset({"ghostnet-linux-arm64"})
 
 
 @dataclass(frozen=True)
@@ -81,9 +83,18 @@ def is_self_hosted(runs_on) -> bool:
 
     A fork-PR fallback expression such as
     `${{ head.repo.full_name == github.repository && fromJSON('["self-hosted", ...]') || 'ubuntu-latest' }}`
-    counts as self-hosted: same-repo work goes to the Macs.
+    counts as self-hosted: same-repo work goes to the Macs. ARC scale-set
+    names are recognized only as exact static labels, never substrings or
+    expression text; dynamic ARC routes need separate policy review.
     """
-    return "self-hosted" in _runs_on_text(runs_on)
+    if "self-hosted" in _runs_on_text(runs_on):
+        return True
+    labels = runs_on.get("labels") if isinstance(runs_on, dict) else runs_on
+    if isinstance(labels, str):
+        labels = [labels]
+    return isinstance(labels, list) and any(
+        isinstance(label, str) and label in ARC_RUNNER_LABELS for label in labels
+    )
 
 
 def _cancels(conc) -> bool:
@@ -221,3 +232,4 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
