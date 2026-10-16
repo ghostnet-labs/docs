@@ -45,4 +45,4 @@ The last row is still positive but only 3.3 mΩ under the 122 mΩ break-even, an
 
 ## 5. Record text
 
-Applied to [v1-bridge-selection.md](v1-bridge-selection.md): the header position and the board-copper row are in §3.4, the path budget there includes the 3.4 mΩ run, and B6 counts it. §4 is not re-run yet (record conflict 3 there).
+Applied to [v1-bridge-selection.md](v1-bridge-selection.md): the header position and the board-copper row are in §3.4, the path budget there includes the 3.4 mΩ run, and B6 counts it. §4 there is re-run at 101.1 mΩ (83.7 mΩ of cells plus the 17.4 mΩ path), giving +42.2 J. §1 to §3 above add 3.4 mΩ to the 98.7 mΩ record, which already carried 1 mΩ of rounding, so they read about 1 mΩ high.
