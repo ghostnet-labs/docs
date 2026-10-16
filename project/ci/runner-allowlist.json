@@ -158,15 +158,6 @@
     },
     {
       "repo": "firmware",
-      "workflow": "kernel.yml",
-      "job": "build-kernels",
-      "rules": [
-        "pinned-reusable"
-      ],
-      "reason": "Upstream OpenWrt reusable workflow at @main. To be vendored, pinned and moved to openwrt-build after the board move."
-    },
-    {
-      "repo": "firmware",
       "workflow": "label-kernel.yml",
       "job": "build-kernels-label",
       "rules": [
@@ -206,24 +197,6 @@
         "pr-concurrency"
       ],
       "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
-    },
-    {
-      "repo": "firmware",
-      "workflow": "toolchain.yml",
-      "job": "build-toolchains",
-      "rules": [
-        "pinned-reusable"
-      ],
-      "reason": "Upstream OpenWrt reusable workflow at @main. To be vendored and pinned with kernel.yml."
-    },
-    {
-      "repo": "firmware",
-      "workflow": "tools.yml",
-      "job": "build-tools",
-      "rules": [
-        "pinned-reusable"
-      ],
-      "reason": "Upstream OpenWrt reusable workflow at @main. To be vendored and pinned with kernel.yml."
     },
     {
       "repo": "luci",
@@ -437,6 +410,96 @@
         "pinned-reusable"
       ],
       "reason": "Upstream container push, never run on this fork (no registry credentials). Remove the workflow or pin it to a SHA."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "reusable_build.yml",
+      "job": "setup_build",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Vendored from openwrt/actions-shared-workflows in firmware #41 (GHO-48); called only through kernel.yml (pull_request and push to 24.10 on kernel paths). Hosted and untimed as upstream ships it; set timeout-minutes and move to [self-hosted, openwrt-build] with the Mac board-build move."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "reusable_build.yml",
+      "job": "check",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Vendored from openwrt/actions-shared-workflows in firmware #41 (GHO-48); called only through kernel.yml (pull_request and push to 24.10 on kernel paths). Hosted and untimed as upstream ships it; set timeout-minutes and move to [self-hosted, openwrt-build] with the Mac board-build move."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "reusable_build.yml",
+      "job": "build",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Vendored from openwrt/actions-shared-workflows in firmware #41 (GHO-48); called only through kernel.yml (pull_request and push to 24.10 on kernel paths). Hosted and untimed as upstream ships it; set timeout-minutes and move to [self-hosted, openwrt-build] with the Mac board-build move."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "reusable_check-kernel-patches.yml",
+      "job": "setup_build",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Vendored from openwrt/actions-shared-workflows in firmware #41 (GHO-48); called only through kernel.yml (pull_request and push to 24.10 on kernel paths). Hosted and untimed as upstream ships it; set timeout-minutes and move to [self-hosted, openwrt-build] with the Mac board-build move."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "reusable_check-kernel-patches.yml",
+      "job": "check-patch",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Vendored from openwrt/actions-shared-workflows in firmware #41 (GHO-48); called only through kernel.yml (pull_request and push to 24.10 on kernel paths). Hosted and untimed as upstream ships it; set timeout-minutes and move to [self-hosted, openwrt-build] with the Mac board-build move."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "reusable_determine_changed_files.yml",
+      "job": "determine_changed_files",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Vendored from openwrt/actions-shared-workflows in firmware #41 (GHO-48); called only through kernel.yml (pull_request and push to 24.10 on kernel paths). Hosted and untimed as upstream ships it; set timeout-minutes and move to [self-hosted, openwrt-build] with the Mac board-build move."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "reusable_determine_changed_packages.yml",
+      "job": "determine_changed_packages",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Vendored from openwrt/actions-shared-workflows in firmware #41 (GHO-48); called only through kernel.yml (pull_request and push to 24.10 on kernel paths). Hosted and untimed as upstream ships it; set timeout-minutes and move to [self-hosted, openwrt-build] with the Mac board-build move."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "reusable_kernel.yml",
+      "job": "determine_targets",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Vendored from openwrt/actions-shared-workflows in firmware #41 (GHO-48); called only through kernel.yml (pull_request and push to 24.10 on kernel paths). Hosted and untimed as upstream ships it; set timeout-minutes and move to [self-hosted, openwrt-build] with the Mac board-build move."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "reusable_upload-file-s3.yml",
+      "job": "upload-file-in-s3",
+      "rules": [
+        "hosted-runner",
+        "job-timeout"
+      ],
+      "reason": "Vendored from openwrt/actions-shared-workflows in firmware #41 (GHO-48); called only through kernel.yml (pull_request and push to 24.10 on kernel paths). Hosted and untimed as upstream ships it; set timeout-minutes and move to [self-hosted, openwrt-build] with the Mac board-build move."
     }
   ]
 }
