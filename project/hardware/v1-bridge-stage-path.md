@@ -43,10 +43,6 @@ The last row is still positive but only 3.3 mΩ under the 122 mΩ break-even, an
 2. Keep the harness at 2 × 16 AWG per pole; do not add contacts.
 3. The 130 mm rows in §3 show the cost: about 16 J of margin.
 
-## 5. Proposed record text
+## 5. Record text
 
-For the records owner to apply only if the project owner accepts. No IDs are assigned.
-
-- **§3.4 interconnect:** the bank header sits at the east end of the tray, under the stage (V1 working default).
-- **§3.4 path ESR budget:** add a row "Board copper, header to stage: 3.4 mΩ at 30 mm, 8 mm pour on L8 plus L5 (v1-bridge-stage-path.md)"; path ESR becomes about 17.4 mΩ (22.4 mΩ with the fuse). In §4 the stack total becomes 102.1 mΩ and the margin +40.2 J.
-- **B6:** include the board run in the 122 mΩ check.
+Applied to [v1-bridge-selection.md](v1-bridge-selection.md): the header position and the board-copper row are in §3.4, the path budget there includes the 3.4 mΩ run, and B6 counts it. §4 there is re-run at 101.1 mΩ (83.7 mΩ of cells plus the 17.4 mΩ path), giving +42.2 J. §1 to §3 above add 3.4 mΩ to the 98.7 mΩ record, which already carried 1 mΩ of rounding, so they read about 1 mΩ high.

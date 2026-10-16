@@ -27,11 +27,11 @@ Coordinates: "pack frame" is the frame of [v1-battery-pack.md](v1-battery-pack.m
 | Ideal-diode FETs | 2 × **TI CSD18512Q5B** (40 V, 2.3 mΩ max at 4.5 V) | Below the 5.4 mΩ needed to hold 30 mV forward drop at 5.56 A. |
 | Switching frequency | 500 kHz, RT = 107 kΩ (490 to 510 kHz over temperature) | Verified, Rev. D p4. Same value the RF review analysed. |
 | Backup output | +VBUS_HOLD regulated at 7.0 V (OUTFB divider 487 kΩ over 100 kΩ, giving 7.04 V) | Unchanged from the bridge study. It sits above SVS4's 6.0 V (D-044) and above the 6.66 V maximum stack. |
-| Energy | **445.0 J usable vs 334 J needed: +111 J.** The conservative calculator margin is **+47.0 J**. The duration lower bound is 13.1 s. | `bridge_budget.py` at −20 °C, end of life, minimum charge and +15 mΩ path ESR (§4). |
+| Energy | **441.8 J usable vs 334 J needed: +108 J.** The conservative calculator margin is **+42.2 J**. The duration lower bound is 12.9 s. | `bridge_budget.py` at −20 °C, end of life, minimum charge and the 17.4 mΩ path ESR of §3.4 (§4). |
 | Placement | Bank in a **bridge tray under the carrier** (the battery-side bay of the radio body). Power stage on the carrier top side at board X 119.5 to 136.5, Y 36 to 60 (§3.5). | The bank fits nowhere in the present body. The tray adds **23.0 mm** of under-board depth (§3). |
-| Interconnect | Würth WR-MPC4 8-pin dual row (4.2 mm pitch). Two 16 AWG wires per pole, a fuse at the bank. | 14 A per pole against a 7.94 A average and a 10.94 A peak (§3.4). |
+| Interconnect | Würth WR-MPC4 8-pin dual row (4.2 mm pitch), header at the east end of the tray under the stage. Two 16 AWG wires per pole, a fuse at the bank. | 14 A per pole against a 7.94 A average and a 10.94 A peak (§3.4). |
 
-This design meets the 25 W case. It does **not** cover the 35 W stress case at −20 °C and end of life (−337.9 J). The break-even sustained load is **26.3 W**. D-047 sizes for 25 W.
+This design meets the 25 W case. It does **not** cover the 35 W stress case at −20 °C and end of life (−343.8 J). The break-even sustained load is **26.2 W**. D-047 sizes for 25 W.
 
 ## 1. Cells
 
@@ -42,9 +42,9 @@ The LTC3350 charges the stack with a step-down converter. It starts charging onl
 | Population | Cells | Charge | Per cell | Margin (calculator, §4 conditions) | Fit (§3) | Verdict |
 |---|---:|---:|---:|---:|---|---|
 | 4S1P SCCV60B107SRB or SCCW45B107SSB | 4 | 8.0 V | 2.0 V | Negative (bridge study, before cold derating) | Fits | Rejected: fails 25 W |
-| 4S2P SCCV60B107SRB | 8 | 8.0 V (7.84 V min) | 2.0 V | +193.3 J | 8 cells need two layers (+42 mm) | Rejected: volume. The stack also sits within 0.4 V of the pack-cutoff bus, so charging stops on a weak pack. |
-| **3S2P SCCV60B107SRB** | **6** | **6.525 V (6.39 V min)** | **2.175 V** | **+47.0 J** | One layer (+23 mm) | **Default** |
-| 3S2P at code 13 | 6 | 6.75 V (6.62 V min) | 2.25 V | +103.6 J | Same | End-of-life step (D-047) |
+| 4S2P SCCV60B107SRB | 8 | 8.0 V (7.84 V min) | 2.0 V | +189.2 J | 8 cells need two layers (+42 mm) | Rejected: volume. The stack also sits within 0.4 V of the pack-cutoff bus, so charging stops on a weak pack. |
+| **3S2P SCCV60B107SRB** | **6** | **6.525 V (6.39 V min)** | **2.175 V** | **+42.2 J** | One layer (+23 mm) | **Default** |
+| 3S2P at code 13 | 6 | 6.75 V (6.62 V min) | 2.25 V | +98.8 J | Same | End-of-life step (D-047) |
 | 3S1P SCCY62B307SSB (300 F, Ø35 × 62) | 3 | 6.525 V | 2.175 V | More than 3S2P (same ESR, 1.5 × C) | Ø36 mm layer, +40 mm | Rejected: height |
 
 3S2P uses each cell harder (2.175 V against 2.0 V, so 1.18 × the energy per cell), and the stack stays 1.7 V or more below pack cutoff. Charging then completes from any pack above cutoff.
@@ -70,7 +70,7 @@ Source: [SCC Series datasheet TDS-SC-0001 Rev 11](https://datasheets.kyocera-avx
 
 **Screening factors used in §4.**
 - Capacitance factor: 0.9 (initial −10 %) × 0.7 (end of life) × 0.94 (−20 °C) = **0.5922**. Calculated.
-- Cell ESR: 18 mΩ × 2 (end of life) × 1.55 (−20 °C) = 55.8 mΩ. A 2P group is 27.9 mΩ and the 3S stack is 83.7 mΩ. Adding 15 mΩ of path (§3.4) gives **98.7 mΩ**. Calculated.
+- Cell ESR: 18 mΩ × 2 (end of life) × 1.55 (−20 °C) = 55.8 mΩ. A 2P group is 27.9 mΩ and the 3S stack is 83.7 mΩ. Adding the 17.4 mΩ path budget (§3.4) gives **101.1 mΩ**. Calculated.
 
 These stack the worst cases on purpose. The cold factors come from typical curves, so B4 must measure them.
 
@@ -128,7 +128,7 @@ A lower-profile alternative is SRP1245A-4R7M ([REV. 06/24](https://www.bourns.co
 | Step-down maximum duty (p5) | 97 % min | 6.66 / 8.1 = 82 % (pack at cutoff, 0.3 V path drop assumed) | Pass |
 | Charge enable VDUVLO (p4) | VOUTSN ≥ VCAP + 225 mV max | 6.66 + 0.225 = 6.89 V, below 8.1 V | Pass. The 4S 8.0 V stack would leave only about 0.1 V. |
 | Minimum on-time (p30) | tON(min) 85 ns < VCAP / (VOUT × fSW) | Holds for VCAP ≥ 85 ns × 12.6 V × 510 kHz = 0.55 V | Pulse skipping only below 0.55 V on a first charge from empty. The datasheet allows this. |
-| Maximum-power-transfer floor (p24) | VCAP(min) ≥ sqrt(4 × n × RSC × P / η) | sqrt(27.8 W × 98.7 mΩ) = 1.66 V terminal | Not limiting. The current limit sets 3.50 V. |
+| Maximum-power-transfer floor (p24) | VCAP(min) ≥ sqrt(4 × n × RSC × P / η) | sqrt(27.8 W × 101.1 mΩ) = 1.68 V terminal | Not limiting. The current limit sets 3.50 V. |
 | IC dissipation (p29) | TJ = TA + VOUT(IQ + IG) × 34 °C/W | IG = 2 × 18 nC × 500 kHz = 18 mA; 12.6 V × 22 mA × 34 = **+9.4 K** | Pass |
 
 ### 2.4 Rest of the stage
@@ -146,7 +146,7 @@ A lower-profile alternative is SRP1245A-4R7M ([REV. 06/24](https://www.bourns.co
 | DB bootstrap diode | Fast PN diode, not Schottky | The stage never runs non-synchronously here because VCAP is always below VOUT. The datasheet still prefers PN when the output ideal diode is fitted (p29). |
 | I2C | SMBus address 0b0001001 (0x09). Alert response address 0b0001100. | Verified, p18. Belongs on the SYS_I2C address map (net plan open item 24). |
 
-**Backup efficiency.** At the floor (3.5 V in, 7.94 A) the conduction losses add up as follows: RSNSC 0.38 W, inductor 0.69 W (8.4 mΩ × 1.3), FETs 0.65 W, and gate drive 0.28 W. That is about 2.0 W of 27.8 W, or 93 %. Switching and core loss are not modelled. The 90 % used in §4 is plausible but **Unverified**, and the break-even is 85.7 % (B5).
+**Backup efficiency.** At the floor (3.5 V in, 7.94 A) the conduction losses add up as follows: RSNSC 0.38 W, inductor 0.69 W (8.4 mΩ × 1.3), FETs 0.65 W, and gate drive 0.28 W. That is about 2.0 W of 27.8 W, or 93 %. Switching and core loss are not modelled. The 90 % used in §4 is plausible but **Unverified**, and the break-even is 86.1 % (B5).
 
 ## 3. Mechanical fit
 
@@ -194,23 +194,25 @@ The bank board splits to the two outer ends, so the centre gap becomes X 67.5 to
 | Pin map | 1–2 VCAP+, 3–4 CAPRTN, 5 CAP1, 6 CAP2, 7 CAP3 Kelvin, 8 CAPRTN Kelvin | The Kelvin taps feed the CAP pins through the 2.4 Ω ballasts and carry at most 0.48 A, so 22 to 24 AWG is enough. | Proposed |
 | Bank NTC | 10 kΩ NTC on the row A right cell (board X 0 to 62, Y 0 to 19, the hottest cell, under the bucks) to the LTC3350 GPI (a thermistor input the datasheet supports, p14), 2-pin link | Lets firmware step the charge from code 12 to code 11 (6.30 V) while it reads 60 °C or more (D-051) | Proposed. Circuit values Unverified. |
 | Bank fuse | One fuse at the bank board in series with VCAP+: about 15 A slow-blow, ≥ 32 V, cold resistance ≤ 5 mΩ | Stack short-circuit current is about 6.5 V / 27 mΩ = 240 A. Without a fuse a harness short dumps the full bank (about 1.4 kJ). | MPN open (Unverified). Fitted by D-047. |
-| Path ESR budget | Connector pairs 2 × 5 mΩ max, wires 2 mΩ, bank bus about 2 mΩ: **14 mΩ**. 15 mΩ is used in §4; with a fuse, about +5 mΩ. | Calculated, B6 |
+| Header position | Carrier bottom side at the east end of the tray, under the stage (§3.5) | Shortest VCAP+ run to the stage, about 30 mm | V1 working default; Justin has not been asked ([v1-bridge-stage-path.md](v1-bridge-stage-path.md)) |
+| Board copper, header to stage | 8 mm pour on L8 (1 oz) in parallel with 8 mm on L5 (0.5 oz), about 30 mm, joined by vias at both ends | **3.4 mΩ**: 1.4 mΩ of pour plus about 2 mΩ of vias. Drop 27 mV at 7.94 A and 37 mV at 10.94 A. | Calculated; via resistance is an assumption until routed ([v1-bridge-stage-path.md](v1-bridge-stage-path.md) §2) |
+| Path ESR budget | Connector pairs 2 × 5 mΩ max, wires 2 mΩ, bank bus about 2 mΩ, board copper 3.4 mΩ: **17.4 mΩ**, used in §4 (stack 101.1 mΩ). With a fuse, about +5 mΩ; the §4 path +10 mΩ row covers it. | Calculated, B6 |
 
 The bus side needs no new harness: the input and output ideal diodes and +VBUS_HOLD stay on the carrier.
 
 ### 3.5 Power-stage placement
 
-**Default: carrier top side, board X 119.5 to 136.5, Y 36 to 60 (408 mm²), east of the Wi-Fi card**, as modelled in firmware `parts.yaml` ([firmware #71](https://github.com/ghostnet-labs/firmware/pull/71), V1 working default). The earlier area at X 55 to 85, Y 1.5 to 23 is now taken by the Ethernet header, the HX5120NL magnetics and the USB-C host port with its DFP parts ([v1-reference.md](v1-reference.md) §18), and the CM5 underside (2.5 mm) rules out the 6.5 mm inductor under the module. The new area keeps 1.5 mm wall clearance, stays outside the Wi-Fi card's XY shadow (X 88 to 118) and is exactly 15.0 mm from the GNSS block (Y ≤ 21), the minimum the rule allows. The stage needs room for the IC (5 × 7 mm), the inductor (14.0 × 12.8 mm max), four 5 × 6 mm FETs, two 2512 sense resistors, CCAP and part of COUT: about 450 mm², against 408 mm² here, so the fit is an assumption until layout. Calculated. The radio load switches and the hub 1.1 V buck are not modelled yet (Unverified). The WR-MPC4 header goes on the bottom side at about board X 80.5 to 90, Y 2 to 19, beside the shunt block (CAD-verify); the stack path from the header to the stage is now about 30 mm or more longer, which the path ESR budget in §3.4 does not yet include (Unverified).
+**Default: carrier top side, board X 119.5 to 136.5, Y 36 to 60 (408 mm²), east of the Wi-Fi card**, as modelled in firmware `parts.yaml` ([firmware #71](https://github.com/ghostnet-labs/firmware/pull/71), V1 working default). The earlier area at X 55 to 85, Y 1.5 to 23 is now taken by the Ethernet header, the HX5120NL magnetics and the USB-C host port with its DFP parts ([v1-reference.md](v1-reference.md) §18), and the CM5 underside (2.5 mm) rules out the 6.5 mm inductor under the module. The new area keeps 1.5 mm wall clearance, stays outside the Wi-Fi card's XY shadow (X 88 to 118) and is exactly 15.0 mm from the GNSS block (Y ≤ 21), the minimum the rule allows. The stage needs room for the IC (5 × 7 mm), the inductor (14.0 × 12.8 mm max), four 5 × 6 mm FETs, two 2512 sense resistors, CCAP and part of COUT: about 450 mm², against 408 mm² here, so the fit is an assumption until layout. Calculated. The radio load switches and the hub 1.1 V buck are not modelled yet (Unverified). The WR-MPC4 header goes on the bottom side under the stage, at the east end of the tray (§3.4).
 
 This places the stage on the top side (D-047); [v1-rf-coexistence.md](v1-rf-coexistence.md) §3.2 and [v1-stackup-routing.md](v1-stackup-routing.md) (L8 list) record the same. The RF rules are met. The bottom-side alternative uses SRP1245A-4R7M at 5.0 mm. Cells under the power band would then have to clear Z −6.6 instead of −4.6, which adds up to 2 mm of tray depth. The stackup's 10 A supercapacitor-path row still covers this design (7.94 A average, 10.94 A peak).
 
 ## 4. Calculator run
 
-The tool is the existing [bridge_budget.py](../scripts/bridge_budget.py) (added in docs #26, 83101b4). Its arguments are command-line flags, so no new case file is needed. The run below is at docs `main` 73368aa, and the output is unedited.
+The tool is the existing [bridge_budget.py](../scripts/bridge_budget.py) (added in docs #26, 83101b4). Its arguments are command-line flags, so no new case file is needed. The run below is at docs `main` 6d21cc3, and the output is unedited.
 
 ```sh
 python3 project/scripts/bridge_budget.py \
-  --cells 3 --cell-f 200 --capacitance-factor 0.5922 --stack-esr-ohm 0.0987 \
+  --cells 3 --cell-f 200 --capacitance-factor 0.5922 --stack-esr-ohm 0.1011 \
   --start-v 6.3945 --terminal-min-v 3.5 --average-current-a 7.94 \
   --efficiency 0.9 --load-w 25 --gap-s 10 --shutdown-w 5 --shutdown-s 10
 ```
@@ -222,7 +224,7 @@ python3 project/scripts/bridge_budget.py \
     "cells": 3,
     "cell_f": 200.0,
     "capacitance_factor": 0.5922,
-    "stack_esr_ohm": 0.0987,
+    "stack_esr_ohm": 0.1011,
     "start_v": 6.3945,
     "terminal_min_v": 3.5,
     "average_current_a": 7.94,
@@ -234,42 +236,42 @@ python3 project/scripts/bridge_budget.py \
   },
   "effective_stack_f": 39.48,
   "terminal_floor_v": 3.5,
-  "open_circuit_stack_floor_v": 4.283333333333333,
-  "usable_energy_j": 444.9926178016666,
-  "gap_energy_bound_j": 339.9470899470899,
-  "shutdown_reserve_bound_j": 58.04232804232804,
-  "energy_margin_j": 47.003199812248624,
-  "gap_duration_lower_bound_s": 13.090055216266924,
+  "open_circuit_stack_floor_v": 4.302380952380952,
+  "usable_energy_j": 441.764389230238,
+  "gap_energy_bound_j": 341.4588057445201,
+  "shutdown_reserve_bound_j": 58.10279667422524,
+  "energy_margin_j": 42.20278681149267,
+  "gap_duration_lower_bound_s": 12.93756030883464,
   "gap_plus_reserve_budget_satisfied": true,
-  "required_nominal_cell_f": 178.87461592309023
+  "required_nominal_cell_f": 180.8935315564798
 }
 ```
 
 Inputs: `--cells 3` is the series group count. `--cell-f 200` is one 2P group. The factor and ESR come from §1.2. The start voltage is the code-12 minimum from §1.3. The current is the 7.94 A ceiling from §2.1. The other inputs are the bridge study's.
 
-**Result.** Usable energy is 445.0 J against the 334 J target: **+111.7 J (+33 %)**. The calculator's conservative margin, which adds the I²R loss bound to both the gap and the reserve, is **+47.0 J**. A 2P group needs 178.9 F nominal, and 200 F is fitted.
+**Result.** Usable energy is 441.8 J against the 334 J target: **+107.8 J (+32 %)**. The calculator's conservative margin, which adds the I²R loss bound to both the gap and the reserve, is **+42.2 J**. A 2P group needs 180.9 F nominal, and 200 F is fitted.
 
 **Sensitivity** (same command, one input changed; Calculated):
 
 | Case | Floor (V) | Usable (J) | Margin (J) | Gap lower bound (s) |
 |---|---:|---:|---:|---:|
-| Default above | 4.283 | 445.0 | +47.0 | 13.1 |
-| Load 16 W (typical estimate) | 4.001 | 491.1 | +229.8 | 24.2 |
-| Load 20 W | 4.127 | 471.0 | +150.9 | 18.0 |
-| Load 30 W | 4.981 | 317.3 | −135.5 | 8.0 |
-| Load 35 W (stress case) | 5.681 | 170.1 | −337.9 | 3.8 |
-| Path ESR +10 mΩ (fuse and contacts) | 4.363 | 431.4 | +26.9 | 12.5 |
-| Charge code 13 (6.75 V) | 4.283 | 501.6 | +103.6 | 14.8 |
-| New cells at 25 °C (factor 0.9, ESR 27 + 15 mΩ) | 3.833 | 785.9 | +425.0 | 25.8 |
-| End of life at 25 °C (factor 0.63, ESR 54 + 15 mΩ) | 4.048 | 514.6 | +136.1 | 16.0 |
-| Efficiency 0.85 | 4.488 | 409.6 | −8.0 | 11.5 |
-| Shutdown reserve 10 W × 10 s | 4.283 | 445.0 | −16.0 | 13.1 |
-| Gap 12 s | 4.283 | 445.0 | −21.0 | 13.1 |
-| 4S2P, 8 cells at 8.0 V, for comparison | 4.505 | 609.6 | +193.3 | 17.0 |
+| Default above | 4.302 | 441.8 | +42.2 | 12.9 |
+| Load 16 W (typical estimate) | 4.014 | 489.2 | +227.2 | 24.0 |
+| Load 20 W | 4.142 | 468.5 | +147.4 | 17.8 |
+| Load 30 W | 5.001 | 313.5 | −140.9 | 7.9 |
+| Load 35 W (stress case) | 5.701 | 165.7 | −343.8 | 3.7 |
+| Path ESR +10 mΩ (fuse and contacts) | 4.382 | 428.2 | +22.0 | 12.3 |
+| Charge code 13 (6.75 V) | 4.302 | 498.4 | +98.8 | 14.6 |
+| New cells at 25 °C (factor 0.9, ESR 27 + 17.4 mΩ) | 3.852 | 781.5 | +419.0 | 25.6 |
+| End of life at 25 °C (factor 0.63, ESR 54 + 17.4 mΩ) | 4.067 | 511.4 | +131.3 | 15.8 |
+| Efficiency 0.85 | 4.507 | 406.2 | −13.0 | 11.4 |
+| Shutdown reserve 10 W × 10 s | 4.302 | 441.8 | −21.0 | 12.9 |
+| Gap 12 s | 4.302 | 441.8 | −26.1 | 12.9 |
+| 4S2P, 8 cells at 8.0 V, for comparison | 4.524 | 607.0 | +189.2 | 16.9 |
 
-**Break-even values** (margin = 0, other inputs at default; Calculated): load **26.3 W** (27.9 W at code 13); gap **11.4 s** at 25 W; shutdown reserve 18.1 s at 5 W, about 90 J; efficiency **85.7 %**; total stack ESR **122 mΩ**; capacitance factor **0.530**.
+**Break-even values** (margin = 0, other inputs at default; Calculated): load **26.2 W** (27.8 W at code 13); gap **11.2 s** at 25 W; shutdown reserve 17.3 s at 5 W, about 86 J; efficiency **86.1 %**; total stack ESR **122 mΩ**; capacitance factor **0.536**.
 
-**Shutdown trigger.** Firmware should start `poweroff` when meas_vcap reaches the level that still holds the reserve at end of life and −20 °C. That level is ½ × 39.48 × (V² − 4.283²) = 58 J, which gives V = 4.61 V. Allowing for ADC error (1.5 %, Verified, p6), set the trigger at **4.75 V**. Calculated.
+**Shutdown trigger.** Firmware should start `poweroff` when meas_vcap reaches the level that still holds the reserve at end of life and −20 °C. That level is ½ × 39.48 × (V² − 4.302²) = 58 J, which gives V = 4.63 V. Allowing for ADC error (1.5 %, Verified, p6), set the trigger at **4.75 V**. Calculated.
 
 Verification of the tool: `python3 -m unittest discover -s project/tests -p 'test_bridge_budget.py'`; the project record checks workflow runs it on every PR.
 
@@ -335,7 +337,7 @@ The register, decision and record edits this file proposed are applied (B-24, D-
     bans: [power_region, ic, connector]
 ```
 
-Also move `pack_contacts` to `z0: -35.0` (option A) and add a WR-MPC4 header envelope at about X 80.5, Y 2 once the vertical-header drawing is read.
+Also move `pack_contacts` to `z0: -35.0` (option A) and add a WR-MPC4 header envelope on the bottom side under the stage (§3.4) once the vertical-header drawing is read.
 
 ## Decisions taken
 
@@ -347,12 +349,12 @@ The first two belong to [GHO-30](https://linear.app/ghostnet-labs/issue/GHO-30).
 
 | ID | Measurement | Selection holds if | If not |
 |---|---|---|---|
-| B1 | **GHO-30:** full-node plus accessory power at +VBUS_HOLD, the highest 10 s mean, at the D-028 endpoints | ≤ 26.3 W (code 12) or ≤ 27.9 W (code 13) | Add cells (4S2P or a second layer), or a hybrid lithium-ion-capacitor study (§1.4) |
-| B2 | **GHO-30:** clean-shutdown energy and time | ≤ about 90 J (break-even 18.1 s at 5 W) | Raise the poweroff trigger; at worst add cells |
-| B3 | Gloved swap time, 95th percentile (bridge study test 1) | ≤ 11.4 s at 25 W (longer at the measured B1 load) | As B1 |
-| B4 | Capacitance and DC-5 s ESR of the six cells at −20 °C and 25 °C, plus aged-cell emulation | Stack factor ≥ 0.530; total stack ESR ≤ 122 mΩ including path | Change the cell or add a group cell |
-| B5 | Backup efficiency at 3.5 V and 7.94 A input, and the step-up duty limit at −18 °C | ≥ 85.7 % | Switch to 5 mΩ RSNSC (§2.1) or lower-loss parts |
-| B6 | Path resistance: connector pairs, harness, fuse | Fits inside B4's 122 mΩ | Shorter harness or more contacts |
+| B1 | **GHO-30:** full-node plus accessory power at +VBUS_HOLD, the highest 10 s mean, at the D-028 endpoints | ≤ 26.2 W (code 12) or ≤ 27.8 W (code 13) | Add cells (4S2P or a second layer), or a hybrid lithium-ion-capacitor study (§1.4) |
+| B2 | **GHO-30:** clean-shutdown energy and time | ≤ about 86 J (break-even 17.3 s at 5 W) | Raise the poweroff trigger; at worst add cells |
+| B3 | Gloved swap time, 95th percentile (bridge study test 1) | ≤ 11.2 s at 25 W (longer at the measured B1 load) | As B1 |
+| B4 | Capacitance and DC-5 s ESR of the six cells at −20 °C and 25 °C, plus aged-cell emulation | Stack factor ≥ 0.536; total stack ESR ≤ 122 mΩ including path | Change the cell or add a group cell |
+| B5 | Backup efficiency at 3.5 V and 7.94 A input, and the step-up duty limit at −18 °C | ≥ 86.1 % | Switch to 5 mΩ RSNSC (§2.1) or lower-loss parts |
+| B6 | Path resistance: connector pairs, harness, fuse and the board run from the header to the stage (3.4 mΩ calculated, §3.4) | Fits inside B4's 122 mΩ with the board run included | Shorter harness or more contacts |
 | B7 | Cell temperature in the tray at the D-028 hot endpoint, sealed, at full load (GHO-23 T3/T4) | ≤ 85 °C at ≤ 2.3 V per cell | Lower the charge code, add insulation, or move the bank |
 | B8 | Pack reinsertion during backup: INFET inrush, eFuse current, handover | No eFuse trip at 25 W | Increase INFET gate capacitance |
 | B9 | LTC3350 meas_cap and meas_esr against B4 | Within 10 % | Firmware health thresholds |
@@ -364,7 +366,6 @@ These were found, not resolved. README rule 6 asks for a Linear issue for each o
 
 1. **Radio-body height.** The thermal model ([v1-thermal-update-tray.md](v1-thermal-update-tray.md)) uses a 50 mm body: 27 mm plus option A's 23 mm. The floorplan already needs more than 26.66 mm above the PCB for the feed-through, so the real body may be taller; 66 mm is run as a sensitivity case. The body height is not recorded yet (GHO-7).
 2. **Bottom-side height.** parts.yaml assumes 3 mm for every bottom-side part. The LM76005 inductors probably exceed that. (The bridge inductor is on the top side, D-047.) The tray depth above uses 3 mm.
-3. **Stage position against the thermal model and RF budget.** [v1-thermal-update-tray.md](v1-thermal-update-tray.md) models the stage at X 55 to 85 over the bottom-side buck island (board at case + 15 to 25 K). It now sits beside the Wi-Fi card, the hottest part in the body, and at the 15 mm GNSS minimum, so the thermal figures for the stage and the RF scan (T8, with the stage in charge mode) must use the new position.
 
 ## What remains unverified
 
