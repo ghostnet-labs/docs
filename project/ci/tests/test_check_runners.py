@@ -52,6 +52,90 @@ jobs:
         self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)),
                          [("b", "hosted-runner"), ("b", "job-timeout"), ("b", "pr-concurrency")])
 
+    def test_arc_exact_static_labels_count_as_self_hosted(self):
+        for route in ("ghostnet-linux-arm64", ["ghostnet-linux-arm64"],
+                      {"labels": "ghostnet-linux-arm64"},
+                      {"group": "ci", "labels": ["ghostnet-linux-arm64"]}):
+            with self.subTest(route=route):
+                doc = {"on": "pull_request",
+                       "concurrency": {"group": "ci", "cancel-in-progress": True},
+                       "jobs": {"test": {"runs-on": route, "timeout-minutes": 10}}}
+                self.assertEqual(cr.check_workflow("r", "w.yml", doc), [])
+
+    def test_arc_substrings_and_non_label_fields_do_not_waive_policy(self):
+        for route in ("ghostnet-linux-arm64-spoof", "prefix-ghostnet-linux-arm64",
+                      "ghostnet-linux-arm64 ubuntu-latest", "GHOSTNET-LINUX-ARM64",
+                      ["ghostnet-linux-arm64-spoof"],
+                      {"group": "ghostnet-linux-arm64", "labels": "ubuntu-latest"},
+                      {"labels": {"nested": "ghostnet-linux-arm64"}},
+                      "${{ inputs.ghostnet-linux-arm64 }}",
+                      "${{ contains('ghostnet-linux-arm64', 'arm') && 'ubuntu-latest' }}",
+                      "${{ 'ghostnet-linux-arm64' }}", None):
+            with self.subTest(route=route):
+                doc = {"on": "push", "jobs": {"test": {"runs-on": route, "timeout-minutes": 10}}}
+                self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)),
+                                 [("test", "hosted-runner")])
+
+    def test_arc_keeps_other_policy_rules_and_legacy_fallback(self):
+        doc = {"on": "pull_request", "jobs": {"test": {"runs-on": "ghostnet-linux-arm64"}}}
+        self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)),
+                         [("test", "job-timeout"), ("test", "pr-concurrency")])
+        self.assertTrue(cr.is_self_hosted(FORK_FALLBACK))
+        self.assertTrue(cr.is_self_hosted({"group": "ci", "labels": ["self-hosted", "Linux"]}))
+
+    def test_canonical_arc_fork_fallback_is_recognized(self):
+        route = ("${{ (github.event_name != 'pull_request' || "
+                 "github.event.pull_request.head.repo.full_name == github.repository) "
+                 "&& 'ghostnet-linux-arm64' || 'ubuntu-latest' }}")
+        for value in (route, route.replace(" || ", "\n  ||\t")):
+            with self.subTest(route=value):
+                doc = {"on": "pull_request", "jobs": {"test": {"runs-on": value}}}
+                self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)),
+                                 [("test", "job-timeout"), ("test", "pr-concurrency")])
+
+    def test_modified_arc_fork_expressions_are_rejected(self):
+        canonical = cr.ARC_FORK_FALLBACK
+        for route in (canonical.replace("!= 'pull_request'", "== 'pull_request'"),
+                      canonical.replace("full_name ==", "full_name !="),
+                      canonical.replace("|| 'ubuntu-latest'", "|| 'ghostnet-linux-arm64'"),
+                      canonical.replace("&& 'ghostnet-linux-arm64'", "&& 'ubuntu-latest'"),
+                      canonical.replace("github.repository", "'attacker/repository'"),
+                      canonical.replace("ghostnet-linux-arm64", "ghostnet-linux-arm64-spoof"),
+                      canonical.replace("ghostnet-linux-arm64", "ghostnet- linux-arm64"),
+                      canonical.replace("|| 'ubuntu-latest'", "|| 'ubuntu-24.04'"),
+                      "${{ inputs.note == 'ghostnet-linux-arm64' && 'ubuntu-latest' }}"):
+            with self.subTest(route=route):
+                self.assertFalse(cr.is_self_hosted(route))
+
+    def test_pr_only_arc_route_preserves_hosted_publish_boundary(self):
+        route = cr.ARC_PR_ONLY_FALLBACK
+        for value in (route, route.replace(" && ", "\n &&\t")):
+            with self.subTest(route=value):
+                self.assertTrue(cr.is_self_hosted(value))
+
+    def test_pr_only_arc_route_still_checks_hosted_cron(self):
+        doc = {"on": {"schedule": [{"cron": "*/15 * * * *"}]},
+               "jobs": {"test": {"runs-on": cr.ARC_PR_ONLY_FALLBACK, "timeout-minutes": 10}}}
+        self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)),
+                         [("test", "hosted-cron")])
+
+    def test_modified_pr_only_arc_routes_are_rejected(self):
+        route = cr.ARC_PR_ONLY_FALLBACK
+        for value in (route.replace("event_name ==", "event_name !="),
+                      route.replace("full_name ==", "full_name !="),
+                      route.replace(" && ", " || ", 1),
+                      route.replace("pull_request", "pull_request_target"),
+                      route.replace("ghostnet-linux-arm64", "ghostnet-linux-arm64-spoof"),
+                      route.replace("github.repository", "inputs.repository"),
+                      route.replace("ubuntu-latest", "ghostnet-linux-arm64")):
+            with self.subTest(route=value):
+                self.assertFalse(cr.is_self_hosted(value))
+
+    def test_arc_cron_is_not_hosted_cron(self):
+        doc = {"on": {"schedule": [{"cron": "*/15 * * * *"}]},
+               "jobs": {"test": {"runs-on": "ghostnet-linux-arm64", "timeout-minutes": 10}}}
+        self.assertEqual(cr.check_workflow("r", "w.yml", doc), [])
+
     def test_cancel_in_progress_expression_and_job_level(self):
         doc = wf("""
 on: {pull_request: {}, push: {}}
@@ -170,3 +254,4 @@ class RepositoryAllowlistTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

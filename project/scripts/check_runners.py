@@ -44,6 +44,21 @@ DEFAULT_ALLOWLIST = HERE.parent / "ci" / "runner-allowlist.json"
 RULES = ("hosted-runner", "pr-concurrency", "hosted-cron", "pinned-reusable", "job-timeout")
 PR_EVENTS = ("pull_request", "pull_request_target")
 SHA_RE = re.compile(r"@[0-9a-f]{40}$")
+# ARC scale sets route by their exact name rather than the self-hosted label.
+ARC_RUNNER_LABELS = frozenset({"ghostnet-linux-arm64"})
+# Only this reviewed expression sends trusted events to ARC and forks to hosted.
+ARC_FORK_FALLBACK = (
+    "${{ (github.event_name != 'pull_request' || "
+    "github.event.pull_request.head.repo.full_name == github.repository) "
+    "&& 'ghostnet-linux-arm64' || 'ubuntu-latest' }}"
+)
+
+# Publishing/deletion jobs can keep their secrets on hosted runners.
+ARC_PR_ONLY_FALLBACK = (
+    "${{ github.event_name == 'pull_request' && "
+    "github.event.pull_request.head.repo.full_name == github.repository "
+    "&& 'ghostnet-linux-arm64' || 'ubuntu-latest' }}"
+)
 
 
 @dataclass(frozen=True)
@@ -81,9 +96,27 @@ def is_self_hosted(runs_on) -> bool:
 
     A fork-PR fallback expression such as
     `${{ head.repo.full_name == github.repository && fromJSON('["self-hosted", ...]') || 'ubuntu-latest' }}`
-    counts as self-hosted: same-repo work goes to the Macs.
+    counts as self-hosted: same-repo work goes to the Macs. ARC scale-set
+    names are recognized as exact static labels or the canonical trusted-event
+    ARC/fork-hosted fallback. Other dynamic ARC routes need policy review.
     """
-    return "self-hosted" in _runs_on_text(runs_on)
+    if "self-hosted" in _runs_on_text(runs_on):
+        return True
+    def expression_tokens(value):
+        # Normalize layout without changing quoted runner names or event values.
+        return re.sub(r"'(?:[^']|'')*'|\s+",
+                      lambda match: match[0] if match[0].startswith("'") else "", value)
+
+    if isinstance(runs_on, str) and expression_tokens(runs_on) in {
+        expression_tokens(ARC_FORK_FALLBACK), expression_tokens(ARC_PR_ONLY_FALLBACK)
+    }:
+        return True
+    labels = runs_on.get("labels") if isinstance(runs_on, dict) else runs_on
+    if isinstance(labels, str):
+        labels = [labels]
+    return isinstance(labels, list) and any(
+        isinstance(label, str) and label in ARC_RUNNER_LABELS for label in labels
+    )
 
 
 def _cancels(conc) -> bool:
@@ -127,7 +160,12 @@ def check_workflow(repo: str, name: str, doc: dict) -> list[Finding]:
         if on_pr and not wf_cancels and not _cancels(job.get("concurrency")):
             out.append(Finding(repo, name, job_id, "pr-concurrency",
                                "pull request runs are not cancelled by a newer push"))
-        if hosted and any(cron_is_subhourly(c) for c in crons):
+        # The PR-only route deliberately uses hosted runners for scheduled events.
+        pr_only_route = job.get("runs-on")
+        scheduled_hosted = (isinstance(pr_only_route, str) and
+                            re.sub(r"\s+", "", pr_only_route) ==
+                            re.sub(r"\s+", "", ARC_PR_ONLY_FALLBACK))
+        if (hosted or scheduled_hosted) and any(cron_is_subhourly(c) for c in crons):
             out.append(Finding(repo, name, job_id, "hosted-cron",
                                f"schedule {crons} fires more than hourly on a hosted runner"))
     return out
@@ -221,3 +259,4 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
