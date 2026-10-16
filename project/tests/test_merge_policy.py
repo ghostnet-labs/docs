@@ -20,6 +20,15 @@ class GateTests(unittest.TestCase):
     def evaluate(self, runs, files=None):
         return evaluate(self.profile, files or ["src/main.go"], runs, "current", 7)
 
+    def test_skipped_label_build_runs_are_ignored(self):
+        for path in [".github/workflows/label-kernel.yml", ".github/workflows/label-target.yml"]:
+            skipped = dict(self.run, id=9, path=path, conclusion="skipped")
+            self.assertEqual(self.evaluate([self.run, skipped]), [])
+            # A later skip (a hold label, say) must not hide an earlier failed build.
+            self.assertTrue(self.evaluate([self.run, dict(self.run, id=2, path=path, conclusion="failure"), skipped]))
+            self.assertTrue(self.evaluate([self.run, dict(skipped, status="in_progress", conclusion=None)]))
+        self.assertTrue(self.evaluate([self.run, dict(self.run, id=9, path=".github/workflows/other.yml", conclusion="skipped")]))
+
     def test_transient_neutral_waits_but_never_passes(self):
         neutral = dict(self.run, conclusion="neutral")
         blockers = self.evaluate([neutral])
@@ -132,9 +141,12 @@ class GateTests(unittest.TestCase):
         self.assertEqual(check_blockers([dict(check, name="Pull Request Labeler", status="queued", conclusion=None)]), [])
         self.assertEqual(check_blockers([dict(check, name="Audit runner policy", conclusion="failure")]), [])
         for name in ["Build all affected Kernels from defined label", "Build target from defined label"]:
-            self.assertEqual(check_blockers([dict(check, name=name, conclusion="skipped")]), [])
+            skipped = dict(check, id=9, name=name, conclusion="skipped")
+            self.assertEqual(check_blockers([skipped]), [])
             self.assertTrue(check_blockers([dict(check, name=name, conclusion="failure")]))
             self.assertTrue(check_blockers([dict(check, name=name, status="in_progress", conclusion=None)]))
+            # A later skip (a hold label, say) must not hide an earlier failed build.
+            self.assertTrue(check_blockers([dict(check, id=1, name=name, conclusion="failure"), skipped]))
         self.assertTrue(check_blockers([dict(check, name="Build all affected Kernels from defined label / Build Kernel", conclusion="skipped")]))
 
 
