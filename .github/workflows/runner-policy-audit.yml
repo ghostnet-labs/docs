@@ -24,17 +24,18 @@ concurrency:
 jobs:
   audit:
     name: Audit runner policy
-    runs-on: [self-hosted, Linux, ARM64]
+    runs-on: ghostnet-linux-arm64
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           path: docs
           persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-          check-latest: true
+      - name: Prepare Python environment
+        run: |
+          python3 -m venv "$RUNNER_TEMP/audit-venv"
+          "$RUNNER_TEMP/audit-venv/bin/python" -m pip install --quiet pyyaml==6.0.2
+          echo "$RUNNER_TEMP/audit-venv/bin" >> "$GITHUB_PATH"
       - name: Fetch each repo's workflows
         # Public repos only; setup is private and checked by its own CI.
         run: |
@@ -49,5 +50,4 @@ jobs:
           cp -r docs/.github/workflows repos/docs/.github/
       - name: Check runner policy
         run: |
-          python -m pip install --quiet pyyaml==6.0.2
           python docs/project/scripts/check_runners.py --root repos --allowlist docs/project/ci/runner-allowlist.json
