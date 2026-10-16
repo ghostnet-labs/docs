@@ -19,6 +19,11 @@ LABELER = "Pull Request Labeler"
 # Cross-repo audit of default branches. A workflow_dispatch on a PR branch
 # attaches it to that head SHA, but it does not test the PR's diff.
 AUDIT = "Audit runner policy"
+# Firmware workflows and jobs that build only when a ci:kernel:* or ci:target:* label
+# is added. Every other label event (hold, for one) skips them. A skipped run tested
+# nothing, so it is ignored rather than passed: an earlier real run still decides.
+LABEL_WORKFLOWS = {".github/workflows/label-kernel.yml", ".github/workflows/label-target.yml"}
+LABEL_BUILDS = {"Build all affected Kernels from defined label", "Build target from defined label"}
 
 
 def matches(path, pattern):
@@ -62,6 +67,8 @@ def evaluate(profile, files, runs, sha, number):
             continue
         path = run["path"].split("@")[0]
         if path.endswith("manet-merge-gate.yml"):
+            continue
+        if path in LABEL_WORKFLOWS and run["status"] == "completed" and run["conclusion"] == "skipped":
             continue
         previous = latest.get(path)
         if previous is None or (run["id"], run.get("run_attempt", 1)) > (previous["id"], previous.get("run_attempt", 1)):
@@ -203,6 +210,8 @@ def check_blockers(checks):
     latest = {}
     for check in checks:
         if check["name"] in {GATE, AUTOMATION, LABELER, AUDIT}:
+            continue
+        if check["name"] in LABEL_BUILDS and check["status"] == "completed" and check["conclusion"] == "skipped":
             continue
         key = (check["name"], check["app"]["id"])
         if key not in latest or check["id"] > latest[key]["id"]:
