@@ -23,10 +23,19 @@ runs. Each rule names a failure that already happened once:
                     A workflow that runs on pull_request puts a job on a
                     self-hosted runner with no fork guard. A fork PR could then
                     run its own code on Justin's Macs. The runs-on must pick
-                    self-hosted only when the PR head repo is this repo, e.g.
-                    `${{ github.event.pull_request.head.repo.full_name ==
-                    github.repository && fromJSON('["self-hosted", ...]') ||
-                    'ubuntu-latest' }}`.
+                    self-hosted only when the PR head repo is this repo and
+                    fall back to a GitHub-hosted label. Three forms pass (HEAD
+                    is `github.event.pull_request.head.repo.full_name ==
+                    github.repository`, either way round):
+                      `${{ HEAD && fromJSON('["self-hosted", ...]') ||
+                      'ubuntu-latest' }}`
+                      `${{ github.event_name == 'pull_request' && HEAD &&
+                      fromJSON('["self-hosted", ...]') || 'ubuntu-latest' }}`
+                      `${{ (github.event_name != 'pull_request' || HEAD) &&
+                      fromJSON('["self-hosted", ...]') || 'ubuntu-latest' }}`
+                    The last form lets push runs use the Macs, so it passes
+                    only when every trigger is pull_request, push, schedule,
+                    workflow_dispatch or merge_group.
 
 Exceptions live in project/ci/runner-allowlist.json with a reason, so each
 one is reviewed in a docs PR. Usage:
