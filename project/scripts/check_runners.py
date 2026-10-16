@@ -19,6 +19,25 @@ runs. Each rule names a failure that already happened once:
                     (and runner choice) can change without a PR here.
   job-timeout       A job has no timeout-minutes, so a hung step holds a
                     runner for GitHub's 6-hour default.
+  fork-pr-self-hosted
+                    A workflow that runs on pull_request puts a job on a
+                    self-hosted runner with no fork guard. A fork PR could then
+                    run its own code on Justin's Macs or the ARC runners. The
+                    runs-on must pick self-hosted only when the PR head repo is
+                    this repo and fall back to a GitHub-hosted label. Three forms
+                    pass (HEAD is `github.event.pull_request.head.repo.full_name
+                    == github.repository`, either way round):
+                      `${{ HEAD && fromJSON('["self-hosted", ...]') ||
+                      'ubuntu-latest' }}`
+                      `${{ github.event_name == 'pull_request' && HEAD &&
+                      fromJSON('["self-hosted", ...]') || 'ubuntu-latest' }}`
+                      `${{ (github.event_name != 'pull_request' || HEAD) &&
+                      fromJSON('["self-hosted", ...]') || 'ubuntu-latest' }}`
+                    The exact ARC routes ARC_PR_ONLY_FALLBACK and
+                    ARC_FORK_FALLBACK below pass the same way. The event forms
+                    let push runs use self-hosted runners, so they pass only when
+                    every trigger is pull_request, push, schedule,
+                    workflow_dispatch or merge_group.
 
 Exceptions live in project/ci/runner-allowlist.json with a reason, so each
 one is reviewed in a docs PR. Usage:
@@ -41,7 +60,8 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_ALLOWLIST = HERE.parent / "ci" / "runner-allowlist.json"
-RULES = ("hosted-runner", "pr-concurrency", "hosted-cron", "pinned-reusable", "job-timeout")
+RULES = ("hosted-runner", "pr-concurrency", "hosted-cron", "pinned-reusable", "job-timeout",
+         "fork-pr-self-hosted")
 PR_EVENTS = ("pull_request", "pull_request_target")
 SHA_RE = re.compile(r"@[0-9a-f]{40}$")
 # ARC scale sets route by their exact name rather than the self-hosted label.
@@ -91,6 +111,12 @@ def _runs_on_text(runs_on) -> str:
     return str(runs_on or "")
 
 
+def _expression_tokens(value: str) -> str:
+    # Normalize layout without changing quoted runner names or event values.
+    return re.sub(r"'(?:[^']|'')*'|\s+",
+                  lambda match: match[0] if match[0].startswith("'") else "", value)
+
+
 def is_self_hosted(runs_on) -> bool:
     """True when the job can run on a self-hosted runner.
 
@@ -102,13 +128,8 @@ def is_self_hosted(runs_on) -> bool:
     """
     if "self-hosted" in _runs_on_text(runs_on):
         return True
-    def expression_tokens(value):
-        # Normalize layout without changing quoted runner names or event values.
-        return re.sub(r"'(?:[^']|'')*'|\s+",
-                      lambda match: match[0] if match[0].startswith("'") else "", value)
-
-    if isinstance(runs_on, str) and expression_tokens(runs_on) in {
-        expression_tokens(ARC_FORK_FALLBACK), expression_tokens(ARC_PR_ONLY_FALLBACK)
+    if isinstance(runs_on, str) and _expression_tokens(runs_on) in {
+        _expression_tokens(ARC_FORK_FALLBACK), _expression_tokens(ARC_PR_ONLY_FALLBACK)
     }:
         return True
     labels = runs_on.get("labels") if isinstance(runs_on, dict) else runs_on
@@ -117,6 +138,59 @@ def is_self_hosted(runs_on) -> bool:
     return isinstance(labels, list) and any(
         isinstance(label, str) and label in ARC_RUNNER_LABELS for label in labels
     )
+
+
+_HEAD_IS_REPO = (r"(?:github\.event\.pull_request\.head\.repo\.full_name == github\.repository"
+                 r"|github\.repository == github\.event\.pull_request\.head\.repo\.full_name)")
+# The label the guard selects for same-repository work must be self-hosted, and
+# the fallback for everything else a GitHub-hosted runner. Checking both stops
+# an inverted guard (`head == repo && 'ubuntu-latest' || 'self-hosted'`).
+_PICK = r"(?:fromJSON\('(?P<sel>[^']*)'\)|'(?P<lit>[^']*)')"
+_FALLBACK = r"'(?P<fb>(?:ubuntu|macos|windows)-[A-Za-z0-9._-]+)'"
+# `${{ HEAD && self-hosted-labels || 'hosted' }}`: forks never get the Macs.
+_GUARD_PLAIN = re.compile(r"^\$\{\{ " + _HEAD_IS_REPO + " && " + _PICK + r" \|\| " + _FALLBACK + r" \}\}$")
+# `${{ (event_name != 'pull_request' || HEAD) && ... }}`: lets push events use
+# the Macs. Only safe when every trigger is one where event_name cannot be a
+# pull_request_target-style event (see SAFE_FOR_EVENT_GUARD).
+_GUARD_EVENT = re.compile(r"^\$\{\{ \(github\.event_name != 'pull_request' \|\| " + _HEAD_IS_REPO
+                          + r"\) && " + _PICK + r" \|\| " + _FALLBACK + r" \}\}$")
+# `${{ event_name == 'pull_request' && HEAD && ... }}`: only a same-repository
+# pull_request run gets the Macs; push, delete and every other event stay on the
+# hosted fallback. Safe whatever else the workflow triggers on, because a
+# pull_request_target event never matches the first term.
+_GUARD_PR_ONLY = re.compile(r"^\$\{\{ github\.event_name == 'pull_request' && " + _HEAD_IS_REPO + " && " + _PICK
+                            + r" \|\| " + _FALLBACK + r" \}\}$")
+SAFE_FOR_EVENT_GUARD = frozenset({"pull_request", "push", "schedule", "workflow_dispatch", "merge_group"})
+
+
+def _guard_picks_self_hosted(m: "re.Match[str]") -> bool:
+    sel = m.group("sel") or m.group("lit") or ""
+    return "self-hosted" in sel or any(label in sel for label in ARC_RUNNER_LABELS)
+
+
+def has_fork_guard(runs_on, allow_event_form: bool = True) -> bool:
+    """True when runs-on is a recognised fork guard.
+
+    Only the exact forms in _GUARD_PLAIN, _GUARD_PR_ONLY and _GUARD_EVENT pass,
+    plus the reviewed ARC routes (ARC_PR_ONLY_FALLBACK always, ARC_FORK_FALLBACK
+    like the event form). Anything else, such as an inverted `!=` or a stray
+    `||`, is rejected rather than guessed at. The guard must select self-hosted
+    labels for same-repository work and a GitHub-hosted label otherwise. Pass
+    allow_event_form=False for workflows with any trigger outside
+    SAFE_FOR_EVENT_GUARD, which then only accept the plain and PR-only forms.
+    """
+    if not isinstance(runs_on, str):
+        return False
+    tokens = _expression_tokens(runs_on)
+    if tokens == _expression_tokens(ARC_PR_ONLY_FALLBACK):
+        return True
+    if tokens == _expression_tokens(ARC_FORK_FALLBACK):
+        return allow_event_form
+    text = " ".join(runs_on.split())
+    m = _GUARD_PLAIN.match(text) or _GUARD_PR_ONLY.match(text)
+    if m is None and allow_event_form:
+        m = _GUARD_EVENT.match(text)
+    return m is not None and _guard_picks_self_hosted(m)
 
 
 def _cancels(conc) -> bool:
@@ -155,6 +229,11 @@ def check_workflow(repo: str, name: str, doc: dict) -> list[Finding]:
             if hosted:
                 out.append(Finding(repo, name, job_id, "hosted-runner",
                                    f"runs-on {_runs_on_text(job.get('runs-on'))!r}"))
+            if (on_pr and is_self_hosted(job.get("runs-on"))
+                    and not has_fork_guard(job.get("runs-on"), set(triggers) <= SAFE_FOR_EVENT_GUARD)):
+                out.append(Finding(repo, name, job_id, "fork-pr-self-hosted",
+                                   "pull request code can run on a self-hosted runner "
+                                   f"(runs-on {_runs_on_text(job.get('runs-on'))!r} has no fork guard)"))
             if "timeout-minutes" not in job:
                 out.append(Finding(repo, name, job_id, "job-timeout", "no timeout-minutes"))
         if on_pr and not wf_cancels and not _cancels(job.get("concurrency")):
