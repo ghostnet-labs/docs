@@ -2,6 +2,7 @@
 """Fail-closed Manet CI gate and protected auto-merge, using only GitHub metadata."""
 import argparse
 import base64
+import http.client
 import json
 import os
 from pathlib import Path
@@ -77,6 +78,18 @@ def evaluate(profile, files, runs, sha, number):
     return blockers
 
 
+READ_ATTEMPTS = 5
+RETRY_BASE_DELAY = 2
+TRANSIENT_ERRORS = (urllib.error.URLError, http.client.HTTPException, ConnectionError, TimeoutError)
+
+
+def _transient(error):
+    """Connection drops, short reads and timeouts, plus GitHub 5xx/429 responses."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code == 429 or error.code >= 500
+    return True
+
+
 class API:
     def __init__(self, token):
         self.token = token
@@ -87,9 +100,17 @@ class API:
             method=method, headers={"Authorization": "Bearer " + self.token,
             "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28",
             "Content-Type": "application/json"})
-        with urllib.request.urlopen(request, timeout=60) as response:
-            body = response.read()
-        return json.loads(body) if body else {}
+        # Only reads are retried: replaying a write after a dropped connection could act twice.
+        attempts = READ_ATTEMPTS if request.get_method() == "GET" else 1
+        for attempt in range(1, attempts + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    body = response.read()
+                return json.loads(body) if body else {}
+            except TRANSIENT_ERRORS as error:
+                if attempt == attempts or not _transient(error):
+                    raise
+                time.sleep(RETRY_BASE_DELAY * 2 ** (attempt - 1))
 
     def pages(self, path, key=None):
         results = []
