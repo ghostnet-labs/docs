@@ -126,6 +126,22 @@ jobs:
                  "    timeout-minutes: 5\n    steps: []\n")
         self.assertIn("fork-pr-self-hosted", [f.rule for f in cr.check_workflow("r", "w.yml", doc)])
 
+    def test_reusable_workflow_jobs_need_a_fork_guard(self):
+        def found(route):
+            doc = {"on": {"workflow_call": {}},
+                   "jobs": {"build": {"runs-on": route, "timeout-minutes": 10}}}
+            return [f.rule for f in cr.check_workflow("r", "w.yml", doc)]
+        head = "github.event.pull_request.head.repo.full_name == github.repository"
+        event_form = (f"${{{{ (github.event_name != 'pull_request' || {head}) && "
+                      "fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}")
+        for route in (["self-hosted", "Linux"], "ghostnet-linux-arm64", event_form, cr.ARC_FORK_FALLBACK):
+            with self.subTest(route=route):
+                self.assertIn("fork-pr-self-hosted", found(route))
+        for route in (f"${{{{ {head} && fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}}}",
+                      cr.ARC_PR_ONLY_FALLBACK):
+            with self.subTest(route=route):
+                self.assertNotIn("fork-pr-self-hosted", found(route))
+
     def test_arc_routes_as_fork_guards_on_pr_workflows(self):
         def found(on, route):
             doc = {"on": on, "concurrency": {"group": "ci", "cancel-in-progress": True},

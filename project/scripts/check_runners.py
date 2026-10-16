@@ -33,6 +33,8 @@ runs. Each rule names a failure that already happened once:
                       fromJSON('["self-hosted", ...]') || 'ubuntu-latest' }}`
                       `${{ (github.event_name != 'pull_request' || HEAD) &&
                       fromJSON('["self-hosted", ...]') || 'ubuntu-latest' }}`
+                    Reusable (workflow_call) workflows run with their caller's
+                    event, so their self-hosted jobs need a guard as well.
                     The exact ARC routes ARC_PR_ONLY_FALLBACK and
                     ARC_FORK_FALLBACK below pass the same way. The event forms
                     let push runs use self-hosted runners, so they pass only when
@@ -213,6 +215,10 @@ def check_workflow(repo: str, name: str, doc: dict) -> list[Finding]:
     out: list[Finding] = []
     triggers = _triggers(doc)
     on_pr = any(e in triggers for e in PR_EVENTS)
+    # A reusable workflow runs with its caller's event, which can be a fork PR,
+    # so its self-hosted jobs need a guard too. workflow_call is outside
+    # SAFE_FOR_EVENT_GUARD, so only the plain and PR-only forms pass there.
+    called = "workflow_call" in triggers
     crons = [c.get("cron", "") for c in (triggers.get("schedule") or []) if isinstance(c, dict)]
     wf_cancels = _cancels(doc.get("concurrency"))
     for job_id, job in (doc.get("jobs") or {}).items():
@@ -229,7 +235,7 @@ def check_workflow(repo: str, name: str, doc: dict) -> list[Finding]:
             if hosted:
                 out.append(Finding(repo, name, job_id, "hosted-runner",
                                    f"runs-on {_runs_on_text(job.get('runs-on'))!r}"))
-            if (on_pr and is_self_hosted(job.get("runs-on"))
+            if ((on_pr or called) and is_self_hosted(job.get("runs-on"))
                     and not has_fork_guard(job.get("runs-on"), set(triggers) <= SAFE_FOR_EVENT_GUARD)):
                 out.append(Finding(repo, name, job_id, "fork-pr-self-hosted",
                                    "pull request code can run on a self-hosted runner "
