@@ -1,0 +1,48 @@
+# V1 bridge: header-to-stage copper budget
+
+**Status:** Candidate, 2026-10-16. This file adds the board-copper run that [v1-bridge-selection.md](v1-bridge-selection.md) §3.4 did not budget, now that the LTC3350 stage sits at X 119.5 to 136.5, Y 36 to 60 (firmware #71, docs #119). It edits no record and assigns no D, B or R number. The owning records still win (README rule 6). Nothing here is routed or measured.
+
+## 1. Result
+
+- **V1 working default (not asked of Justin): the bank header goes at the east end of the tray, under the stage.** This closes the WR-MPC4 header-position item. The firmware floorplan README still lists it as open until its next edit.
+- With the header there, the VCAP+ run is about 30 mm and adds **about 3.4 mΩ** of board resistance (1.4 mΩ pour plus about 2 mΩ of vias). Total stack ESR is **102.1 mΩ** (107.1 mΩ with the 5 mΩ bank fuse), against the 122 mΩ break-even.
+- Calculator margin is **+40.2 J** (+30.1 J with the fuse), against +47.0 J in the record. Gap lower bound 12.9 s (12.6 s with the fuse), against the 10 s target. The hold-up target is met.
+- Drop on the run is **27 mV at the 7.94 A backup average and 37 mV at the 10.94 A peak**, about 1 % of the 3.50 V floor.
+- The bounding case, a header at the far west end of the tray (130 mm run), would add about 8 mΩ and cut the margin to +30.9 J. Moving the header east returns about 5 mΩ. Nothing in the selection changes.
+
+## 2. Inputs and assumptions
+
+| Item | Value | Tag |
+|---|---|---|
+| Run length | **30 mm** with the header at the east end of the tray under the stage (default). Bounding case 130 mm: header at the west end (X about 5, Y about 33) | Working default for the header position; the 130 mm case is kept for comparison |
+| Copper default (picked, not asked of Justin) | **8 mm wide pour on L8 (1 oz) in parallel with 8 mm on L5 (0.5 oz)**, joined by vias at both ends | V1 working default. 8 mm is above the 7.2 mm that [v1-stackup-routing.md](v1-stackup-routing.md) §5 gives for 10 A at 10 K rise on 1 oz alone. |
+| Sheet resistance at 60 °C | 1 oz: 0.570 mΩ/sq. 0.5 oz: 1.140 mΩ/sq. Parallel: **0.380 mΩ/sq** | Calculated from copper resistivity 1.724e-8 Ω·m with 0.00393 per K. |
+| Pour resistance | 30 / 8 = 3.75 squares × 0.380 = **1.4 mΩ** (130 mm: 16.25 squares, 6.2 mΩ) | Calculated |
+| Via transitions | The stage is on the top side, the pour on L8 and L5: two transitions of about 8 vias each, about **1 mΩ each**, so about 2 mΩ | Assumption (0.3 mm drill, 1.6 mm board); sum real via resistance once routed |
+| CAPRTN return | Taken as the solid ground planes (L2, L4, L7), so its drop is under 1 mΩ and not counted | Assumption |
+| Allowance already in the old 15 mΩ | None for board copper | The 14 mΩ list is connectors, wires and bank bus only |
+
+## 3. Effect on hold-up
+
+`bridge_budget.py` at the §4 command with only `--stack-esr-ohm` changed (Calculated):
+
+| Case | Stack ESR | Usable (J) | Margin (J) | Gap bound (s) |
+|---|---:|---:|---:|---:|
+| Record (§4) | 98.7 mΩ | 445.0 | +47.0 | 13.1 |
+| **Default: header east, 30 mm run (+3.4 mΩ)** | 102.1 mΩ | 440.4 | +40.2 | 12.9 |
+| Default plus bank fuse (+8.4 mΩ) | 107.1 mΩ | 433.6 | +30.1 | 12.6 |
+| Bounding case, 130 mm run (+8 mΩ) | 106.7 mΩ | 434.2 | +30.9 | 12.6 |
+| 130 mm run plus fuse (+13 mΩ) | 111.7 mΩ | 427.3 | +20.8 | 12.3 |
+| 130 mm run, fuse and 7 mΩ tolerance (+20 mΩ) | 118.7 mΩ | 417.7 | +6.6 | 11.8 |
+
+The last row is still positive but only 3.3 mΩ under the 122 mΩ break-even, and it is already at the aged, cold-cell corner that §1.2 uses. The 7 mΩ tolerance is an assumed stress value, not a datasheet figure. The run is worth shortening.
+
+## 4. If the header cannot go east
+
+1. A 10 mm pour instead of 8 mm lowers a 130 mm run from 6.2 to 4.9 mΩ.
+2. Keep the harness at 2 × 16 AWG per pole; do not add contacts.
+3. The 130 mm rows in §3 show the cost: about 16 J of margin.
+
+## 5. Record text
+
+Applied to [v1-bridge-selection.md](v1-bridge-selection.md): the header position and the board-copper row are in §3.4, the path budget there includes the 3.4 mΩ run, and B6 counts it. §4 there is re-run at 101.1 mΩ (83.7 mΩ of cells plus the 17.4 mΩ path), giving +42.2 J. §1 to §3 above add 3.4 mΩ to the 98.7 mΩ record, which already carried 1 mΩ of rounding, so they read about 1 mΩ high.

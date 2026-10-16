@@ -5,7 +5,9 @@ name: Runner policy audit
 # runs that a newer push does not cancel, sub-hourly hosted crons, unpinned
 # reusable workflows and jobs without a timeout. A failure here means a
 # workflow change slipped past review; GitHub emails the failure.
-# No pull_request trigger, so it never adds a check to a PR.
+# No pull_request trigger. A workflow_dispatch on a PR branch still attaches
+# its check to that head commit; merge_policy.py ignores it (AUDIT), because
+# it audits default branches, not the PR's diff.
 
 on:
   schedule:

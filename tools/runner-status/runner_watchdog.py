@@ -159,7 +159,7 @@ def may_act(attempts: list[float], now: float) -> tuple[bool, str]:
     """Backoff: 2, 4, 8 minutes between tries, at most 3 tries an hour."""
     recent = [t for t in attempts if t > now - 3600]
     if len(recent) >= MAX_TRIES_PER_HOUR:
-        return False, (f"auto-recovery gave up after {MAX_TRIES_PER_HOUR} tries this hour; "
+        return False, (f"gave up: {MAX_TRIES_PER_HOUR} tries this hour did not bring it back; "
                        "it tries again when the oldest try is an hour old")
     if recent:
         wait = BACKOFF_MINUTES[min(len(recent), len(BACKOFF_MINUTES)) - 1] * 60
@@ -444,9 +444,10 @@ class Watchdog:
         ok, why = may_act(attempts.get(key, []), now)
         entry["action"] = " ".join(cmd)
         entry["tries"] = len([t for t in attempts.get(key, []) if t > now - 3600])
-        entry["gave_up"] = not ok and why.startswith("auto-recovery gave up")
+        entry["gave_up"] = not ok and why.startswith("gave up")
         if not ok:
-            entry["result"] = why
+            # "ok" / "failed ..." / "gave up ..." / "waiting ...": the page keys off these.
+            entry["result"] = why if entry["gave_up"] else f"retrying: {why}"
             return entry
         if self.dry_run:
             entry["result"] = "dry run: not run"

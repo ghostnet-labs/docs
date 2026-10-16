@@ -6,14 +6,15 @@ so any VM can be rebuilt the same way and drift is detected.
 | VM | Host | Role | Runners |
 |---|---|---|---|
 | `gh-ubuntu` | Mac Studio | `ubuntu`: light CI, e2e, optional Docker/x86 | `studio-ubuntu-1..5` (one-job) |
-| `gh-build` | Mac Studio | `build`: OpenWrt builds | `studio-build-1` (one-job) |
+| `gh-build` | Mac Studio | `build`: OpenWrt builds, Docker allowed | `studio-build-1` (one-job) |
 | `gh-build-2` | Mac Studio | `build` | `studio-build-2` (one-job) |
 | `gh-build` | MacBook Pro | `build` | `macbook-pro-build-1` |
 
 Rules that must hold (checked by `verify-vm.sh`):
 
-- `build` VMs: no `/usr/local/bin/runc`, containerd off, no Docker. The firmware
-  Mac pilot fails if runc is there.
+- `build` VMs (`gh-build`, `gh-build-2`): no `/usr/local/bin/runc` (the firmware
+  Mac pilot fails if it exists). Docker is allowed, but only the Ubuntu
+  `docker.io` package, whose runc lives in `/usr/bin`.
 - `ubuntu` VM: `libpam0g-dev` and the Playwright libraries installed; Docker
   only when `provision/gh-ubuntu-extras.sh --with-docker` was run, and then the
   `docker-x86` label stays off jobs that fork PRs can reach.
@@ -21,6 +22,7 @@ Rules that must hold (checked by `verify-vm.sh`):
 
 Files:
 
+- `provision/install-yq.sh`: installs the pinned mikefarah yq (checksum-verified) into a Linux runner VM; `verify-vm.sh` flags yq older than the minimum CI needs (`CI_TOOL_MINIMUMS`).
 - `verify-vm.sh <ubuntu|build>`: read-only drift check. The runner watchdog
   (`tools/runner-status/runner_watchdog.py`) runs it in each VM hourly and the
   status page alerts on drift.
