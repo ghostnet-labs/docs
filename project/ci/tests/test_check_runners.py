@@ -16,8 +16,8 @@ import yaml  # noqa: E402
 
 import check_runners as cr  # noqa: E402
 
-FORK_FALLBACK = ("${{ github.event.pull_request.head.repo.full_name == github.repository && "
-                 "fromJSON('[\"self-hosted\", \"macOS\", \"ARM64\"]') || 'ubuntu-latest' }}")
+FORK_FALLBACK = ("${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) "
+                 "&& fromJSON('[\"self-hosted\", \"macOS\", \"ARM64\"]') || 'ubuntu-latest' }}")
 
 
 def wf(text):
@@ -34,9 +34,90 @@ class RuleTest(unittest.TestCase):
 on: pull_request
 concurrency: {group: x, cancel-in-progress: true}
 jobs:
+  t:
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "Linux", "ARM64"]') || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps: []
+""")
+        self.assertEqual(cr.check_workflow("r", "w.yml", doc), [])
+
+    def test_self_hosted_pr_job_without_fork_guard(self):
+        doc = wf("""
+on: [pull_request]
+concurrency: {group: x, cancel-in-progress: true}
+jobs:
+  t: {runs-on: [self-hosted, Linux, ARM64], timeout-minutes: 10, steps: []}
+  u: {runs-on: ubuntu-latest, timeout-minutes: 10, steps: []}
+""")
+        found = cr.check_workflow("r", "w.yml", doc)
+        self.assertEqual([(f.job, f.rule) for f in found if f.rule == "fork-pr-self-hosted"],
+                         [("t", "fork-pr-self-hosted")])
+
+    def test_self_hosted_job_without_pr_trigger_needs_no_guard(self):
+        doc = wf("""
+on: {push: {branches: [main]}, schedule: [{cron: '41 * * * *'}]}
+jobs:
   t: {runs-on: [self-hosted, Linux, ARM64], timeout-minutes: 10, steps: []}
 """)
         self.assertEqual(cr.check_workflow("r", "w.yml", doc), [])
+
+    def test_fork_guard_accepts_only_exact_forms(self):
+        head = "github.event.pull_request.head.repo.full_name == github.repository"
+        pick = "fromJSON('[\"self-hosted\"]')"
+        ok = [
+            f"${{{{ {head} && {pick} || 'ubuntu-latest' }}}}",
+            f"${{{{ github.repository == github.event.pull_request.head.repo.full_name && {pick} || 'ubuntu-latest' }}}}",
+            f"${{{{ (github.event_name != 'pull_request' || {head}) && {pick} || 'ubuntu-latest' }}}}",
+        ]
+        pr_only = f"${{{{ github.event_name == 'pull_request' && {head} && {pick} || 'ubuntu-latest' }}}}"
+        ok.append(pr_only)
+        for text in ok:
+            self.assertTrue(cr.has_fork_guard(text), text)
+        # the pull-request-only form never matches pull_request_target, so it is
+        # fine for workflows that also trigger on it
+        self.assertTrue(cr.has_fork_guard(pr_only, allow_event_form=False))
+        bad = [
+            ["self-hosted", "Linux"],
+            "self-hosted",
+            f"${{{{ github.actor == 'x' && {pick} || 'ubuntu-latest' }}}}",
+            # inverted: forks get the Macs
+            f"${{{{ github.event.pull_request.head.repo.full_name != github.repository && {pick} || 'ubuntu-latest' }}}}",
+            # the head check is only one side of an ||, so it never restricts
+            f"${{{{ ({head} || github.event_name == 'pull_request') && {pick} || 'ubuntu-latest' }}}}",
+            f"${{{{ {head} || {pick} }}}}",
+            f"${{{{ github.event_name != 'pull_request' && {head} && {pick} || 'ubuntu-latest' }}}}",
+            f"${{{{ github.event_name == 'pull_request' && {pick} || 'ubuntu-latest' }}}}",
+            # inverted selector: same-repo PRs get a hosted runner, forks get the Macs
+            f"${{{{ {head} && 'ubuntu-latest' || 'self-hosted' }}}}",
+            f"${{{{ {head} && fromJSON('[\"ubuntu-latest\"]') || 'ubuntu-latest' }}}}",
+            # fallback must be a GitHub-hosted label, never a self-hosted one
+            f"${{{{ {head} && {pick} || 'self-hosted' }}}}",
+            # guard in the fallback position instead of the selector
+            f"${{{{ true && {pick} || ({head} && 'a' || 'b') }}}}",
+        ]
+        for text in bad:
+            self.assertFalse(cr.has_fork_guard(text), text)
+
+    def test_event_form_needs_only_safe_triggers(self):
+        head = "github.event.pull_request.head.repo.full_name == github.repository"
+        event_form = (f"${{{{ (github.event_name != 'pull_request' || {head}) && "
+                      "fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}")
+        doc = wf("on: [pull_request, workflow_run]\nconcurrency: {group: x, cancel-in-progress: true}\n"
+                 "jobs:\n  t:\n    runs-on: \"" + event_form.replace('"', '\\"') + "}\"\n"
+                 "    timeout-minutes: 5\n    steps: []\n")
+        self.assertIn("fork-pr-self-hosted", [f.rule for f in cr.check_workflow("r", "w.yml", doc)])
+
+    def test_pull_request_target_rejects_event_name_disjunct(self):
+        head = "github.event.pull_request.head.repo.full_name == github.repository"
+        event_form = (f"${{{{ (github.event_name != 'pull_request' || {head}) && "
+                      "fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}")
+        plain = f"${{{{ {head} && fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}}}"
+        self.assertTrue(cr.has_fork_guard(plain, allow_event_form=False))
+        self.assertFalse(cr.has_fork_guard(event_form + "}", allow_event_form=False))
+        doc = wf("on: pull_request_target\nconcurrency: {group: x, cancel-in-progress: true}\n"
+                 "jobs:\n  t:\n    runs-on: \"" + event_form.replace('"', '\\"') + "}\"\n"
+                 "    timeout-minutes: 5\n    steps: []\n")
+        self.assertIn("fork-pr-self-hosted", [f.rule for f in cr.check_workflow("r", "w.yml", doc)])
 
     def test_fork_fallback_expression_counts_as_self_hosted(self):
         self.assertTrue(cr.is_self_hosted(FORK_FALLBACK))
@@ -119,15 +200,15 @@ concurrency:
   group: g
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  a: {runs-on: [self-hosted], timeout-minutes: 5, steps: []}
+  a: {runs-on: "${{ github.event.pull_request.head.repo.full_name == github.repository && 'self-hosted' || 'ubuntu-latest' }}", timeout-minutes: 5, steps: []}
 """)
         self.assertEqual(cr.check_workflow("r", "w.yml", doc), [])
         doc = wf("""
 on: pull_request
 concurrency: {group: g, cancel-in-progress: false}
 jobs:
-  a: {runs-on: [self-hosted], timeout-minutes: 5, concurrency: {group: j, cancel-in-progress: true}, steps: []}
-  b: {runs-on: [self-hosted], timeout-minutes: 5, steps: []}
+  a: {runs-on: "${{ github.event.pull_request.head.repo.full_name == github.repository && 'self-hosted' || 'ubuntu-latest' }}", timeout-minutes: 5, concurrency: {group: j, cancel-in-progress: true}, steps: []}
+  b: {runs-on: "${{ github.event.pull_request.head.repo.full_name == github.repository && 'self-hosted' || 'ubuntu-latest' }}", timeout-minutes: 5, steps: []}
 """)
         self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)), [("b", "pr-concurrency")])
 
