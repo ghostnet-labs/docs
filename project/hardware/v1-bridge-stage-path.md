@@ -50,3 +50,33 @@ For the records owner to apply only if the project owner accepts. No IDs are ass
 - **§3.4 interconnect:** the bank header sits at the east end of the tray, under the stage (V1 working default).
 - **§3.4 path ESR budget:** add a row "Board copper, header to stage: 3.4 mΩ at 30 mm, 8 mm pour on L8 plus L5 (v1-bridge-stage-path.md)"; path ESR becomes about 17.4 mΩ (22.4 mΩ with the fuse). In §4 the stack total becomes 102.1 mΩ and the margin +40.2 J.
 - **B6:** include the board run in the 122 mΩ check.
+
+## 6. §4 re-run at the record's path budget
+
+The records thread applied §5 in docs #121 (path 17.4 mΩ, so total stack ESR 83.7 + 17.4 = **101.1 mΩ**, 1 mΩ under the 102.1 mΩ used in §1 to §3 above). §4 of v1-bridge-selection.md was not re-run. Result at 101.1 mΩ, from `project/scripts/bridge_budget.py` (Calculated; `--stack-esr-ohm 0.1011`, every other flag as in §4 of the record):
+
+```sh
+python3 project/scripts/bridge_budget.py \
+  --cells 3 --cell-f 200 --capacitance-factor 0.5922 --stack-esr-ohm 0.1011 \
+  --start-v 6.3945 --terminal-min-v 3.5 --average-current-a 7.94 \
+  --efficiency 0.9 --load-w 25 --gap-s 10 --shutdown-w 5 --shutdown-s 10
+```
+
+Key output: `open_circuit_stack_floor_v` 4.302, `usable_energy_j` 441.764, `gap_energy_bound_j` 341.459, `shutdown_reserve_bound_j` 58.103, `energy_margin_j` **42.203**, `gap_duration_lower_bound_s` 12.938, `gap_plus_reserve_budget_satisfied` true, `required_nominal_cell_f` 180.89.
+
+| Quantity | Record (15 mΩ path, 98.7 mΩ) | Re-run (17.4 mΩ path, 101.1 mΩ) |
+|---|---:|---:|
+| Usable energy | 445.0 J | 441.8 J |
+| Calculator margin | +47.0 J | **+42.2 J** |
+| Gap lower bound | 13.1 s | 12.9 s |
+| Required nominal cell | 178.9 F | 180.9 F (200 F fitted) |
+| Break-even load | 26.3 W | **26.2 W** |
+| Break-even gap at 25 W | 11.4 s | **11.2 s** |
+| Break-even efficiency | 85.7 % | **86.1 %** |
+| Break-even shutdown reserve at 5 W | 18.1 s | **17.3 s** |
+| Break-even capacitance factor | 0.530 | **0.536** |
+| Break-even total stack ESR | 122 mΩ | 122 mΩ (unchanged, it is the answer, not an input) |
+
+Sensitivity rows at 101.1 mΩ (floor V, usable J, margin J, gap bound s): load 16 W 4.014 / 489.2 / +227.2 / 24.0; 20 W 4.142 / 468.5 / +147.4 / 17.8; 30 W 5.001 / 313.5 / −140.9 / 7.9; 35 W 5.701 / 165.7 / −343.8 / 3.7; path +10 mΩ 4.382 / 428.2 / +22.0 / 12.3; efficiency 0.85 4.507 / 406.2 / −13.0 / 11.4; shutdown 10 W × 10 s 4.302 / 441.8 / −21.0 / 12.9; gap 12 s 4.302 / 441.8 / −26.1 / 12.9. The charge-code-13, new-cell and end-of-life rows are not re-run here (they need their own start voltage and cell inputs).
+
+No selection changes: D-047's parts, B1's pass criterion and the code-12 default all hold. The margin falls by 4.8 J and every break-even moves by under 1 %. Only the quoted numbers (26.3 W, 11.4 s, 85.7 %, 18.1 s, 0.530, +47.0 J, 13.1 s) need updating in the summary, §1.1, §1.2, §2.3 and §4.
