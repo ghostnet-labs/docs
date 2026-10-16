@@ -32,7 +32,7 @@
 | Run plus bank fuse (+13 mΩ) | 111.7 mΩ | 427.3 | +20.8 | 12.3 |
 | Run, fuse and 7 mΩ contact/wire tolerance (+20 mΩ) | 118.7 mΩ | 417.7 | +6.6 | 11.8 |
 
-The last row is still positive but close to the 122 mΩ break-even. It does not hold if the cells are also at the aged, cold corner that §1.2 already uses, so the run is worth shortening.
+The last row is still positive but only 3.3 mΩ under the 122 mΩ break-even, and it is already at the aged, cold-cell corner that §1.2 uses. The 7 mΩ tolerance is an assumed stress value, not a datasheet figure. The run is worth shortening.
 
 ## 4. Cheap ways to buy the margin back
 
