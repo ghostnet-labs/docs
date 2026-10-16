@@ -160,7 +160,12 @@ def check_workflow(repo: str, name: str, doc: dict) -> list[Finding]:
         if on_pr and not wf_cancels and not _cancels(job.get("concurrency")):
             out.append(Finding(repo, name, job_id, "pr-concurrency",
                                "pull request runs are not cancelled by a newer push"))
-        if hosted and any(cron_is_subhourly(c) for c in crons):
+        # The PR-only route deliberately uses hosted runners for scheduled events.
+        pr_only_route = job.get("runs-on")
+        scheduled_hosted = (isinstance(pr_only_route, str) and
+                            re.sub(r"\s+", "", pr_only_route) ==
+                            re.sub(r"\s+", "", ARC_PR_ONLY_FALLBACK))
+        if (hosted or scheduled_hosted) and any(cron_is_subhourly(c) for c in crons):
             out.append(Finding(repo, name, job_id, "hosted-cron",
                                f"schedule {crons} fires more than hourly on a hosted runner"))
     return out

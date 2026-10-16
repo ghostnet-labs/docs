@@ -113,6 +113,12 @@ jobs:
             with self.subTest(route=value):
                 self.assertTrue(cr.is_self_hosted(value))
 
+    def test_pr_only_arc_route_still_checks_hosted_cron(self):
+        doc = {"on": {"schedule": [{"cron": "*/15 * * * *"}]},
+               "jobs": {"test": {"runs-on": cr.ARC_PR_ONLY_FALLBACK, "timeout-minutes": 10}}}
+        self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)),
+                         [("test", "hosted-cron")])
+
     def test_modified_pr_only_arc_routes_are_rejected(self):
         route = cr.ARC_PR_ONLY_FALLBACK
         for value in (route.replace("event_name ==", "event_name !="),
