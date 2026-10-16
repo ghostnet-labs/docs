@@ -29,7 +29,7 @@ Ambient is the D-028 hot endpoint, **+43.3 °C** (110 °F). The brief rounds it 
 
 | Input | Thermal plan (main) | This update | Tag |
 |---|---|---|---|
-| Radio body height | 27 mm | **50 mm** (27 + 23.0 mm tray, D-048) | Calculated from Verified D-048 text. The floorplan already needs more than 26.66 mm above the PCB ([v1-bridge-selection.md](v1-bridge-selection.md) record conflict 6). A 66 mm body is run as a sensitivity case. |
+| Radio body height | 27 mm | **50 mm** (27 + 23.0 mm tray, D-048) | Calculated from Verified D-048 text. The floorplan already needs more than 26.66 mm above the PCB ([v1-bridge-selection.md](v1-bridge-selection.md) record conflict 1). A 66 mm body is run as a sensitivity case. |
 | Shedding area (top plus four sides; the pack covers the bottom) | 0.0107 + 0.0118 = 0.0226 m² | 0.0107 + 0.0219 = **0.0326 m²** | Calculated |
 | Wi-Fi card | 8 W typical, 10 W peak | **10 W sustained** worst case | Verified: AsiaRF S3 page, "10W maximum, 8W average" ([v1-gpio-and-m2-audit.md](v1-gpio-and-m2-audit.md) §2.1). Sustained 10 W is a bounding assumption. |
 | LTC3350 stage | not in the model | Top side, board X 119.5 to 136.5, Y 36 to 60, beside the Wi-Fi card (firmware #71, docs #119; moved from X 55 to 85, Y 1.5 to 23, which is no longer free). Losses in §2. | Placement is a V1 working default (assumption); losses Calculated |

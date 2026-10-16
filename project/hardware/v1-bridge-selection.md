@@ -29,7 +29,7 @@ Coordinates: "pack frame" is the frame of [v1-battery-pack.md](v1-battery-pack.m
 | Backup output | +VBUS_HOLD regulated at 7.0 V (OUTFB divider 487 kΩ over 100 kΩ, giving 7.04 V) | Unchanged from the bridge study. It sits above SVS4's 6.0 V (D-044) and above the 6.66 V maximum stack. |
 | Energy | **445.0 J usable vs 334 J needed: +111 J.** The conservative calculator margin is **+47.0 J**. The duration lower bound is 13.1 s. | `bridge_budget.py` at −20 °C, end of life, minimum charge and +15 mΩ path ESR (§4). |
 | Placement | Bank in a **bridge tray under the carrier** (the battery-side bay of the radio body). Power stage on the carrier top side at board X 119.5 to 136.5, Y 36 to 60 (§3.5). | The bank fits nowhere in the present body. The tray adds **23.0 mm** of under-board depth (§3). |
-| Interconnect | Würth WR-MPC4 8-pin dual row (4.2 mm pitch). Two 16 AWG wires per pole, a fuse at the bank. | 14 A per pole against a 7.94 A average and a 10.94 A peak (§3.4). |
+| Interconnect | Würth WR-MPC4 8-pin dual row (4.2 mm pitch), header at the east end of the tray under the stage. Two 16 AWG wires per pole, a fuse at the bank. | 14 A per pole against a 7.94 A average and a 10.94 A peak (§3.4). |
 
 This design meets the 25 W case. It does **not** cover the 35 W stress case at −20 °C and end of life (−337.9 J). The break-even sustained load is **26.3 W**. D-047 sizes for 25 W.
 
@@ -194,13 +194,15 @@ The bank board splits to the two outer ends, so the centre gap becomes X 67.5 to
 | Pin map | 1–2 VCAP+, 3–4 CAPRTN, 5 CAP1, 6 CAP2, 7 CAP3 Kelvin, 8 CAPRTN Kelvin | The Kelvin taps feed the CAP pins through the 2.4 Ω ballasts and carry at most 0.48 A, so 22 to 24 AWG is enough. | Proposed |
 | Bank NTC | 10 kΩ NTC on the row A right cell (board X 0 to 62, Y 0 to 19, the hottest cell, under the bucks) to the LTC3350 GPI (a thermistor input the datasheet supports, p14), 2-pin link | Lets firmware step the charge from code 12 to code 11 (6.30 V) while it reads 60 °C or more (D-051) | Proposed. Circuit values Unverified. |
 | Bank fuse | One fuse at the bank board in series with VCAP+: about 15 A slow-blow, ≥ 32 V, cold resistance ≤ 5 mΩ | Stack short-circuit current is about 6.5 V / 27 mΩ = 240 A. Without a fuse a harness short dumps the full bank (about 1.4 kJ). | MPN open (Unverified). Fitted by D-047. |
-| Path ESR budget | Connector pairs 2 × 5 mΩ max, wires 2 mΩ, bank bus about 2 mΩ: **14 mΩ**. 15 mΩ is used in §4; with a fuse, about +5 mΩ. | Calculated, B6 |
+| Header position | Carrier bottom side at the east end of the tray, under the stage (§3.5) | Shortest VCAP+ run to the stage, about 30 mm | V1 working default; Justin has not been asked ([v1-bridge-stage-path.md](v1-bridge-stage-path.md)) |
+| Board copper, header to stage | 8 mm pour on L8 (1 oz) in parallel with 8 mm on L5 (0.5 oz), about 30 mm, joined by vias at both ends | **3.4 mΩ**: 1.4 mΩ of pour plus about 2 mΩ of vias. Drop 27 mV at 7.94 A and 37 mV at 10.94 A. | Calculated; via resistance is an assumption until routed ([v1-bridge-stage-path.md](v1-bridge-stage-path.md) §2) |
+| Path ESR budget | Connector pairs 2 × 5 mΩ max, wires 2 mΩ, bank bus about 2 mΩ, board copper 3.4 mΩ: **17.4 mΩ**, or 22.4 mΩ with the fuse. The stack is then 102.1 mΩ (107.1 mΩ with the fuse), the calculator margin **+40.2 J** (+30.1 J with the fuse) and the gap lower bound 12.9 s (12.6 s), all inside the 122 mΩ break-even ([v1-bridge-stage-path.md](v1-bridge-stage-path.md) §3). §4 still uses 15 mΩ (record conflict 3). | Calculated, B6 |
 
 The bus side needs no new harness: the input and output ideal diodes and +VBUS_HOLD stay on the carrier.
 
 ### 3.5 Power-stage placement
 
-**Default: carrier top side, board X 119.5 to 136.5, Y 36 to 60 (408 mm²), east of the Wi-Fi card**, as modelled in firmware `parts.yaml` ([firmware #71](https://github.com/ghostnet-labs/firmware/pull/71), V1 working default). The earlier area at X 55 to 85, Y 1.5 to 23 is now taken by the Ethernet header, the HX5120NL magnetics and the USB-C host port with its DFP parts ([v1-reference.md](v1-reference.md) §18), and the CM5 underside (2.5 mm) rules out the 6.5 mm inductor under the module. The new area keeps 1.5 mm wall clearance, stays outside the Wi-Fi card's XY shadow (X 88 to 118) and is exactly 15.0 mm from the GNSS block (Y ≤ 21), the minimum the rule allows. The stage needs room for the IC (5 × 7 mm), the inductor (14.0 × 12.8 mm max), four 5 × 6 mm FETs, two 2512 sense resistors, CCAP and part of COUT: about 450 mm², against 408 mm² here, so the fit is an assumption until layout. Calculated. The radio load switches and the hub 1.1 V buck are not modelled yet (Unverified). The WR-MPC4 header goes on the bottom side at about board X 80.5 to 90, Y 2 to 19, beside the shunt block (CAD-verify); the stack path from the header to the stage is now about 30 mm or more longer, which the path ESR budget in §3.4 does not yet include (Unverified).
+**Default: carrier top side, board X 119.5 to 136.5, Y 36 to 60 (408 mm²), east of the Wi-Fi card**, as modelled in firmware `parts.yaml` ([firmware #71](https://github.com/ghostnet-labs/firmware/pull/71), V1 working default). The earlier area at X 55 to 85, Y 1.5 to 23 is now taken by the Ethernet header, the HX5120NL magnetics and the USB-C host port with its DFP parts ([v1-reference.md](v1-reference.md) §18), and the CM5 underside (2.5 mm) rules out the 6.5 mm inductor under the module. The new area keeps 1.5 mm wall clearance, stays outside the Wi-Fi card's XY shadow (X 88 to 118) and is exactly 15.0 mm from the GNSS block (Y ≤ 21), the minimum the rule allows. The stage needs room for the IC (5 × 7 mm), the inductor (14.0 × 12.8 mm max), four 5 × 6 mm FETs, two 2512 sense resistors, CCAP and part of COUT: about 450 mm², against 408 mm² here, so the fit is an assumption until layout. Calculated. The radio load switches and the hub 1.1 V buck are not modelled yet (Unverified). The WR-MPC4 header goes on the bottom side under the stage, at the east end of the tray (§3.4).
 
 This places the stage on the top side (D-047); [v1-rf-coexistence.md](v1-rf-coexistence.md) §3.2 and [v1-stackup-routing.md](v1-stackup-routing.md) (L8 list) record the same. The RF rules are met. The bottom-side alternative uses SRP1245A-4R7M at 5.0 mm. Cells under the power band would then have to clear Z −6.6 instead of −4.6, which adds up to 2 mm of tray depth. The stackup's 10 A supercapacitor-path row still covers this design (7.94 A average, 10.94 A peak).
 
@@ -335,7 +337,7 @@ The register, decision and record edits this file proposed are applied (B-24, D-
     bans: [power_region, ic, connector]
 ```
 
-Also move `pack_contacts` to `z0: -35.0` (option A) and add a WR-MPC4 header envelope at about X 80.5, Y 2 once the vertical-header drawing is read.
+Also move `pack_contacts` to `z0: -35.0` (option A) and add a WR-MPC4 header envelope on the bottom side under the stage (§3.4) once the vertical-header drawing is read.
 
 ## Decisions taken
 
@@ -352,7 +354,7 @@ The first two belong to [GHO-30](https://linear.app/ghostnet-labs/issue/GHO-30).
 | B3 | Gloved swap time, 95th percentile (bridge study test 1) | ≤ 11.4 s at 25 W (longer at the measured B1 load) | As B1 |
 | B4 | Capacitance and DC-5 s ESR of the six cells at −20 °C and 25 °C, plus aged-cell emulation | Stack factor ≥ 0.530; total stack ESR ≤ 122 mΩ including path | Change the cell or add a group cell |
 | B5 | Backup efficiency at 3.5 V and 7.94 A input, and the step-up duty limit at −18 °C | ≥ 85.7 % | Switch to 5 mΩ RSNSC (§2.1) or lower-loss parts |
-| B6 | Path resistance: connector pairs, harness, fuse | Fits inside B4's 122 mΩ | Shorter harness or more contacts |
+| B6 | Path resistance: connector pairs, harness, fuse and the board run from the header to the stage (3.4 mΩ calculated, §3.4) | Fits inside B4's 122 mΩ with the board run included | Shorter harness or more contacts |
 | B7 | Cell temperature in the tray at the D-028 hot endpoint, sealed, at full load (GHO-23 T3/T4) | ≤ 85 °C at ≤ 2.3 V per cell | Lower the charge code, add insulation, or move the bank |
 | B8 | Pack reinsertion during backup: INFET inrush, eFuse current, handover | No eFuse trip at 25 W | Increase INFET gate capacitance |
 | B9 | LTC3350 meas_cap and meas_esr against B4 | Within 10 % | Firmware health thresholds |
@@ -364,7 +366,7 @@ These were found, not resolved. README rule 6 asks for a Linear issue for each o
 
 1. **Radio-body height.** The thermal model ([v1-thermal-update-tray.md](v1-thermal-update-tray.md)) uses a 50 mm body: 27 mm plus option A's 23 mm. The floorplan already needs more than 26.66 mm above the PCB for the feed-through, so the real body may be taller; 66 mm is run as a sensitivity case. The body height is not recorded yet (GHO-7).
 2. **Bottom-side height.** parts.yaml assumes 3 mm for every bottom-side part. The LM76005 inductors probably exceed that. (The bridge inductor is on the top side, D-047.) The tray depth above uses 3 mm.
-3. **Stage position against the thermal model and RF budget.** [v1-thermal-update-tray.md](v1-thermal-update-tray.md) models the stage at X 55 to 85 over the bottom-side buck island (board at case + 15 to 25 K). It now sits beside the Wi-Fi card, the hottest part in the body, and at the 15 mm GNSS minimum, so the thermal figures for the stage and the RF scan (T8, with the stage in charge mode) must use the new position.
+3. **§4 run against the path budget.** The summary, §1.1, §1.2, §2.3 and the §4 run, sensitivity and break-even values use 15 mΩ of path. §3.4 now budgets 17.4 mΩ with the board run, which gives +40.2 J instead of +47.0 J. Re-running §4 also moves the 26.3 W break-even load that D-047 and B1 cite, so it is not re-run here.
 
 ## What remains unverified
 
