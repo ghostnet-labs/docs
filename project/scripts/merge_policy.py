@@ -15,6 +15,9 @@ AUTOMATION = "Handle passing PRs"
 MAX_GATE_ATTEMPTS = 3
 # Adds labels only and runs from the base branch, so it is not a test to wait on.
 LABELER = "Pull Request Labeler"
+# Cross-repo audit of default branches. A workflow_dispatch on a PR branch
+# attaches it to that head SHA, but it does not test the PR's diff.
+AUDIT = "Audit runner policy"
 
 
 def matches(path, pattern):
@@ -178,7 +181,7 @@ def reviews_clear(reviews):
 def check_blockers(checks):
     latest = {}
     for check in checks:
-        if check["name"] in {GATE, AUTOMATION, LABELER}:
+        if check["name"] in {GATE, AUTOMATION, LABELER, AUDIT}:
             continue
         key = (check["name"], check["app"]["id"])
         if key not in latest or check["id"] > latest[key]["id"]:
