@@ -15,16 +15,15 @@ concurrency:
 jobs:
   records:
     name: Project record validation
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "Linux", "ARM64"]') || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'ghostnet-linux-arm64' || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-          # Self-hosted runners keep a tool cache; without this "3.x" can
-          # resolve to an old cached Python (3.8 from another repo's job).
-          check-latest: true
+      - name: Prepare Python environment
+        run: |
+          python3 -m venv "$RUNNER_TEMP/records-venv"
+          "$RUNNER_TEMP/records-venv/bin/python" -m pip install --quiet pyyaml==6.0.2
+          echo "$RUNNER_TEMP/records-venv/bin" >> "$GITHUB_PATH"
       - name: GPIO allocation consistency
         run: python project/scripts/check_gpio_allocations.py
       - name: Agent instruction links
@@ -33,6 +32,5 @@ jobs:
         run: python -m unittest discover -s project/tests -v
       - name: Runner policy (docs workflows)
         run: |
-          python -m pip install --quiet pyyaml==6.0.2
           python -m unittest discover -s project/ci/tests -v
           python project/scripts/check_runners.py --repo docs
