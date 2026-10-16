@@ -419,6 +419,24 @@
         "job-timeout"
       ],
       "reason": "Tag-only release with a write-all token; stays on GitHub-hosted runners."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "issue-labeller.yml",
+      "job": "label-component",
+      "rules": [
+        "pinned-reusable"
+      ],
+      "reason": "Calls openwrt/actions-shared-workflows@main for issue labels only (read-only, hosted). Goes away with the Pull Request Labeler removal or gets a SHA pin."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "push-containers.yml",
+      "job": "build-push-containers",
+      "rules": [
+        "pinned-reusable"
+      ],
+      "reason": "Upstream container push, never run on this fork (no registry credentials). Remove the workflow or pin it to a SHA."
     }
   ]
 }
