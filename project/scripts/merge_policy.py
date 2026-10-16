@@ -19,6 +19,9 @@ LABELER = "Pull Request Labeler"
 # Cross-repo audit of default branches. A workflow_dispatch on a PR branch
 # attaches it to that head SHA, but it does not test the PR's diff.
 AUDIT = "Audit runner policy"
+# Firmware jobs that build only when a ci:kernel:* or ci:target:* label is added.
+# Every other label event (hold, for one) skips them, so a skip is not a failed test.
+LABEL_BUILDS = {"Build all affected Kernels from defined label", "Build target from defined label"}
 
 
 def matches(path, pattern):
@@ -209,7 +212,8 @@ def check_blockers(checks):
             latest[key] = check
     blockers = []
     for check in latest.values():
-        allowed_skip = "Upload ccache cache to s3" in check["name"] or "Check packages for ${{ inputs.target }}/${{ inputs.subtarget }}" in check["name"]
+        allowed_skip = ("Upload ccache cache to s3" in check["name"] or "Check packages for ${{ inputs.target }}/${{ inputs.subtarget }}" in check["name"]
+                        or check["name"] in LABEL_BUILDS)
         if check["status"] != "completed" or (check["conclusion"] != "success" and not (check["conclusion"] == "skipped" and allowed_skip)):
             blockers.append(f"Check {check['name']}: {check['status']}/{check.get('conclusion')}")
     return blockers

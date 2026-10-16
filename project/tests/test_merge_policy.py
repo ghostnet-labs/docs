@@ -131,6 +131,11 @@ class GateTests(unittest.TestCase):
         self.assertTrue(check_blockers([dict(check, name="test", conclusion="skipped")]))
         self.assertEqual(check_blockers([dict(check, name="Pull Request Labeler", status="queued", conclusion=None)]), [])
         self.assertEqual(check_blockers([dict(check, name="Audit runner policy", conclusion="failure")]), [])
+        for name in ["Build all affected Kernels from defined label", "Build target from defined label"]:
+            self.assertEqual(check_blockers([dict(check, name=name, conclusion="skipped")]), [])
+            self.assertTrue(check_blockers([dict(check, name=name, conclusion="failure")]))
+            self.assertTrue(check_blockers([dict(check, name=name, status="in_progress", conclusion=None)]))
+        self.assertTrue(check_blockers([dict(check, name="Build all affected Kernels from defined label / Build Kernel", conclusion="skipped")]))
 
 
 class FakeExternalAPI:
