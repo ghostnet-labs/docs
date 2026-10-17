@@ -33,7 +33,7 @@ Costs come from each track's `build-list.md`; draw and runtime from each `power-
 | Pack input | 7 to 36 V carrier input, LM74700 in front; the carrier buck computes to about 5.40 V, above the CM5's 5.25 V limit | 8 to 60 V with reverse protection | 5.5 to 20 V, no reverse-polarity protection | 12 V only, through a Victron Orion-Tr 12/12-9 |
 | Wi-Fi mesh card (D-026) | AW7916-AED on a Sintech M-to-A+E adapter | AW7916-NPD mini-PCIe (same MT7916 chip, not the V1 form factor) | AW7916-AED in the E-key bay | AW7916-AED in the E-key bay |
 | 3.3 V for the card | Dedicated 3 A MP1658 rail; adapter about 2 A (Unverified) | About 1.5 A per socket (Unverified); 15 W shared | Official 3 A MP2143 rail | Unpublished; slot rated 8 W |
-| Card fit | Overhangs; support it on the 2242/2260 nut | Fits | Not cleanly, see [nanopc-t6/e-key-fit.md](nanopc-t6/e-key-fit.md) | Fits |
+| Card fit | Overhangs; nylon spacer on the adapter, Kapton on HDMI (the carrier nuts are under the adapter) | Fits | Not cleanly, see [nanopc-t6/e-key-fit.md](nanopc-t6/e-key-fit.md) | Fits |
 | GNSS and PPS | MAX-M10S on UART0, PPS on GPIO18 | On-board u-blox, PPS on GPIO1_15 | MAX-M10S on UART0, PPS on GPIO3_B7 | MAX-M10S through a MAX3232 into COM2, PPS on DCD |
 | INA228 power monitor | Kernel driver | Userspace script (no imx kernel backport) | Kernel driver | Kernel driver on a USB-I2C bridge |
 
