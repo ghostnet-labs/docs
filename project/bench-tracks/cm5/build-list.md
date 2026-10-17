@@ -55,7 +55,7 @@ The INA228 shares i2c-1 with the carrier's CAT24C32 EEPROM (0x50) and ATSHA204 (
 
 | Radio | Where | Notes |
 |---|---|---|
-| AW7916-AED | M.2 slot through the Sintech adapter | The card is 30 x 52 mm and overhangs the adapter's 2230 position. Support its far end on the carrier's 2242 or 2260 nut. Three U.FL pigtails to the ADD5RA dipoles |
+| AW7916-AED | M.2 slot through the Sintech adapter | The card is 30 x 52 mm and overhangs the adapter's 2230 position. The carrier's 2242/2260 nuts are under the adapter, not the card: remove the adapter's 2230 screw, hold the far end with a nylon spacer, and put Kapton on the HDMI shells under the adapter tip (positions **Unverified**). Three U.FL pigtails to the ADD5RA dipoles |
 | GW16167 on the Pier42 carrier | USB-C port (J4, the BCM2712's own dwc2 controller) | Not shared with the 2.5 GbE NIC or the CH334 hub. Fallback: Type-A ports J1/J2 on the hub |
 | MAX-M10S | 40-pin header, UART0 and GPIO18 | ANN-MB1 on the breakout's antenna connector. Confirm on the bench that the breakout feeds antenna bias to the ANN-MB1's LNA |
 
