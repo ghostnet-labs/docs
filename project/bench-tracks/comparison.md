@@ -1,6 +1,6 @@
 # Bench compute tracks compared
 
-**This is a dated snapshot from 2026-10-23, not a purchasing record.** Nothing has been bought, so no board has booted our image and nothing here is measured. Every power, runtime and RF figure is calculated from datasheets and schematics in the track folders. Purchases go through [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36) and the Linear "OpenMANET POC — Purchase BOM". The visual version, with photos and the full 187-board screen, is the [Manet Bench Compute Screen](https://claude.ai/artifact/Sm3hWVZPsHHcJnTMRVeCXe). A daily refresh keeps this file and that page in step.
+**This is a dated snapshot from 2026-10-28, not a purchasing record.** Nothing has been bought, so no board has booted our image and nothing here is measured. Every power, runtime and RF figure is calculated from datasheets and schematics in the track folders. Purchases go through [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36) and the Linear "OpenMANET POC — Purchase BOM". The visual version, with photos and the full 187-board screen, is the [Manet Bench Compute Screen](https://claude.ai/artifact/Sm3hWVZPsHHcJnTMRVeCXe). A daily refresh keeps this file and that page in step.
 
 Per-track detail stays in each track folder; this file only lines the tracks up.
 
@@ -55,4 +55,4 @@ Both Waveshare carriers are in use, for different jobs, and run the same `bcm271
 - The full Protectli node costs about $1,130, not $720: the $419 box is barebone, and the node also needs RAM, storage, a Wi-Fi kit, a 12 V converter and a MAX3232.
 - The Venice worst case, about 15.8 W, exceeds Gateworks' "up to 15 W" figure.
 - The CM5-DUAL-ETH-BASE buck computes to about 5.40 V; measure it before seating a CM5.
-- Seller pages on 2026-10-23: SparkFun's CM5104064 and MAX-M10S breakout show backorder, and Seeed shows the CM5104016 out of stock. The NanoPC-T6 LTS and the GW11048-2 kit show in stock. Protectli's VP2430e page offers it for sale but states no stock level.
+- Seller pages on 2026-10-28: SparkFun's CM5104064 and MAX-M10S breakout show backorder. Seeed lists the CM5104016 as made to order with a 25-unit minimum, and its only button reads Discontinued, so a single unit cannot be ordered there. The NanoPC-T6 LTS and the GW11048-2 kit show in stock. Protectli's VP2430e page offers it for sale but states no stock level.
