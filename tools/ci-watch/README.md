@@ -20,6 +20,7 @@ or writing.
 | Stuck | checks still running after `--stuck-hours` (3) | warn |
 | Idle | a ready PR untouched for `--idle-hours` (24) | warn |
 | Runner page (`--runner-page`) | any warn or crit alert on the runner status page: offline runner, job queued 20+ min, hosted stall, minutes, disk, swap | as the page says |
+| Starved runner label (`--runner-page`) | a self-hosted job has waited 15 min and no online runner carries its labels (for example `openwrt-build` with studio-build-1 down); names the label, the waiting runs and the offline runners that could take them, or says none is registered | crit |
 | Stale runner registration (`--runner-page`) | a runner offline `--stale-runner-hours` (12), or an hour with nothing on the Mac running it (watchdog "no-service"); links its page under org runner settings, where you click Remove | warn |
 | Disabled workflow | carries the exact place to click: the fork's Actions tab ("I understand my workflows…") or the workflow's own "Enable workflow" page | crit |
 | Deploy drift | a deployed docs clone (`~/ci-watch-src`, `~/runner-status-src`, `~/stale-runs-src`, or `--clone`) misses `tools/` changes on main for over an hour, so whatever updates it has stopped | warn |

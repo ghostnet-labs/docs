@@ -349,6 +349,42 @@ def runner_findings(page: str, fetch=None, stale_hours: float = 12.0) -> dict[st
         found["runner:" + DIGITS.sub("#", text)] = {
             "level": alert["level"], "url": alert.get("url") or page, "text": "runner: " + text}
     found.update(stale_registrations(state, stale_hours))
+    found.update(starved_labels(state))
+    return found
+
+
+STARVED_MINUTES = 15  # a queued self-hosted job this old with no online runner for its labels
+
+
+def starved_labels(state: dict, min_age: int = STARVED_MINUTES) -> dict[str, dict]:
+    """Queued self-hosted jobs whose labels no online runner carries.
+
+    The page's queue alert only says jobs are waiting. This names the label set,
+    the runs that wait, and which runners could take them (offline) or that none
+    is registered, e.g. openwrt-build with studio-build-1 down.
+    """
+    runners = [r for m in state.get("machines", []) for r in m.get("runners", [])]
+    waiting: dict[tuple, list] = {}
+    for j in state.get("jobs", []):
+        if j.get("status") != "queued" or j.get("hosted") or (j.get("age_min") or 0) < min_age:
+            continue
+        want = tuple(sorted({lbl.lower() for lbl in j.get("labels") or []} - {"self-hosted"}))
+        if want:
+            waiting.setdefault(want, []).append(j)
+    found = {}
+    for want, jobs in waiting.items():
+        able = [r for r in runners if set(want) <= {lbl.lower() for lbl in r.get("labels") or []}]
+        if any(r.get("status") != "offline" for r in able):
+            continue  # a runner is up; the queue alert covers a busy pool
+        names = ", ".join(sorted(r.get("name") or "?" for r in able))
+        who = f"its runners are offline: {names}" if able else "no runner with these labels is registered"
+        links = " ".join(j.get("url") or "" for j in jobs[:3])
+        more = f" (+{len(jobs) - 3} more)" if len(jobs) > 3 else ""
+        oldest = minutes(timedelta(minutes=max(j.get("age_min") or 0 for j in jobs)))
+        found["starved:" + ",".join(want)] = {
+            "level": "crit", "url": jobs[0].get("url") or RUNNERS_SETTINGS,
+            "text": f"{len(jobs)} job(s) for label {'+'.join(want)} queued {oldest} and nothing can run them; "
+                    f"{who}. Runs: {links}{more}. Runners: {RUNNERS_SETTINGS}"}
     return found
 
 
