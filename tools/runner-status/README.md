@@ -14,7 +14,8 @@ A small always-on page that shows, without anyone asking:
   processes, runner version drift, and the minutes counter when the token can
   read billing (full list under "Alerts");
 - each Mac's RAM, CPU load, disks (`/` and `/Volumes/NAS`) and Lima VMs
-  (`gh-ubuntu`, `gh-build`, `gh-build-2` on the Studio).
+  (`ci-k3s`, `gh-build`, `gh-build-2` on the Studio; `ci-k3s` hosts the
+  ephemeral ARC runner pods).
 
 The page refreshes itself every 15 seconds; GitHub is polled every 60
 seconds. Each request carries the ETag of its last answer, and GitHub does not
@@ -163,7 +164,7 @@ To give a machine a different name or runner pattern, create
 ```json
 {
   "machines": [
-    {"name": "Mac Studio", "agent": "local", "runner_pattern": "(?i)studio|gh-ubuntu|gh-build"},
+    {"name": "Mac Studio", "agent": "local", "runner_pattern": "(?i)studio|gh-build|^ghostnet-linux-arm64"},
     {"name": "MacBook Pro", "agent": "push", "runner_pattern": "(?i)macbook|mac-dev|\\bdev\\b"},
     {"name": "R620", "agent": "", "runner_pattern": "(?i)r620"}
   ]
@@ -261,7 +262,7 @@ Before taking runners down on purpose (for example the one-job runner
 conversion), list them in `~/.config/runner-status/maintenance.json`:
 
 ```json
-{"entries": [{"runner": "^gh-ubuntu", "reason": "one-job runner conversion",
+{"entries": [{"runner": "^studio-build-2", "reason": "one-job runner conversion",
               "until": "2026-10-13T12:00:00Z"}]}
 ```
 

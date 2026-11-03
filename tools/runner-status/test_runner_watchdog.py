@@ -12,6 +12,20 @@ sys.path.insert(0, os.path.dirname(__file__))
 import runner_status as rs  # noqa: E402
 import runner_watchdog as wd  # noqa: E402
 
+
+def fixture_config():
+    """DEFAULT_CONFIG plus a test-only Linux VM ("gh-ubuntu", runners
+    gh-ubuntu-N and one-job slots studio-ubuntu-N). The production defaults
+    retired that VM; the tests keep it as a generic fixture for the VM and
+    one-job-slot mechanics."""
+    cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+    studio = cfg["machines"][0]
+    studio["runner_pattern"] += "|gh-ubuntu"
+    studio["vms"] = {"gh-ubuntu": r"(?i)^(gh-ubuntu|studio-ubuntu)", **studio["vms"]}
+    studio["vm_roles"] = {"gh-ubuntu": "ubuntu", **studio["vm_roles"]}
+    studio["jit_slots"] = [f"studio-ubuntu-{i}" for i in range(1, 6)] + studio["jit_slots"]
+    return cfg
+
 GIB = 1024 ** 3
 
 
@@ -68,7 +82,7 @@ class WatchdogTest(unittest.TestCase):
             p = mock.patch.object(wd, name, os.path.join(self.dir.name, name.lower()))
             p.start()
             self.addCleanup(p.stop)
-        self.cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        self.cfg = fixture_config()
         self.cfg["machines"][0]["jit_slots"] = []  # tests opt in
         self.cfg["machines"][0]["vm_roles"] = {}
 

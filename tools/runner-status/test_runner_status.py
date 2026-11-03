@@ -11,6 +11,20 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(__file__))
 import runner_status as rs  # noqa: E402
 
+
+def fixture_config():
+    """DEFAULT_CONFIG plus a test-only Linux VM ("gh-ubuntu", runners
+    gh-ubuntu-N and one-job slots studio-ubuntu-N). The production defaults
+    retired that VM; the tests keep it as a generic fixture for the VM and
+    one-job-slot mechanics."""
+    cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+    studio = cfg["machines"][0]
+    studio["runner_pattern"] += "|gh-ubuntu"
+    studio["vms"] = {"gh-ubuntu": r"(?i)^(gh-ubuntu|studio-ubuntu)", **studio["vms"]}
+    studio["vm_roles"] = {"gh-ubuntu": "ubuntu", **studio["vm_roles"]}
+    studio["jit_slots"] = [f"studio-ubuntu-{i}" for i in range(1, 6)] + studio["jit_slots"]
+    return cfg
+
 NOW = datetime(2026, 10, 13, 5, 0, tzinfo=timezone.utc)
 
 
@@ -29,7 +43,7 @@ def job(status, labels, minutes_ago, **kw):
 
 class BuildStateTest(unittest.TestCase):
     def setUp(self):
-        self.cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        self.cfg = fixture_config()
 
     def test_runners_grouped_by_machine_and_status(self):
         raw = {"runners": [runner(1, "studio-mac-1", busy=True), runner(2, "gh-ubuntu-1"),
@@ -114,6 +128,23 @@ class BuildStateTest(unittest.TestCase):
         st = rs.build_state(rs.demo_raw(), self.cfg, NOW)
         self.assertTrue(st["machines"][0]["runners"])
 
+    def test_default_studio_config_retires_gh_ubuntu(self):
+        """gh-ubuntu is retired; Linux ARM64 jobs are ARC pods in ci-k3s. No
+        default one-job slot may map to gh-ubuntu, or the watchdog would
+        `limactl start` the stopped VM again."""
+        studio = rs.DEFAULT_CONFIG["machines"][0]
+        self.assertEqual(studio["name"], "Mac Studio")
+        self.assertNotIn("gh-ubuntu", studio["vms"])
+        self.assertNotIn("gh-ubuntu", studio["vm_roles"])
+        self.assertEqual(studio["jit_slots"], ["studio-build-1", "studio-build-2"])
+        pattern = rs.re.compile(studio["runner_pattern"])
+        k3s = rs.re.compile(studio["vms"]["ci-k3s"])
+        for name in ("ghostnet-linux-arm64-runner-k7q2p",
+                     "ghostnet-linux-arm64-large-runner-lflbh"):
+            self.assertTrue(pattern.search(name), name)
+            self.assertTrue(k3s.search(name), name)
+        self.assertFalse(k3s.search("studio-build-1"))
+
 
 class TokenErrorTest(unittest.TestCase):
     def test_explanations(self):
@@ -182,7 +213,7 @@ class TokenErrorTest(unittest.TestCase):
         self.assertIn("token rejected", str(ctx.exception))
         self.assertIn("fine-grained personal token", str(ctx.exception))
         st = rs.build_state({"errors": [f"Runners: {ctx.exception}"] * 2},
-                            json.loads(json.dumps(rs.DEFAULT_CONFIG)), NOW)
+                            fixture_config(), NOW)
         self.assertEqual(len(st["errors"]), 1)
         self.assertEqual(st["alerts"][0]["level"], "crit")
 
@@ -229,7 +260,7 @@ class FakeGitHub:
 class PollerTest(unittest.TestCase):
     def test_first_sweep_paints_runners_before_jobs(self):
         from unittest import mock
-        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        cfg = fixture_config()
         cfg["org"] = "o"
         cfg["machines"][0]["agent"] = ""
         gh = FakeGitHub()
@@ -261,7 +292,7 @@ class PollerTest(unittest.TestCase):
 
     def test_sweep_finishes_while_usage_takes_the_client_lock(self):
         from unittest import mock
-        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        cfg = fixture_config()
         cfg["org"] = "o"
         cfg["machines"][0]["agent"] = ""
         gh = FakeGitHub()
@@ -327,7 +358,7 @@ class PollerTest(unittest.TestCase):
 
 class PushTest(unittest.TestCase):
     def setUp(self):
-        self.cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        self.cfg = fixture_config()
         self.cfg["machines"][0]["agent"] = ""
         self.poller = rs.Poller(self.cfg, None, demo=True)
         self.poller.poll_once()
@@ -453,7 +484,7 @@ class RateLimitTest(unittest.TestCase):
         self.assertEqual(rs.next_wait({"rate": {"remaining": 4000, "limit": 5000}}, 60), 60)
 
     def test_low_quota_alert(self):
-        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        cfg = fixture_config()
         st = rs.build_state({"rate": {"remaining": 100, "limit": 5000}}, cfg, NOW)
         self.assertTrue(any("API quota low" in a["text"] for a in st["alerts"]))
 
@@ -534,7 +565,7 @@ class StartupTest(unittest.TestCase):
 
     def run_polls(self, fake, polls=2, timeout=15):
         from unittest import mock
-        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        cfg = fixture_config()
         cfg["org"] = "o"
         for m in cfg["machines"]:
             m["agent"] = ""
@@ -597,7 +628,7 @@ class StartupTest(unittest.TestCase):
 
 class HistoryTest(unittest.TestCase):
     def test_samples_are_spaced_bounded_and_skip_missing_stats(self):
-        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        cfg = fixture_config()
         raw = rs.demo_raw()
         raw["machine_stats"]["MacBook Pro"] = {"error": "no stats pushed yet"}
         state = rs.build_state(raw, cfg, NOW)
@@ -614,14 +645,14 @@ class HistoryTest(unittest.TestCase):
         self.assertEqual(out["jobs"]["running"][-1], 3)
 
     def test_no_job_samples_while_loading_or_failing(self):
-        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        cfg = fixture_config()
         h = rs.History()
         h.record(rs.build_state({"loading": True}, cfg, NOW), 1000)
         h.record(rs.build_state({"errors": ["Runners: boom"]}, cfg, NOW), 2000)
         self.assertIsNone(h.export()["jobs"])
 
     def test_page_state_carries_history(self):
-        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        cfg = fixture_config()
         poller = rs.Poller(cfg, None, demo=True)
         poller.poll_once()
         hist = poller.snapshot()["history"]
@@ -641,7 +672,7 @@ class PageTest(unittest.TestCase):
         self.assertNotIn("\t", rs.PAGE)
 
     def test_page_reads_the_state_keys_the_server_sends(self):
-        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        cfg = fixture_config()
         poller = rs.Poller(cfg, None, demo=True)
         poller.poll_once()
         state = poller.snapshot()
@@ -654,7 +685,7 @@ class PageTest(unittest.TestCase):
 
 class HygieneAlertTest(unittest.TestCase):
     def setUp(self):
-        self.cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        self.cfg = fixture_config()
 
     def texts(self, raw):
         return {a["text"]: a["level"] for a in rs.build_state(raw, self.cfg, NOW)["alerts"]}
@@ -754,7 +785,7 @@ class HygieneAlertTest(unittest.TestCase):
 
 class JitSlotTest(unittest.TestCase):
     def test_missing_slot_alerts_after_grace_and_names_the_cause(self):
-        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        cfg = fixture_config()
         poller = rs.Poller(cfg, None)
         t = 1_000_000.0
         online = [runner(i, f"studio-ubuntu-{i}-17608{i}") for i in (1, 2, 3, 4)]
@@ -781,7 +812,7 @@ class JitSlotTest(unittest.TestCase):
                       {"name": "gh-build", "status": "Running"}]}
         raw = {"runners": [runner(1, "studio-ubuntu-2-1760800", busy=True),
                            runner(2, "studio-build-1-1760801")], "machine_stats": {"Mac Studio": st}}
-        state = rs.build_state(raw, json.loads(json.dumps(rs.DEFAULT_CONFIG)), NOW)
+        state = rs.build_state(raw, fixture_config(), NOW)
         vms = {v["name"]: v["runners"] for v in state["machines"][0]["stats"]["vms"]}
         self.assertEqual(vms["gh-ubuntu"], ["studio-ubuntu-2-1760800"])
         self.assertEqual(vms["gh-build"], ["studio-build-1-1760801"])
@@ -908,7 +939,7 @@ class ParserTest(unittest.TestCase):
 
 class ServerTest(unittest.TestCase):
     def test_page_and_state_endpoints(self):
-        cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
+        cfg = fixture_config()
         cfg["machines"][0]["agent"] = ""
         poller = rs.Poller(cfg, None, demo=True)
         poller.poll_once()
