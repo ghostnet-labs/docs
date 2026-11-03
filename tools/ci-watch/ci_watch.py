@@ -437,6 +437,48 @@ def deploy_drift(gh, clones: list[str], now: datetime, previous: dict, git=None)
     return found, seen
 
 
+DEPLOY_STATUS = os.path.expanduser("~/.config/runner-status/deploy-status.json")
+DEPLOY_STATUS_CLONE = os.path.expanduser("~/runner-status-src")
+DEPLOY_STATUS_STALE = timedelta(minutes=30)  # autodeploy writes it every 2 min
+
+
+def deploy_status(path: str, clone: str, now: datetime, git=None) -> dict[str, dict]:
+    """Alert when the runner-status autodeploy says it failed, lies, or has stopped.
+
+    It once failed on local edits yet kept writing ok:true. So trust nothing it
+    says alone: ok must be true, its commit must be the clone's HEAD, and the
+    file must have been written recently.
+    """
+    if not path or not os.path.exists(path):
+        return {}
+    git = git or run_git
+    url = f"https://github.com/{ORG}/docs/commits/main/tools/runner-status"
+    short = path.replace(os.path.expanduser("~"), "~", 1)
+    try:
+        with open(path, encoding="utf-8") as f:
+            st = json.load(f)
+    except (OSError, ValueError) as err:
+        return {"deploy-status": {"level": "warn", "url": url,
+                                  "text": f"runner-status autodeploy: cannot read {short}: {str(err)[:120]}"}}
+    problems = []
+    if st.get("ok") is not True:
+        problems.append(f"it reports a failure ({str(st.get('reason') or 'no reason given')[:120]})")
+    at = sr.parse_ts(st.get("at"))
+    if at is None:
+        problems.append("it has no time stamp")
+    elif now - at > DEPLOY_STATUS_STALE:
+        problems.append(f"it last ran {minutes(now - at)} ago")
+    code, head = git(clone, "rev-parse", "HEAD")
+    if code == 0 and st.get("commit") and st["commit"] != head:
+        problems.append(f"it says {str(st['commit'])[:7]} but the clone is at {head[:7]}")
+    if not problems:
+        return {}
+    return {"deploy-status": {
+        "level": "warn", "url": url,
+        "text": "runner-status autodeploy is not working: " + "; ".join(problems)
+                + ". On the Studio check ~/Library/Logs and launchctl list com.ghostnet.runner-status.autodeploy"}}
+
+
 def update_self(now: datetime, previous: dict, git=None, root: str | None = None) -> tuple[dict, dict]:
     """Pull this clone hourly so new checks reach the Studio without anyone typing a line.
 
@@ -770,6 +812,8 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
         found.update(drift_found)
     except RuntimeError as err:
         errors.append(f"deploy check: {str(err)[:160]}")
+    found.update(deploy_status(getattr(args, "deploy_status", DEPLOY_STATUS), DEPLOY_STATUS_CLONE, now,
+                               git=getattr(args, "git", None)))
     self_update = state.get("self_update", {})
     if args.self_update:
         self_found, self_update = update_self(now, self_update, git=getattr(args, "git", None))
@@ -854,6 +898,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--runner-page", metavar="URL", help="runner status page to forward alerts from")
     p.add_argument("--clone", action="append", metavar="PATH",
                    help="deployed docs clone to check against main (default: the usual ~/*-src clones)")
+    p.add_argument("--deploy-status", default=DEPLOY_STATUS, metavar="PATH",
+                   help="runner-status autodeploy status file to check ('' = off)")
     p.add_argument("--no-self-update", dest="self_update", action="store_false",
                    help="do not fast-forward this clone of docs every hour")
     p.add_argument("--stale-runner-hours", type=float, default=12.0,

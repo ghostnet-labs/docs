@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import plistlib
 import sys
 import tempfile
@@ -80,6 +81,7 @@ def args(**kw) -> argparse.Namespace:
     a.upstream_hours = 0
     a.self_update = False
     a.clone = []
+    a.deploy_status = ""
     for k, v in kw.items():
         setattr(a, k, v)
     return a
@@ -365,6 +367,43 @@ class FixOnceTest(unittest.TestCase):
         item = next(v for k, v in found.items() if "workflow-off" in k)
         self.assertEqual(item["url"], "https://github.com/ghostnet-labs/luci/actions/workflows/gate.yml")
 
+    def deploy_status(self, status, head="abc1234def"):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "deploy-status.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(status, f)
+            return cw.deploy_status(path, "/clone", NOW, git=lambda *a: (0, head))
+
+    def test_healthy_autodeploy_is_quiet(self):
+        found = self.deploy_status({"ok": True, "commit": "abc1234def", "at": NOW.isoformat()})
+        self.assertEqual(found, {})
+
+    def test_autodeploy_failure_alerts_with_reason(self):
+        found = self.deploy_status({"ok": False, "commit": "abc1234def", "reason": "local edits",
+                                    "at": NOW.isoformat()})
+        self.assertIn("local edits", found["deploy-status"]["text"])
+        self.assertIn("tools/runner-status", found["deploy-status"]["url"])
+
+    def test_autodeploy_saying_ok_on_an_old_commit_alerts(self):
+        found = self.deploy_status({"ok": True, "commit": "0000000aaa", "at": NOW.isoformat()})
+        self.assertIn("clone is at abc1234", found["deploy-status"]["text"])
+
+    def test_autodeploy_that_stopped_writing_alerts(self):
+        found = self.deploy_status({"ok": True, "commit": "abc1234def",
+                                    "at": (NOW - timedelta(hours=2)).isoformat()})
+        self.assertIn("last ran", found["deploy-status"]["text"])
+
+    def test_missing_deploy_status_file_is_quiet(self):
+        self.assertEqual(cw.deploy_status("/nonexistent/deploy-status.json", "/clone", NOW), {})
+
+    def test_unreadable_deploy_status_alerts(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "deploy-status.json")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("{not json")
+            found = cw.deploy_status(path, "/clone", NOW, git=lambda *a: (0, "x"))
+        self.assertIn("cannot read", found["deploy-status"]["text"])
+
     def state(self, *runners):
         return {"alerts": [], "machines": [{"name": "Mac Studio", "runners": list(runners)}]}
 
@@ -466,7 +505,8 @@ class MainTest(unittest.TestCase):
                 mock.patch.object(cw.sr, "GitHub", return_value=FakeGitHub(repo_routes())), \
                 mock.patch.object(cw.sr, "utcnow", return_value=NOW), \
                 mock.patch("builtins.print"):
-            code = cw.main(["--repos", "luci", "--branch-hours", "0", "--state-dir", d, "--no-self-update"])
+            code = cw.main(["--repos", "luci", "--branch-hours", "0", "--state-dir", d, "--no-self-update",
+                            "--deploy-status", ""])
             self.assertEqual(code, 0)
             self.assertIn("green, auto-merge on", Path(d, "report.md").read_text())
             self.assertTrue(json.loads(Path(d, "state.json").read_text())["initialized"])

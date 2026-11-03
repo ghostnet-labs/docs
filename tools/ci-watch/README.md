@@ -23,6 +23,7 @@ or writing.
 | Stale runner registration (`--runner-page`) | a runner offline `--stale-runner-hours` (12), or an hour with nothing on the Mac running it (watchdog "no-service"); links its page under org runner settings, where you click Remove | warn |
 | Disabled workflow | carries the exact place to click: the fork's Actions tab ("I understand my workflows…") or the workflow's own "Enable workflow" page | crit |
 | Deploy drift | a deployed docs clone (`~/ci-watch-src`, `~/runner-status-src`, `~/stale-runs-src`, or `--clone`) misses `tools/` changes on main for over an hour, so whatever updates it has stopped | warn |
+| Runner-status autodeploy (`--deploy-status`) | `~/.config/runner-status/deploy-status.json` says ok is false, names a commit that is not `~/runner-status-src`'s HEAD, or was last written over 30 min ago; links the runner-status history on main | warn |
 | Itself | GitHub unreadable three runs in a row; the hourly self-update failed | crit / warn |
 | News | a PR opened, merged, closed, or no longer red | info |
 | Branches (hourly) | lists branches already in the default branch that no open PR uses; never deletes | report only |
