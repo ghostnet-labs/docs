@@ -1,0 +1,370 @@
+"""Tests for ci_watch.py. Run: python3 -m unittest discover -s tools/ci-watch -v"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import plistlib
+import sys
+import tempfile
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ci_watch as cw  # noqa: E402
+
+NOW = datetime(2026, 11, 3, 17, 0, tzinfo=timezone.utc)
+SHA = "b" * 40
+
+
+def ts(minutes_ago: float) -> str:
+    return (NOW - timedelta(minutes=minutes_ago)).isoformat().replace("+00:00", "Z")
+
+
+class FakeGitHub:
+    """Answers GET paths from a dict; a missing path is an HTTP 404 like the real client."""
+
+    def __init__(self, routes: dict):
+        self.routes = routes
+        self.calls = 0
+        self.not_modified = 0
+
+    def get(self, path: str):
+        if path not in self.routes:
+            raise RuntimeError(f"GET {path}: HTTP 404: not in fake")
+        value = self.routes[path]
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    def save(self):
+        pass
+
+
+def check(name, status="completed", conclusion="success", run_id=1, started=30):
+    return {"name": name, "status": status, "conclusion": conclusion, "id": run_id, "started_at": ts(started)}
+
+
+def repo_routes(repo="luci", prs=None, checks=None, statuses=None, merge="clean", auto_merge=True,
+                wf_state="active", run_age=10, details=None) -> dict:
+    base = f"/repos/ghostnet-labs/{repo}"
+    prs = prs if prs is not None else [{
+        "number": 9, "title": "Bump feeds", "draft": False, "created_at": ts(120), "updated_at": ts(60),
+        "head": {"sha": SHA, "ref": "claude/x"}, "labels": [], "user": {"login": "stupidmonk37"},
+        "html_url": f"https://github.com/ghostnet-labs/{repo}/pull/9", "body": "",
+        "auto_merge": {"merge_method": "merge"} if auto_merge else None}]
+    checks = checks if checks is not None else [check("Manet merge gate"), check("Test x86_64", run_id=2)]
+    r = {
+        f"{base}/actions/permissions": {"enabled": True},
+        f"{base}/actions/workflows?per_page=100": {"workflows": [{"name": "Manet merge gate", "state": wf_state}]},
+        f"{base}/pulls?state=open&per_page=100": prs,
+        f"{base}/actions/runs?per_page=1": {"workflow_runs": [{"created_at": ts(run_age)}]},
+    }
+    for pr in prs:
+        sha = pr["head"]["sha"]
+        r[f"{base}/pulls/{pr['number']}"] = {"mergeable_state": merge, "auto_merge": pr.get("auto_merge")}
+        r[f"{base}/commits/{sha}/check-runs?per_page=1"] = {"total_count": len(checks)}
+        r[f"{base}/commits/{sha}/check-runs?per_page=100"] = {"check_runs": checks}
+        r[f"{base}/commits/{sha}/status"] = {"total_count": len(statuses or []), "statuses": statuses or []}
+    r.update(details or {})
+    return r
+
+
+def args(**kw) -> argparse.Namespace:
+    a = cw.parse_args([])
+    a.repos = "luci"
+    a.branch_hours = 0
+    for k, v in kw.items():
+        setattr(a, k, v)
+    return a
+
+
+class SummarizeChecksTest(unittest.TestCase):
+    def test_newest_rerun_replaces_failure(self):
+        s = cw.summarize_checks([check("gate", conclusion="failure", run_id=1), check("gate", run_id=2)], [], NOW)
+        self.assertEqual(s["state"], "green")
+
+    def test_failure_and_timeout_are_red(self):
+        s = cw.summarize_checks([check("a", conclusion="failure"), check("b", conclusion="timed_out", run_id=2)],
+                                [], NOW)
+        self.assertEqual(s["state"], "red")
+        self.assertEqual(s["red"], ["a", "b (timed_out)"])
+
+    def test_cancelled_alone_is_its_own_state(self):
+        s = cw.summarize_checks([check("gate"), check("Handle passing PRs", conclusion="cancelled", run_id=2)],
+                                [], NOW)
+        self.assertEqual((s["state"], s["cancelled"]), ("cancelled", ["Handle passing PRs"]))
+
+    def test_skipped_and_neutral_are_green(self):
+        s = cw.summarize_checks([check("a", conclusion="skipped"), check("b", conclusion="neutral", run_id=2)],
+                                [], NOW)
+        self.assertEqual(s["state"], "green")
+
+    def test_running_reports_oldest_start(self):
+        s = cw.summarize_checks([check("a", status="in_progress", conclusion=None, started=50),
+                                 check("b", status="queued", conclusion=None, run_id=2, started=10)], [], NOW)
+        self.assertEqual(s["state"], "running")
+        self.assertEqual(s["running_minutes"], 50)
+
+    def test_commit_status_failure_is_red(self):
+        s = cw.summarize_checks([], [{"context": "buf", "state": "error"}], NOW)
+        self.assertEqual((s["state"], s["red"]), ("red", ["buf"]))
+
+    def test_nothing_is_none(self):
+        self.assertEqual(cw.summarize_checks([], [], NOW)["state"], "none")
+
+
+class PRStatusTest(unittest.TestCase):
+    def row(self, **kw):
+        base = {"draft": False, "labels": [], "mergeable_state": "clean", "auto_merge": True, "depends_on": [],
+                "checks": {"state": "green", "red": [], "running": [], "running_minutes": 0}}
+        base.update(kw)
+        return cw.pr_status(base)[0]
+
+    def test_categories(self):
+        cases = [
+            ({"draft": True}, "draft"),
+            ({"labels": ["hold"]}, "held"),
+            ({"checks": {"state": "red", "red": ["gate"], "running": [], "running_minutes": 0}}, "red"),
+            ({"mergeable_state": "dirty"}, "conflict"),
+            ({"mergeable_state": "behind"}, "behind"),
+            ({"depends_on": ["https://github.com/ghostnet-labs/docs/pull/1"]}, "waiting"),
+            ({"mergeable_state": "blocked"}, "blocked"),
+            ({}, "green"),
+            ({"checks": {"state": "none", "red": [], "running": [], "running_minutes": 0}}, "none"),
+        ]
+        for kw, want in cases:
+            with self.subTest(kw=kw):
+                self.assertEqual(self.row(**kw), want)
+
+    def test_red_wins_over_conflict(self):
+        red = {"state": "red", "red": ["gate"], "running": [], "running_minutes": 0}
+        self.assertEqual(self.row(checks=red, mergeable_state="dirty"), "red")
+
+
+class RunOnceTest(unittest.TestCase):
+    def test_first_run_reports_problems_but_no_events(self):
+        gh = FakeGitHub(repo_routes(checks=[check("Manet merge gate", conclusion="failure")]))
+        _, report, batch = cw.run_once(gh, args(), NOW, {})
+        self.assertEqual([n["level"] for n in batch["new"]], ["crit"])
+        self.assertIn("ghostnet-labs/luci #9 is red: Manet merge gate", batch["new"][0]["text"])
+        self.assertEqual(batch["events"], [])
+        self.assertIn("| [ghostnet-labs/luci #9](https://github.com/ghostnet-labs/luci/pull/9)", report)
+
+    def test_same_problem_alerts_once(self):
+        gh = FakeGitHub(repo_routes(checks=[check("Manet merge gate", conclusion="failure")]))
+        state, _, _ = cw.run_once(gh, args(), NOW, {})
+        _, _, batch = cw.run_once(gh, args(), NOW + timedelta(minutes=10), state)
+        self.assertEqual(batch["new"], [])
+        self.assertEqual(batch["cleared"], [])
+
+    def test_recovery_clears_and_announces(self):
+        red = FakeGitHub(repo_routes(checks=[check("Manet merge gate", conclusion="failure")]))
+        state, _, _ = cw.run_once(red, args(), NOW, {})
+        green = FakeGitHub(repo_routes())
+        _, _, batch = cw.run_once(green, args(), NOW + timedelta(minutes=10), state)
+        self.assertEqual(len(batch["cleared"]), 1)
+        self.assertEqual(len(batch["events"]), 1)
+        self.assertIn("no longer red", batch["events"][0]["text"])
+
+    def test_merged_pr_is_an_event(self):
+        state, _, _ = cw.run_once(FakeGitHub(repo_routes()), args(), NOW, {})
+        merged = {"merged_at": ts(1), "state": "closed"}
+        gone = repo_routes(prs=[], details={"/repos/ghostnet-labs/luci/pulls/9": merged})
+        _, _, batch = cw.run_once(FakeGitHub(gone), args(), NOW + timedelta(minutes=10), state)
+        self.assertEqual([e["text"] for e in batch["events"]], ["ghostnet-labs/luci #9 merged: Bump feeds"])
+
+    def test_new_pr_is_an_event_after_first_run(self):
+        state, _, _ = cw.run_once(FakeGitHub(repo_routes(prs=[])), args(), NOW, {})
+        _, _, batch = cw.run_once(FakeGitHub(repo_routes()), args(), NOW, state)
+        self.assertEqual([e["text"] for e in batch["events"]], ["ghostnet-labs/luci #9 opened: Bump feeds"])
+
+    def test_behind_with_auto_merge_warns(self):
+        _, _, batch = cw.run_once(FakeGitHub(repo_routes(merge="behind")), args(), NOW, {})
+        self.assertTrue(any("behind its base" in n["text"] for n in batch["new"]))
+
+    def test_cancelled_sweep_warns_with_rerun_hint(self):
+        cancelled = [check("Manet merge gate"), check("Handle passing PRs", conclusion="cancelled", run_id=2)]
+        _, _, batch = cw.run_once(FakeGitHub(repo_routes(checks=cancelled)), args(), NOW, {})
+        self.assertEqual([n["level"] for n in batch["new"]], ["warn"])
+        self.assertIn("re-run the latest 'Handle passing PRs' run", batch["new"][0]["text"])
+
+    def test_behind_without_auto_merge_is_report_only(self):
+        _, report, batch = cw.run_once(FakeGitHub(repo_routes(merge="behind", auto_merge=False)), args(), NOW, {})
+        self.assertEqual(batch["new"], [])
+        self.assertIn("green, behind base", report)
+
+    def test_stuck_checks_warn(self):
+        slow = [check("Build", status="in_progress", conclusion=None, started=200)]
+        _, _, batch = cw.run_once(FakeGitHub(repo_routes(checks=slow)), args(), NOW, {})
+        self.assertTrue(any("checks running" in n["text"] for n in batch["new"]))
+
+    def test_disabled_workflow_is_crit(self):
+        _, _, batch = cw.run_once(FakeGitHub(repo_routes(wf_state="disabled_fork")), args(), NOW, {})
+        self.assertTrue(any(n["level"] == "crit" and "workflow-off" in n["text"] for n in batch["new"]))
+
+    def test_runs_stale_key_is_stable_as_hours_grow(self):
+        a = cw.guard_findings(FakeGitHub(repo_routes(run_age=200)), "luci", NOW)
+        b = cw.guard_findings(FakeGitHub(repo_routes(run_age=260)), "luci", NOW)
+        self.assertEqual(set(a), set(b))
+
+    def test_unreadable_repo_keeps_findings_and_alerts_after_three_runs(self):
+        state, _, _ = cw.run_once(FakeGitHub(repo_routes(wf_state="disabled_fork")), args(), NOW, {})
+        broken = FakeGitHub({})
+        for i in range(1, 4):
+            state, report, batch = cw.run_once(broken, args(), NOW + timedelta(minutes=10 * i), state)
+            self.assertEqual(batch["cleared"], [], "a read failure must not look like a fix")
+        self.assertEqual(state["error_runs"], 3)
+        self.assertTrue(any(n["key"] == "watch:api-error" for n in batch["new"]))
+        self.assertIn("Could not read: luci", report)
+        self.assertIn("luci#9", state["prs"])  # PR kept for the next run's merge check
+
+    def test_runner_page_alerts_are_forwarded(self):
+        page = {"alerts": [{"level": "crit", "text": "studio-build-1 offline 25 min"},
+                           {"level": "info", "text": "slot draining"}]}
+        a = args(runner_page="http://studio.local:8090")
+        _, _, batch = cw.run_once(FakeGitHub(repo_routes()), a, NOW, {}, runner_fetch=lambda u: page)
+        self.assertEqual([n["text"] for n in batch["new"]], ["runner: studio-build-1 offline 25 min"])
+
+    def test_runner_alert_key_ignores_changing_minutes(self):
+        one = cw.runner_findings("p", lambda u: {"alerts": [{"level": "warn", "text": "job queued 21 min"}]})
+        two = cw.runner_findings("p", lambda u: {"alerts": [{"level": "warn", "text": "job queued 31 min"}]})
+        self.assertEqual(set(one), set(two))
+
+    def test_runner_page_down_warns(self):
+        def boom(url):
+            raise OSError("connection refused")
+        found = cw.runner_findings("http://studio.local:8090", boom)
+        self.assertEqual(list(found), ["runner-page:down"])
+
+
+class BranchesTest(unittest.TestCase):
+    def test_lists_only_merged_branches_without_open_pr(self):
+        base = "/repos/ghostnet-labs/docs"
+        gh = FakeGitHub({
+            base: {"default_branch": "main"},
+            f"{base}/branches?per_page=100": [{"name": "main"}, {"name": "old"}, {"name": "live"},
+                                              {"name": "pr-branch"}],
+            f"{base}/compare/main...old": {"ahead_by": 0},
+            f"{base}/compare/main...live": {"ahead_by": 3},
+        })
+        out = cw.merged_branches(gh, "docs", {"pr-branch"})
+        self.assertEqual([b["branch"] for b in out], ["old"])
+
+    def test_scan_runs_on_interval(self):
+        r = repo_routes()
+        r["/repos/ghostnet-labs/luci"] = {"default_branch": "mm-23.05"}
+        r["/repos/ghostnet-labs/luci/branches?per_page=100"] = [{"name": "mm-23.05"}, {"name": "done"}]
+        r["/repos/ghostnet-labs/luci/compare/mm-23.05...done"] = {"ahead_by": 0}
+        state, report, _ = cw.run_once(FakeGitHub(r), args(branch_hours=1), NOW, {})
+        self.assertEqual([b["branch"] for b in state["branches"]], ["done"])
+        self.assertIn("ghostnet-labs/luci done", report)
+        r["/repos/ghostnet-labs/luci/compare/mm-23.05...done"] = RuntimeError("must not be called")
+        state, _, _ = cw.run_once(FakeGitHub(r), args(branch_hours=1), NOW + timedelta(minutes=10), state)
+        self.assertEqual([b["branch"] for b in state["branches"]], ["done"])
+
+
+class DeliverTest(unittest.TestCase):
+    def batch(self):
+        return {"new": [{"level": "crit", "text": "ghostnet-labs/luci #9 is red: gate",
+                         "url": "https://github.com/ghostnet-labs/luci/pull/9", "key": "red"}],
+                "cleared": [], "events": [{"level": "info", "text": "ghostnet-labs/docs #1 merged: x",
+                                           "url": "https://github.com/ghostnet-labs/docs/pull/1"}]}
+
+    def test_ntfy_request(self):
+        sent = []
+
+        class Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def opener(req, timeout):
+            sent.append(req)
+            return Resp()
+
+        cw.notify_ntfy("https://ntfy.sh", "manet-ci", "CI watch", "line one\nline two", "crit",
+                       "https://x", opener=opener)
+        req = sent[0]
+        self.assertEqual(req.full_url, "https://ntfy.sh/manet-ci")
+        self.assertEqual(req.get_header("Priority"), "high")
+        self.assertEqual(req.get_header("Click"), "https://x")
+        self.assertEqual(req.data, b"line one\nline two")
+
+    def test_min_level_filters_banners_and_push(self):
+        a = args(notify=False, ntfy="t", min_level="warn")
+        with mock.patch.object(cw, "notify_ntfy") as push:
+            cw.deliver(a, self.batch(), "r", False, None)
+        text = push.call_args.args[3]
+        self.assertIn("is red", text)
+        self.assertNotIn("merged", text)
+
+    def test_issue_gets_body_and_linked_comment(self):
+        issue = mock.Mock()
+        cw.deliver(args(), self.batch(), "report", True, issue)
+        issue.update_body.assert_called_once_with("report")
+        issue.comment.assert_called_once()
+
+    def test_channel_failure_is_reported_not_raised(self):
+        with mock.patch.object(cw, "notify_ntfy", side_effect=OSError("dns")):
+            failures = cw.deliver(args(ntfy="t"), self.batch(), "r", False, None)
+        self.assertEqual(failures, ["ntfy: dns"])
+
+    def test_nothing_new_sends_nothing(self):
+        issue = mock.Mock()
+        with mock.patch.object(cw, "notify_ntfy") as push:
+            cw.deliver(args(ntfy="t"), {"new": [], "cleared": [], "events": []}, "r", False, issue)
+        push.assert_not_called()
+        issue.comment.assert_not_called()
+
+    def test_issue_comment_links_each_line(self):
+        sent = []
+        sink = cw.IssueSink("tok", 140, opener=lambda req, timeout: sent.append(req) or mock.MagicMock())
+        b = self.batch()
+        sink.comment(cw.alert_text(b["new"], [], b["events"]), b["new"] + b["events"])
+        body = json.loads(sent[0].data)["body"]
+        self.assertIn("- [ghostnet-labs/luci #9 is red: gate](https://github.com/ghostnet-labs/luci/pull/9)", body)
+        self.assertTrue(sent[0].full_url.endswith("/repos/ghostnet-labs/setup/issues/140/comments"))
+
+    def test_macos_banner_only_on_darwin(self):
+        run = mock.Mock()
+        with mock.patch.object(cw.platform, "system", return_value="Linux"):
+            cw.notify_macos("t", "x", run=run)
+        run.assert_not_called()
+        with mock.patch.object(cw.platform, "system", return_value="Darwin"):
+            cw.notify_macos("t", "a\nb\nc", run=run)
+        self.assertIn("(+2 more)", run.call_args.args[0][2])
+
+
+class MainTest(unittest.TestCase):
+    def test_launchd_plist_is_valid(self):
+        out = []
+        with mock.patch("builtins.print", side_effect=lambda s, end="\n": out.append(s)):
+            cw.main(["launchd", "--notify", "--ntfy", "topic"])
+        plist = plistlib.loads(out[0].encode())
+        self.assertEqual(plist["Label"], "com.ghostnet.ci-watch")
+        self.assertEqual(plist["StartInterval"], 600)
+        self.assertEqual(plist["ProgramArguments"][-3:], ["--notify", "--ntfy", "topic"])
+
+    def test_report_without_state(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(cw.main(["report", "--state-dir", d]), 2)
+
+    def test_full_run_writes_state_and_report(self):
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(cw, "read_token", return_value="tok"), \
+                mock.patch.object(cw.sr, "GitHub", return_value=FakeGitHub(repo_routes())), \
+                mock.patch.object(cw.sr, "utcnow", return_value=NOW), \
+                mock.patch("builtins.print"):
+            code = cw.main(["--repos", "luci", "--branch-hours", "0", "--state-dir", d])
+            self.assertEqual(code, 0)
+            self.assertIn("green, auto-merge on", Path(d, "report.md").read_text())
+            self.assertTrue(json.loads(Path(d, "state.json").read_text())["initialized"])
+
+
+if __name__ == "__main__":
+    unittest.main()
