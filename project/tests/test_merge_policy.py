@@ -360,6 +360,21 @@ class AutoMergeTests(unittest.TestCase):
         out = self.handle_with(api, FakeMergeAPI(rerun_error=422))
         self.assertIn("could not update the branch (HTTP 422)", out)
 
+    def test_unstable_from_cancelled_sweep_still_merges(self):
+        api = FakeMergeAPI(mergeable_state="unstable")
+        self.assertIn("merged", self.handle(api))
+        self.assertEqual(api.writes, [("PUT", "repos/o/r/pulls/7/merge")])
+
+    def test_unstable_with_a_failing_check_does_not_merge(self):
+        api = FakeMergeAPI(mergeable_state="unstable", gate="failure", tests="failure")
+        self.handle(api)
+        self.assertNotIn(("PUT", "repos/o/r/pulls/7/merge"), api.writes)
+
+    def test_dirty_pr_does_not_merge(self):
+        api = FakeMergeAPI(mergeable_state="dirty")
+        self.assertIn("not satisfied: dirty", self.handle(api))
+        self.assertEqual(api.writes, [])
+
     def test_passing_pr_merges(self):
         api = FakeMergeAPI()
         self.assertIn("merged", self.handle(api))

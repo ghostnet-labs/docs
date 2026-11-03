@@ -322,8 +322,13 @@ def handle(api, repo, number, profile, updater=None):
     rules = api.call(f"repos/{repo}/rules/branches/{profile['branch']}")
     if not protection_ready(rules, profile):
         blockers.append("Required gate, current-base testing, PR-only merging or conversation resolution is not enforced")
+    # "unstable" only means a check GitHub doesn't require is not green. Every check that
+    # matters was read above; what is left is this sweep's own run, often "cancelled" when a
+    # newer sweep replaced it, which must not hold the PR until someone re-runs the sweep.
+    mergeable = {"clean", "unstable"}
     # Without the up-to-date rule a PR behind its base is still mergeable.
-    mergeable = {"clean"} if requires_up_to_date(profile) else {"clean", "behind"}
+    if not requires_up_to_date(profile):
+        mergeable.add("behind")
     if pr["mergeable_state"] not in mergeable:
         blockers.append(BEHIND if pr["mergeable_state"] == "behind"
                         else "GitHub merge criteria are not satisfied: " + pr["mergeable_state"])
