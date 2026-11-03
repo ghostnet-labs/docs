@@ -250,6 +250,49 @@ jobs:
             with self.subTest(route=value):
                 self.assertFalse(cr.is_self_hosted(value))
 
+    def test_large_arc_pool_routes_are_recognized(self):
+        large = "ghostnet-linux-arm64-large"
+        # The exact route openmanetd's codeql.yml uses for Go CodeQL.
+        route = ("${{ (github.event_name != 'pull_request' || "
+                 "github.event.pull_request.head.repo.full_name == github.repository) "
+                 "&& 'ghostnet-linux-arm64-large' || 'ubuntu-latest' }}")
+        self.assertEqual(route, cr.arc_fork_fallback(large))
+        doc = {"on": {"pull_request": {}, "push": {}, "schedule": [{"cron": "34 15 * * 0"}],
+                      "workflow_dispatch": {}},
+               "concurrency": {"group": "g", "cancel-in-progress": True},
+               "jobs": {"analyze": {"runs-on": route, "timeout-minutes": 60}}}
+        self.assertEqual(cr.check_workflow("r", "w.yml", doc), [])
+        self.assertTrue(cr.has_fork_guard(cr.arc_pr_only_fallback(large), allow_event_form=False))
+        self.assertFalse(cr.has_fork_guard(route, allow_event_form=False))
+        for static in (large, [large], {"labels": large}):
+            with self.subTest(route=static):
+                self.assertTrue(cr.is_self_hosted(static))
+                # A static large-pool label still lets fork PR code onto the cluster.
+                doc = {"on": "pull_request",
+                       "concurrency": {"group": "ci", "cancel-in-progress": True},
+                       "jobs": {"test": {"runs-on": static, "timeout-minutes": 10}}}
+                self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)),
+                                 [("test", "fork-pr-self-hosted")])
+
+    def test_unknown_or_modified_large_pool_routes_are_rejected(self):
+        route = cr.arc_fork_fallback("ghostnet-linux-arm64-large")
+        for value in ("ghostnet-linux-arm64-largeX", "ghostnet-linux-arm64-xl",
+                      ["ghostnet-linux-arm64-large-spoof"],
+                      route.replace("-large'", "-largeX'"),
+                      route.replace("|| 'ubuntu-latest'", "|| 'ghostnet-linux-arm64-large'"),
+                      route.replace("full_name ==", "full_name !="),
+                      route.replace("!= 'pull_request'", "== 'pull_request'"),
+                      cr.arc_pr_only_fallback("ghostnet-linux-arm64-large").replace("event_name ==", "event_name !=")):
+            with self.subTest(route=value):
+                self.assertFalse(cr.is_self_hosted(value))
+                self.assertFalse(cr.has_fork_guard(value))
+
+    def test_large_pool_pr_only_route_still_checks_hosted_cron(self):
+        doc = {"on": {"schedule": [{"cron": "*/15 * * * *"}]},
+               "jobs": {"test": {"runs-on": cr.arc_pr_only_fallback("ghostnet-linux-arm64-large"),
+                                 "timeout-minutes": 10}}}
+        self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)), [("test", "hosted-cron")])
+
     def test_arc_cron_is_not_hosted_cron(self):
         doc = {"on": {"schedule": [{"cron": "*/15 * * * *"}]},
                "jobs": {"test": {"runs-on": "ghostnet-linux-arm64", "timeout-minutes": 10}}}
