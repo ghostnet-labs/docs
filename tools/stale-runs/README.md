@@ -62,6 +62,31 @@ Output goes to `~/Library/Logs/stale-runs.log`. Leave out `--cancel` to only
 log. Arguments after `launchd` are passed to every scheduled run, so add
 `--skip-pr` / `--skip-run` there for work that must not be touched.
 
+## Actions guard: catch Actions switched off
+
+`actions_guard.py` is a second, read-only script in the same folder. It
+exists because luci's workflows were off for four days (2026-10-30 to
+2026-11-03) and nothing noticed. For every repo it reports:
+
+| Finding | Meaning |
+|---|---|
+| `actions-off` | repository-level Actions permission is off (needs a token with repository administration; skipped otherwise) |
+| `workflow-off` | a workflow is `disabled_fork`, `disabled_inactivity` or `disabled_manually` |
+| `pr-no-checks` | a ready PR head has no check runs or statuses after 20 minutes |
+| `runs-stale` | open PRs exist but the newest run is older than 3 hours |
+
+Exit 1 means a finding, so a LaunchAgent or any watchdog can page on it:
+
+```sh
+python3 tools/stale-runs/actions_guard.py          # table
+python3 tools/stale-runs/actions_guard.py --json   # for a watchdog
+```
+
+When it fires with `workflow-off` on a fork, the fix is the green
+"I understand my workflows, go ahead and enable them" button (or
+Enable workflow) on the repo's Actions tab; it cannot be done through the API
+with the tokens we use.
+
 ## Tests
 
 ```sh
