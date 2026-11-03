@@ -72,17 +72,18 @@ DEFAULT_CONFIG = {
     "runner_roots": ["~"],          # where to look for runner dirs (version check)
     "machines": [
         {"name": "Mac Studio", "agent": "local",
-         "runner_pattern": r"(?i)studio|gh-ubuntu|gh-build",
+         "runner_pattern": r"(?i)studio|gh-build|^ghostnet-linux-arm64",
          # Lima VM name -> pattern for the runners that live inside it.
          # One-job (JIT) runners are named <slot>-<epoch> and deregister after a job.
-         "vms": {"gh-ubuntu": r"(?i)^(gh-ubuntu|studio-ubuntu)",
+         # Linux ARM64 jobs run as ephemeral ARC pods in the ci-k3s VM; ARC names
+         # them <scale set>-runner-<id>. The old gh-ubuntu VM is retired.
+         "vms": {"ci-k3s": r"(?i)^ghostnet-linux-arm64(-large)?-runner-",
                  "gh-build": r"(?i)^studio-build-1(-\d+)?$",
                  "gh-build-2": r"(?i)^studio-build-2(-\d+)?$"},
-         # VM role for the drift check in tools/ci-hosts/verify-vm.sh.
-         "vm_roles": {"gh-ubuntu": "ubuntu", "gh-build": "build", "gh-build-2": "build"},
-         "jit_slots": ["studio-ubuntu-1", "studio-ubuntu-2", "studio-ubuntu-3",
-                       "studio-ubuntu-4", "studio-ubuntu-5", "studio-build-1",
-                       "studio-build-2"]},
+         # VM role for the drift check in tools/ci-hosts/verify-vm.sh. ci-k3s has
+         # no role: its runners are pods built from an immutable image.
+         "vm_roles": {"gh-build": "build", "gh-build-2": "build"},
+         "jit_slots": ["studio-build-1", "studio-build-2"]},
         {"name": "MacBook Pro", "agent": "push",
          "runner_pattern": r"(?i)macbook|mac-dev|\bdev\b",
          "vm_roles": {"gh-build": "build"},
@@ -1985,10 +1986,12 @@ def demo_raw() -> dict:
                 "status": status, "busy": busy, "labels": [{"name": x} for x in labels]}
 
     mac = ["self-hosted", "macOS", "ARM64"]
-    lin = ["self-hosted", "Linux", "ARM64"]
+    lin = ["ghostnet-linux-arm64"]
+    big = ["ghostnet-linux-arm64-large"]
     bld = ["self-hosted", "openwrt-build"]
     runners = [runner(i, f"studio-mac-{i}", "online", i < 3, mac) for i in range(1, 6)]
-    runners += [runner(10 + i, f"gh-ubuntu-{i}", "online", i == 1, lin) for i in range(1, 6)]
+    runners += [runner(11, "ghostnet-linux-arm64-runner-k7q2p", "online", False, lin),
+                runner(12, "ghostnet-linux-arm64-large-runner-lflbh", "online", True, big)]
     runners += [runner(20, "studio-build-1", "online", True, bld),
                 runner(21, "studio-build-2", "offline", False, bld),
                 runner(30, "macbook-pro-build-1", "online", False, bld)]
@@ -2002,7 +2005,8 @@ def demo_raw() -> dict:
          "labels": mac, "runner_name": "studio-mac-1", "started_at": ago(3), "html_url": "#",
          "prs": [7]},
         {"repo": "openmanetd", "workflow": "CodeQL", "name": "Analyze (go)",
-         "status": "in_progress", "labels": lin, "runner_name": "gh-ubuntu-1",
+         "status": "in_progress", "labels": big,
+         "runner_name": "ghostnet-linux-arm64-large-runner-lflbh",
          "started_at": ago(9), "html_url": "#"},
     ]
     for j in jobs:
@@ -2014,7 +2018,7 @@ def demo_raw() -> dict:
         "disks": [{"path": "/", "total": 994 * gib, "used": 906 * gib, "free": 88 * gib},
                   {"path": "/Volumes/NAS", "total": 7.3 * 1024 * gib, "used": 4.8 * 1024 * gib,
                    "free": 2.5 * 1024 * gib}],
-        "vms": [{"name": "gh-ubuntu", "status": "Running", "cpus": 6, "memory": 6 * gib, "disk": 100 * gib},
+        "vms": [{"name": "ci-k3s", "status": "Running", "cpus": 8, "memory": 12 * gib, "disk": 100 * gib},
                 {"name": "gh-build", "status": "Running", "cpus": 6, "memory": 9 * gib, "disk": 60 * gib},
                 {"name": "gh-build-2", "status": "Stopped", "cpus": 6, "memory": 9 * gib, "disk": 60 * gib}],
         "swap": {"total": 3 * gib, "used": 1.2 * gib}, "pressure": 1, "sleep_ac": 0,
