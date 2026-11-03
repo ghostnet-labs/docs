@@ -130,6 +130,35 @@ class GateTests(unittest.TestCase):
         self.assertFalse(protection_ready(rules[1:]))
         rules[-1]["parameters"]["strict_required_status_checks_policy"] = False
         self.assertFalse(protection_ready(rules))
+        self.assertFalse(protection_ready(rules, {"branch": "main"}))
+        self.assertFalse(protection_ready(rules, {"requireUpToDate": True}))
+
+    def test_up_to_date_opt_out(self):
+        rules = [{"type": "pull_request", "parameters": {"required_review_thread_resolution": True}},
+                 {"type": "required_status_checks", "parameters": {"strict_required_status_checks_policy": False,
+                   "required_status_checks": [{"context": GATE, "integration_id": 15368}]}}]
+        opt_out = {"requireUpToDate": False}
+        self.assertTrue(protection_ready(rules, opt_out))
+        rules[-1]["parameters"]["strict_required_status_checks_policy"] = True
+        self.assertTrue(protection_ready(rules, opt_out))
+        # The opt-out never waives the gate itself or conversation resolution.
+        self.assertFalse(protection_ready(rules[1:], opt_out))
+        rules[-1]["parameters"]["required_status_checks"] = []
+        self.assertFalse(protection_ready(rules, opt_out))
+
+    def test_firmware_profile_opts_out_and_keeps_smoke_boards_broad(self):
+        profiles = json.loads((Path(__file__).parents[1] / "scripts" / "merge_profiles.json").read_text())
+        firmware = profiles["firmware"]
+        self.assertIs(firmware["requireUpToDate"], False)
+        paths = {w["path"]: w["paths"] for w in firmware["workflows"]}
+        for smoke in ("build-pr-bcm2712.yml", "build-pr-halowlink2.yml"):
+            self.assertIn("feeds.conf.default", paths[".github/workflows/" + smoke])
+        for board in ("build-pr-bcm2710.yml", "build-pr-bcm2711.yml", "build-pr-hd01v2.yml", "build-pr-venice.yml"):
+            self.assertNotIn("feeds.conf.default", paths[".github/workflows/" + board])
+            self.assertIn("package/kernel/**", paths[".github/workflows/" + board])
+        for name, profile in profiles.items():
+            if name != "firmware":
+                self.assertTrue(profile.get("requireUpToDate", True), name)
 
     def test_external_checks_and_skipped_tests_block(self):
         check = {"id": 1, "app": {"id": 99}, "name": "External security scan", "status": "completed", "conclusion": "success"}
@@ -229,7 +258,8 @@ class FakeMergeAPI:
     """Just enough of the GitHub API for handle() on PR 7 with head "head"."""
 
     def __init__(self, gate="success", gate_status="completed", tests="success", merge_error=None,
-                 rerun_error=None, gate_attempt=1):
+                 rerun_error=None, gate_attempt=1, mergeable_state="clean"):
+        self.mergeable_state = mergeable_state
         self.gate_attempt = gate_attempt
         self.gate = gate
         self.gate_status = gate_status
@@ -248,7 +278,7 @@ class FakeMergeAPI:
         if path == "repos/o/r/pulls/7":
             return {"state": "open", "draft": False, "base": {"ref": "main"}, "body": "",
                     "head": {"sha": "head", "repo": {"full_name": "o/r"}}, "labels": [],
-                    "changed_files": 1, "mergeable_state": "clean"}
+                    "changed_files": 1, "mergeable_state": self.mergeable_state}
         if path.endswith("/commits/head/status"):
             return {"statuses": [], "state": "pending"}
         if path.endswith("/rules/branches/main"):
@@ -280,6 +310,17 @@ class AutoMergeTests(unittest.TestCase):
         with redirect_stdout(out):
             handle(api, "o/r", 7, self.profile)
         return out.getvalue()
+
+    def test_behind_pr_waits_unless_profile_opts_out(self):
+        api = FakeMergeAPI(mergeable_state="behind")
+        self.assertIn("GitHub merge criteria are not satisfied: behind", self.handle(api))
+        self.assertEqual(api.writes, [])
+        api = FakeMergeAPI(mergeable_state="behind")
+        out = io.StringIO()
+        with redirect_stdout(out):
+            handle(api, "o/r", 7, dict(self.profile, requireUpToDate=False))
+        self.assertIn("merged", out.getvalue())
+        self.assertEqual(api.writes, [("PUT", "repos/o/r/pulls/7/merge")])
 
     def test_passing_pr_merges(self):
         api = FakeMergeAPI()
