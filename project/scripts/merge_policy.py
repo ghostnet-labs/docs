@@ -224,11 +224,21 @@ def check_blockers(checks):
     return blockers
 
 
-def protection_ready(rules):
+def requires_up_to_date(profile):
+    """True unless the profile opts out of testing every PR on the current base.
+
+    A repo opts out with "requireUpToDate": false when a later full build on the
+    base branch covers what PR builds skip (firmware: the scheduled 8-board build).
+    """
+    return (profile or {}).get("requireUpToDate", True)
+
+
+def protection_ready(rules, profile=None):
     checks = [r for r in rules if r["type"] == "required_status_checks"]
     pull_requests = [r for r in rules if r["type"] == "pull_request"]
+    strict_needed = requires_up_to_date(profile)
     return any(r["parameters"].get("required_review_thread_resolution") for r in pull_requests) and any(
-        r["parameters"]["strict_required_status_checks_policy"] and
+        (r["parameters"]["strict_required_status_checks_policy"] or not strict_needed) and
         any(c["context"] == GATE and c.get("integration_id") == 15368
             for c in r["parameters"]["required_status_checks"]) for r in checks)
 
@@ -281,9 +291,11 @@ def handle(api, repo, number, profile):
     if not reviews_clear(api.pages(f"repos/{repo}/pulls/{number}/reviews")):
         blockers.append("Changes requested in review")
     rules = api.call(f"repos/{repo}/rules/branches/{profile['branch']}")
-    if not protection_ready(rules):
+    if not protection_ready(rules, profile):
         blockers.append("Required gate, current-base testing, PR-only merging or conversation resolution is not enforced")
-    if pr["mergeable_state"] != "clean":
+    # Without the up-to-date rule a PR behind its base is still mergeable.
+    mergeable = {"clean"} if requires_up_to_date(profile) else {"clean", "behind"}
+    if pr["mergeable_state"] not in mergeable:
         blockers.append("GitHub merge criteria are not satisfied: " + pr["mergeable_state"])
     if blockers:
         print(f"PR {number}: " + "; ".join(blockers))

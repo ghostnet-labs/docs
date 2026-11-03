@@ -68,9 +68,9 @@
       "workflow": "build-firmware.yml",
       "job": "build",
       "rules": [
-        "hosted-runner"
+        "fork-pr-self-hosted"
       ],
-      "reason": "Firmware board build. Same-repo PRs move to [self-hosted, openwrt-build] after the Mac pilot passes (ci-health/hosted-runners/firmware-board-builds-on-mac.patch)."
+      "reason": "Board build reusable workflow. It picks [self-hosted, openwrt-build] for same-repo pull_request callers, or when a non-pull_request caller sets self_hosted (build-full.yml: schedule and workflow_dispatch only, no secrets). Fork PRs and the release build, which carries the signing key, stay on ubuntu-24.04. The audit's fixed guard forms cannot express the self_hosted input."
     },
     {
       "repo": "firmware",
