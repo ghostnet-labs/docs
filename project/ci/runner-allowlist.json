@@ -274,6 +274,15 @@
     },
     {
       "repo": "openmanetd",
+      "workflow": "mesh-sim.yml",
+      "job": "mesh-sim",
+      "rules": [
+        "hosted-runner"
+      ],
+      "reason": "Virtual batman-adv mesh tests need root (sudo) to create network namespaces and load batman_adv. ARC runners have no sudo; GitHub-hosted Ubuntu does. Revisit when a self-hosted Linux VM with sudo and BATMAN_V is wired up (mesh simulation thread, 2026-11-03)."
+    },
+    {
+      "repo": "openmanetd",
       "workflow": "release.yml",
       "job": "release",
       "rules": [
@@ -361,6 +370,15 @@
         "pr-concurrency"
       ],
       "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+    },
+    {
+      "repo": "packages",
+      "workflow": "decoder-replay.yml",
+      "job": "replay",
+      "rules": [
+        "hosted-runner"
+      ],
+      "reason": "Builds dump1090-fa and dump978-fa natively and needs root apt-get for Boost, SoapySDR and ncurses headers. The ghostnet-linux-arm64 runners set no-new-privileges, so sudo fails there (packages #33 run, 2026-11-03). Path-filtered to decoder package changes, 15-minute timeout, cancels superseded PR runs."
     },
     {
       "repo": "protobufs",
