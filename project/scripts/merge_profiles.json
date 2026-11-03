@@ -14,37 +14,28 @@
   },
   "firmware": {
     "branch": "24.10",
+    "requireUpToDate": false,
     "workflows": [
       {
         "path": ".github/workflows/build-pr-bcm2710.yml",
         "paths": [
           "boards/ekh-bcm2710/**",
-          "boards/common_extras/**",
           "patches/ekh-bcm2710/**",
-          "scripts/openmanet_setup.sh",
-          ".github/workflows/build-firmware.yml",
           ".github/workflows/build-pr-bcm2710.yml",
-          "boards/common/**",
           "include/kernel*",
           "package/kernel/**",
-          "target/linux/bcm27xx/**",
-          "feeds.conf.default"
+          "target/linux/bcm27xx/**"
         ]
       },
       {
         "path": ".github/workflows/build-pr-bcm2711.yml",
         "paths": [
           "boards/ekh-bcm2711/**",
-          "boards/common_extras/**",
           "patches/ekh-bcm2711/**",
-          "scripts/openmanet_setup.sh",
-          ".github/workflows/build-firmware.yml",
           ".github/workflows/build-pr-bcm2711.yml",
-          "boards/common/**",
           "include/kernel*",
           "package/kernel/**",
-          "target/linux/bcm27xx/**",
-          "feeds.conf.default"
+          "target/linux/bcm27xx/**"
         ]
       },
       {
@@ -84,32 +75,22 @@
         "path": ".github/workflows/build-pr-hd01v2.yml",
         "paths": [
           "boards/ht-hd01-v2/**",
-          "boards/common/**",
-          "boards/common_extras/**",
           "patches/ht-hd01-v2/**",
-          "scripts/openmanet_setup.sh",
-          ".github/workflows/build-firmware.yml",
           ".github/workflows/build-pr-hd01v2.yml",
           "include/kernel*",
           "package/kernel/**",
-          "target/linux/ramips/**",
-          "feeds.conf.default"
+          "target/linux/ramips/**"
         ]
       },
       {
         "path": ".github/workflows/build-pr-venice.yml",
         "paths": [
           "boards/venice/**",
-          "boards/common/**",
-          "boards/common_extras/**",
           "patches/venice/**",
-          "scripts/openmanet_setup.sh",
-          ".github/workflows/build-firmware.yml",
           ".github/workflows/build-pr-venice.yml",
           "include/kernel*",
           "package/kernel/**",
-          "target/linux/imx/**",
-          "feeds.conf.default"
+          "target/linux/imx/**"
         ]
       },
       {
