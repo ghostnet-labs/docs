@@ -367,6 +367,35 @@ class FixOnceTest(unittest.TestCase):
         item = next(v for k, v in found.items() if "workflow-off" in k)
         self.assertEqual(item["url"], "https://github.com/ghostnet-labs/luci/actions/workflows/gate.yml")
 
+    def starved_state(self, *runners, age=30):
+        job = {"status": "queued", "hosted": False, "age_min": age, "labels": ["self-hosted", "openwrt-build"],
+               "url": "https://github.com/ghostnet-labs/firmware/actions/runs/1/job/2"}
+        return {"alerts": [], "jobs": [job], "machines": [{"name": "Mac Studio", "runners": list(runners)}]}
+
+    def test_queued_label_with_only_offline_runners_alerts(self):
+        found = cw.starved_labels(self.starved_state(
+            {"name": "studio-build-1", "status": "offline", "labels": ["self-hosted", "openwrt-build"]}))
+        item = found["starved:openwrt-build"]
+        self.assertEqual(item["level"], "crit")
+        self.assertIn("studio-build-1", item["text"])
+        self.assertIn("/actions/runs/1/job/2", item["text"])
+        self.assertIn("settings/actions/runners", item["text"])
+
+    def test_queued_label_with_no_runner_registered_alerts(self):
+        found = cw.starved_labels(self.starved_state())
+        self.assertIn("no runner with these labels is registered", found["starved:openwrt-build"]["text"])
+
+    def test_busy_online_runner_is_not_starved(self):
+        found = cw.starved_labels(self.starved_state(
+            {"name": "studio-build-1", "status": "busy", "labels": ["self-hosted", "OpenWrt-Build"]}))
+        self.assertEqual(found, {})
+
+    def test_young_or_hosted_queue_is_not_starved(self):
+        self.assertEqual(cw.starved_labels(self.starved_state(age=5)), {})
+        state = self.starved_state()
+        state["jobs"][0]["hosted"] = True
+        self.assertEqual(cw.starved_labels(state), {})
+
     def deploy_status(self, status, head="abc1234def"):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "deploy-status.json")
