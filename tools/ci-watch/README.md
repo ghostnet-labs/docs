@@ -50,11 +50,26 @@ The report is also written to `~/.local/state/ci-watch/report.md`
 
 ## Token
 
-It reuses the stale-runs token (`~/.config/stale-runs/token`) if there is no
-`~/.config/ci-watch/token` or `CI_WATCH_TOKEN`. Reads need **Actions**,
-**Checks**, **Commit statuses**, **Contents** and **Pull requests**, all
-read-only. `--issue` also needs **Issues: Read and write**: either add it to
-the token, or put a separate token in `~/.config/ci-watch/issue-token`.
+Make one fine-grained token for it (the Studio has no other GitHub token):
+
+1. Open <https://github.com/settings/personal-access-tokens/new>.
+2. Name `ci-watch`, expiration 1 year, **Resource owner: ghostnet-labs**,
+   **All repositories**.
+3. Repository permissions, all **Read-only**: Actions, Checks, Commit
+   statuses, Contents, Pull requests. Plus **Issues: Read and write**, so it
+   can keep setup #87 up to date.
+4. Generate it, copy it, and on the Mac Studio run:
+
+```sh
+mkdir -p ~/.config/ci-watch
+pbpaste > ~/.config/ci-watch/token
+chmod 600 ~/.config/ci-watch/token
+```
+
+The script looks for `CI_WATCH_TOKEN`, then `~/.config/ci-watch/token`, then
+the stale-runs token locations (`STALE_RUNS_TOKEN`,
+`~/.config/stale-runs/token`, `GITHUB_TOKEN`). A separate token for the issue
+writes can go in `~/.config/ci-watch/issue-token`.
 
 Every GET carries the ETag of its last answer (`~/.cache/ci-watch/etags.json`);
 "304 not changed" answers are free, so a quiet run costs about 30 counted calls
