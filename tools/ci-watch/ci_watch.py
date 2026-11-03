@@ -304,14 +304,32 @@ def guard_findings(gh, repo: str, now: datetime) -> dict[str, dict]:
     for f in ag.check_repo(gh, repo, now, timedelta(minutes=20), timedelta(hours=3)):
         detail = DIGITS.sub("#", f["detail"]) if f["kind"] == "runs-stale" else f["detail"]
         url = f"https://github.com/{ORG}/{repo}/actions"
+        text = f"{ORG}/{repo} {f['kind']}: {f['detail']}"
         if f.get("pr"):
             url = f"https://github.com/{ORG}/{repo}/pull/{f['pr']}"
-        found[f"guard:{repo}:{f['kind']}:{detail}"] = {
-            "level": "crit", "repo": repo, "url": url, "text": f"{ORG}/{repo} {f['kind']}: {f['detail']}"}
+        elif f["kind"] == "workflow-off":
+            url, how = enable_link(repo, f.get("state", ""), f.get("path", ""))
+            text += f"; {how}"
+        found[f"guard:{repo}:{f['kind']}:{detail}"] = {"level": "crit", "repo": repo, "url": url, "text": text}
     return found
 
 
-def runner_findings(page: str, fetch=None) -> dict[str, dict]:
+def enable_link(repo: str, state: str, path: str) -> tuple[str, str]:
+    """Where Justin clicks to turn a disabled workflow back on (we have no admin to do it).
+
+    GitHub turns off every workflow in a fork until someone accepts them on the
+    Actions tab; a single workflow disabled for inactivity or by hand has its
+    own "Enable workflow" button on its page.
+    """
+    if state == "disabled_fork" or not path:
+        return (f"https://github.com/{ORG}/{repo}/actions",
+                "open the Actions tab and click \"I understand my workflows, go ahead and enable them\"")
+    name = path.rsplit("/", 1)[-1]
+    return (f"https://github.com/{ORG}/{repo}/actions/workflows/{name}",
+            "open the workflow and click \"Enable workflow\"")
+
+
+def runner_findings(page: str, fetch=None, stale_hours: float = 12.0) -> dict[str, dict]:
     """warn/crit alerts from the runner status page's /api/state (no token)."""
     url = page.rstrip("/") + "/api/state"
     if fetch is None:
@@ -330,7 +348,120 @@ def runner_findings(page: str, fetch=None) -> dict[str, dict]:
         text = alert.get("text", "")
         found["runner:" + DIGITS.sub("#", text)] = {
             "level": alert["level"], "url": alert.get("url") or page, "text": "runner: " + text}
+    found.update(stale_registrations(state, stale_hours))
     return found
+
+
+RUNNERS_SETTINGS = f"https://github.com/organizations/{ORG}/settings/actions/runners"
+GONE_CAUSES = {"no-service", "registration"}  # watchdog: nothing on this Mac runs it any more
+
+
+def stale_registrations(state: dict, stale_hours: float) -> dict[str, dict]:
+    """Self-hosted runners still registered with GitHub after their VM or service is gone.
+
+    A retired VM leaves its runner listed as offline forever. The watchdog says
+    "no-service" when nothing on the Mac runs it; otherwise a long offline spell
+    is the sign. Removing a registration needs org admin, so this only links it.
+    """
+    found = {}
+    for machine in state.get("machines", []):
+        for r in machine.get("runners", []):
+            if r.get("status") != "offline":
+                continue
+            minutes_off = r.get("offline_min") or 0
+            cause = (r.get("why") or {}).get("cause", "")
+            if cause == "maintenance":
+                continue
+            if not (cause in GONE_CAUSES and minutes_off >= 60) and minutes_off < stale_hours * 60:
+                continue
+            url = f"{RUNNERS_SETTINGS}/{r['id']}" if r.get("id") else RUNNERS_SETTINGS
+            why = f", {cause}" if cause else ""
+            found[f"stale-runner:{r.get('name')}"] = {
+                "level": "warn", "url": url,
+                "text": f"runner {r.get('name')} looks retired (offline {minutes(timedelta(minutes=minutes_off))}"
+                        f"{why}); remove its registration: open the link and click Remove"}
+    return found
+
+
+# ---------------------------------------------------------------- deployed tools
+
+REPO_ROOT = HERE.parent.parent  # this clone of ghostnet-labs/docs
+DEFAULT_CLONES = [os.path.expanduser(p) for p in ("~/ci-watch-src", "~/runner-status-src", "~/stale-runs-src")]
+DRIFT_GRACE = timedelta(hours=1)  # a deploy that pulls hourly gets this long before it counts as broken
+SELF_UPDATE_EVERY = timedelta(hours=1)
+
+
+def run_git(path: str, *args: str) -> tuple[int, str]:
+    try:
+        done = subprocess.run(["git", "-C", path, *args], capture_output=True, text=True, timeout=120, check=False)
+    except (OSError, subprocess.SubprocessError) as err:
+        return 1, str(err)
+    return done.returncode, (done.stdout if done.returncode == 0 else done.stderr).strip()
+
+
+def deploy_drift(gh, clones: list[str], now: datetime, previous: dict, git=None) -> tuple[dict, dict]:
+    """Alert when a deployed clone of the docs repo misses tool changes that are on main.
+
+    The runner status page once stopped updating and nobody noticed. Any clone
+    whose tools/ differ from main for more than DRIFT_GRACE is a deploy that is
+    not running, whatever does the pulling.
+    """
+    git = git or run_git
+    found, seen = {}, {}
+    if not clones:
+        return found, seen
+    main = gh.get(f"/repos/{ORG}/docs/commits/main")["sha"]
+    for path in clones:
+        code, head = git(path, "rev-parse", "HEAD")
+        short = path.replace(os.path.expanduser("~"), "~", 1)
+        if code != 0:
+            text = f"deploy: cannot read {short}: {head[:120]}"
+            found[f"deploy:{path}:git"] = {"level": "warn", "url": f"https://github.com/{ORG}/docs", "text": text}
+            continue
+        if head == main:
+            continue
+        cmp = gh.get(f"/repos/{ORG}/docs/compare/{head}...{main}")
+        tools = sorted({"/".join(f["filename"].split("/")[:2]) for f in cmp.get("files", [])
+                        if f.get("filename", "").startswith("tools/")})
+        if not tools:
+            continue
+        since = sr.parse_ts((previous.get(path) or {}).get("since")) or now
+        seen[path] = {"since": since.isoformat()}
+        if now - since < DRIFT_GRACE:
+            continue
+        found[f"deploy:{path}"] = {
+            "level": "warn", "url": cmp.get("html_url") or f"https://github.com/{ORG}/docs/compare/{head}...main",
+            "text": f"deploy: {short} is {cmp.get('ahead_by', '?')} commits behind docs main and misses "
+                    f"{', '.join(tools)} (for {minutes(now - since)}); its update is not running: "
+                    f"run git -C {short} pull --ff-only and restart its LaunchAgent"}
+    return found, seen
+
+
+def update_self(now: datetime, previous: dict, git=None, root: str | None = None) -> tuple[dict, dict]:
+    """Pull this clone hourly so new checks reach the Studio without anyone typing a line.
+
+    Only fast-forwards a clean checkout of protected main; anything else is an
+    alert, never a forced update. The next run uses the new code.
+    """
+    git = git or run_git
+    root = root or str(REPO_ROOT)
+    last = sr.parse_ts(previous.get("at"))
+    if last and now - last < SELF_UPDATE_EVERY:
+        return previous.get("found", {}), previous
+    found = {}
+    code, dirty = git(root, "status", "--porcelain", "--untracked-files=no")
+    if code != 0:
+        found["self-update"] = {"level": "warn", "url": f"https://github.com/{ORG}/docs",
+                                "text": f"ci-watch cannot update itself: {dirty[:160]}"}
+    elif dirty:
+        found["self-update"] = {"level": "warn", "url": f"https://github.com/{ORG}/docs",
+                                "text": "ci-watch cannot update itself: its clone has local edits"}
+    else:
+        code, out = git(root, "pull", "--ff-only", "--quiet")
+        if code != 0:
+            found["self-update"] = {"level": "warn", "url": f"https://github.com/{ORG}/docs/commits/main",
+                                    "text": f"ci-watch cannot update itself: git pull failed: {out[:160]}"}
+    return found, {"at": now.isoformat(), "found": found}
 
 
 def merged_branches(gh, repo: str, open_heads: set[str]) -> list[dict]:
@@ -584,7 +715,7 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
             errors.append(f"{repo}: {str(err)[:160]}")
     found.update(pr_findings(prs, now, timedelta(hours=args.stuck_hours), timedelta(hours=args.idle_hours)))
     if args.runner_page:
-        found.update(runner_findings(args.runner_page, runner_fetch))
+        found.update(runner_findings(args.runner_page, runner_fetch, args.stale_runner_hours))
 
     error_runs = state.get("error_runs", 0) + 1 if errors else 0
     if error_runs >= ERROR_RUNS_ALERT:
@@ -632,6 +763,18 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
     else:
         upstream = {}
 
+    clones = args.clone if args.clone is not None else [c for c in DEFAULT_CLONES if os.path.isdir(c)]
+    drift_state = state.get("deploy", {})
+    try:
+        drift_found, drift_state = deploy_drift(gh, clones, now, drift_state, git=getattr(args, "git", None))
+        found.update(drift_found)
+    except RuntimeError as err:
+        errors.append(f"deploy check: {str(err)[:160]}")
+    self_update = state.get("self_update", {})
+    if args.self_update:
+        self_found, self_update = update_self(now, self_update, git=getattr(args, "git", None))
+        found.update(self_found)
+
     new = [dict(v, key=k) for k, v in found.items() if k not in previous_active]
     cleared = [dict(v, key=k) for k, v in previous_active.items() if k not in found]
     if not state.get("initialized"):
@@ -642,6 +785,7 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
         "initialized": True, "at": now.isoformat(), "error_runs": error_runs,
         "active": found, "branches": branches, "branches_at": branches_at,
         "branches_scan_iso": state.get("branches_scan_iso"), "upstream": upstream,
+        "deploy": drift_state, "self_update": self_update,
         "prs": {f"{p['repo']}#{p['number']}": p for p in prs},
     }
     return new_state, report, {"new": new, "cleared": cleared, "events": events}
@@ -708,6 +852,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--min-level", choices=list(LEVELS), default="info",
                    help="lowest level that makes a banner or push (the issue gets everything)")
     p.add_argument("--runner-page", metavar="URL", help="runner status page to forward alerts from")
+    p.add_argument("--clone", action="append", metavar="PATH",
+                   help="deployed docs clone to check against main (default: the usual ~/*-src clones)")
+    p.add_argument("--no-self-update", dest="self_update", action="store_false",
+                   help="do not fast-forward this clone of docs every hour")
+    p.add_argument("--stale-runner-hours", type=float, default=12.0,
+                   help="an offline runner this long counts as a leftover registration")
     p.add_argument("--stuck-hours", type=float, default=3.0, help="checks running this long alert")
     p.add_argument("--idle-hours", type=float, default=24.0, help="a ready PR untouched this long alerts")
     p.add_argument("--branch-hours", type=float, default=1.0, help="merged-branch scan interval (0 = off)")

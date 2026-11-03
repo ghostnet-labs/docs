@@ -20,7 +20,10 @@ or writing.
 | Stuck | checks still running after `--stuck-hours` (3) | warn |
 | Idle | a ready PR untouched for `--idle-hours` (24) | warn |
 | Runner page (`--runner-page`) | any warn or crit alert on the runner status page: offline runner, job queued 20+ min, hosted stall, minutes, disk, swap | as the page says |
-| Itself | GitHub unreadable three runs in a row | crit |
+| Stale runner registration (`--runner-page`) | a runner offline `--stale-runner-hours` (12), or an hour with nothing on the Mac running it (watchdog "no-service"); links its page under org runner settings, where you click Remove | warn |
+| Disabled workflow | carries the exact place to click: the fork's Actions tab ("I understand my workflows…") or the workflow's own "Enable workflow" page | crit |
+| Deploy drift | a deployed docs clone (`~/ci-watch-src`, `~/runner-status-src`, `~/stale-runs-src`, or `--clone`) misses `tools/` changes on main for over an hour, so whatever updates it has stopped | warn |
+| Itself | GitHub unreadable three runs in a row; the hourly self-update failed | crit / warn |
 | News | a PR opened, merged, closed, or no longer red | info |
 | Branches (hourly) | lists branches already in the default branch that no open PR uses; never deletes | report only |
 | Upstream drift (every 6 h, `--upstream-hours`) | an OpenMANET fork is behind its upstream branch; the firmware's OpenWrt base (`.openwrt-upstream`) is behind `openwrt-24.10`, or that file is missing; a firmware feed pin (openwrt packages, routing, telephony, OpenMANET luci, our packages) is behind its branch | warn |
@@ -95,14 +98,16 @@ Every GET carries the ETag of its last answer (`~/.cache/ci-watch/etags.json`);
 git clone --depth 1 https://github.com/ghostnet-labs/docs ~/ci-watch-src
 python3 ~/ci-watch-src/tools/ci-watch/ci_watch.py --branch-hours 0   # one run by hand
 python3 ~/ci-watch-src/tools/ci-watch/ci_watch.py launchd \
-  --notify --ntfy <topic> --issue 87 --runner-page http://localhost:8090 \
+  --notify --issue 87 --runner-page http://localhost:8090 \
   > ~/Library/LaunchAgents/com.ghostnet.ci-watch.plist
 launchctl load ~/Library/LaunchAgents/com.ghostnet.ci-watch.plist
 tail -f ~/Library/Logs/ci-watch.log
 ```
 
-Update with `git -C ~/ci-watch-src pull`; the next run picks it up. Stop with
-`launchctl unload ~/Library/LaunchAgents/com.ghostnet.ci-watch.plist`.
+It updates itself: once an hour it fast-forwards its own clone from main (only
+a clean checkout; local edits or a failed pull are an alert, never a forced
+update), and the next run uses the new code. `--no-self-update` turns that off.
+Stop with `launchctl unload ~/Library/LaunchAgents/com.ghostnet.ci-watch.plist`.
 
 ## Scheduled tasks it replaces
 
