@@ -22,6 +22,10 @@ Each run (every 10 minutes from a LaunchAgent on the Mac Studio):
      detects these; this forwards them to the same alert channels.
   4. Once an hour: branches fully merged into the default branch that no open
      PR uses (listed only; deleting needs Justin's typed line).
+  5. Every --upstream-hours (6): upstream drift. Each OpenMANET fork against
+     its upstream branch, the firmware's OpenWrt 24.10 base (.openwrt-upstream)
+     against openwrt-24.10, and every firmware feed pin against its branch.
+     A repo or pin that falls behind is a warn until it is synced.
 
 A finding alerts once, when it first appears, and once more when it clears.
 If GitHub cannot be read three runs in a row, that is an alert too.
@@ -46,6 +50,7 @@ The live report is also written to ~/.local/state/ci-watch/report.md.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import platform
@@ -81,6 +86,31 @@ MAX_COMPARES = 60  # branch comparisons per hourly scan
 MAX_TEXT = 3500  # ntfy and banner bodies are cut here
 DIGITS = re.compile(r"\d+")
 UPDATED_LINE = re.compile(r"^Updated .*$", re.MULTILINE)
+# Upstream drift. docs is not here (its history was rewritten, nothing to merge)
+# and setup is not a fork.
+UPSTREAMS = {
+    "firmware": ("OpenMANET/firmware", "24.10"),
+    "packages": ("OpenMANET/packages", "24.10"),
+    "luci": ("OpenMANET/luci", "mm-23.05"),
+    "openmanetd": ("OpenMANET/openmanetd", "main"),
+    "OpenVLM": ("OpenMANET/OpenVLM", "main"),
+    "protobufs": ("OpenMANET/protobufs", "main"),
+}
+OPENWRT = "openwrt/openwrt"
+OPENWRT_BRANCH = "openwrt-24.10"
+OPENWRT_MARKER = ".openwrt-upstream"  # "<sha> <branch> <revision>", written by each OpenWrt import
+OPENWRT_TAG = re.compile(r"^v24\.10\.(\d+)$")
+FIRMWARE_BRANCH = UPSTREAMS["firmware"][1]
+# Feed repos whose pin in the firmware's feeds.conf.default is checked, and the branch it should follow.
+FEED_BRANCHES = {
+    "openwrt/packages": OPENWRT_BRANCH,
+    "openwrt/routing": OPENWRT_BRANCH,
+    "openwrt/telephony": OPENWRT_BRANCH,
+    "OpenMANET/luci": "mm-23.05",
+    f"{ORG}/packages": "24.10",
+}
+FEED_LINE = re.compile(
+    r"^src-git\s+(\S+)\s+https://github\.com/([\w.-]+/[\w.-]+?)(?:\.git)?\^([0-9a-f]{7,40})\s*$", re.MULTILINE)
 DEPENDS = re.compile(r"(?im)^Depends-on:\s*(https://github\.com/\S+/pull/\d+)\s*$")
 
 sr.ETAG_MAX = 1500  # one cached answer per PR, head and branch; quiet runs are all 304s
@@ -323,11 +353,86 @@ def merged_branches(gh, repo: str, open_heads: set[str]) -> list[dict]:
     return out
 
 
+def behind_by(gh, repo: str, base: str, head: str) -> int:
+    """Commits on head that base lacks (compare base...head in repo)."""
+    quoted = urllib.parse.quote(f"{base}...{head}", safe=".:")
+    return int(gh.get(f"/repos/{repo}/compare/{quoted}?per_page=1").get("ahead_by", 0))
+
+
+def repo_file(gh, repo: str, path: str, ref: str) -> str | None:
+    """A file's text on ref, or None when it does not exist there."""
+    try:
+        data = gh.get(f"/repos/{repo}/contents/{path}?ref={urllib.parse.quote(ref, safe='')}")
+    except RuntimeError as err:
+        if "HTTP 404" in str(err):
+            return None
+        raise
+    return base64.b64decode(data.get("content", "")).decode("utf-8", errors="replace")
+
+
+def latest_openwrt_release(gh) -> str | None:
+    best = None
+    for tag in gh.get(f"/repos/{OPENWRT}/tags?per_page=100"):
+        m = OPENWRT_TAG.match(tag.get("name", ""))
+        if m and (best is None or int(m.group(1)) > best):
+            best = int(m.group(1))
+    return None if best is None else f"v24.10.{best}"
+
+
+def upstream_drift(gh, repos: list[str]) -> tuple[list[dict], dict[str, dict]]:
+    """Rows for the report and a warn finding for everything behind its upstream."""
+    rows: list[dict] = []
+    found: dict[str, dict] = {}
+
+    def add(key: str, what: str, upstream: str, behind: int | None, url: str, note: str = "") -> None:
+        rows.append({"what": what, "upstream": upstream, "behind": behind, "url": url, "note": note})
+        if behind:
+            text = f"upstream: {what} is {behind} commit{'s' if behind != 1 else ''} behind {upstream}"
+            found["upstream:" + key] = {"level": "warn", "url": url, "text": text + (f" ({note})" if note else "")}
+
+    for repo in repos:
+        if repo not in UPSTREAMS:
+            continue
+        upstream, branch = UPSTREAMS[repo]
+        owner, name = upstream.split("/")
+        head = f"{owner}:{name}:{branch}"
+        add(repo, f"{ORG}/{repo} {branch}", f"{upstream} {branch}", behind_by(gh, f"{ORG}/{repo}", branch, head),
+            f"https://github.com/{ORG}/{repo}/compare/{branch}...{head}")
+
+    if "firmware" not in repos:
+        return rows, found
+    fw = f"{ORG}/firmware"
+    release = latest_openwrt_release(gh)
+    note = f"latest release {release}" if release else ""
+    marker = repo_file(gh, fw, OPENWRT_MARKER, FIRMWARE_BRANCH)
+    synced = marker.split()[0] if marker and marker.split() else None
+    if synced:
+        add("openwrt-base", f"firmware OpenWrt base ({synced[:10]})", f"{OPENWRT} {OPENWRT_BRANCH}",
+            behind_by(gh, OPENWRT, synced, OPENWRT_BRANCH),
+            f"https://github.com/{OPENWRT}/compare/{synced}...{OPENWRT_BRANCH}", note)
+    else:
+        url = f"https://github.com/{fw}/blob/{FIRMWARE_BRANCH}/{OPENWRT_MARKER}"
+        rows.append({"what": "firmware OpenWrt base", "upstream": f"{OPENWRT} {OPENWRT_BRANCH}", "behind": None,
+                     "url": url, "note": f"{OPENWRT_MARKER} missing; {note or 'no release found'}"})
+        found["upstream:openwrt-base"] = {
+            "level": "warn", "url": url,
+            "text": f"upstream: firmware has no {OPENWRT_MARKER}, so its OpenWrt base is unknown ({note})"}
+
+    feeds = repo_file(gh, fw, "feeds.conf.default", FIRMWARE_BRANCH) or ""
+    for feed, repo, pin in FEED_LINE.findall(feeds):
+        branch = FEED_BRANCHES.get(repo)
+        if not branch:
+            continue
+        add(f"feed:{feed}", f"firmware feed {feed} ({pin[:10]})", f"{repo} {branch}",
+            behind_by(gh, repo, pin, branch), f"https://github.com/{repo}/compare/{pin}...{branch}")
+    return rows, found
+
+
 # ---------------------------------------------------------------- report
 
 
 def render_report(now: datetime, prs: list[dict], active: dict[str, dict], branches: list[dict],
-                  branches_at: str | None, errors: list[str]) -> str:
+                  branches_at: str | None, errors: list[str], upstream: dict | None = None) -> str:
     lines = ["# CI watch", "", f"Updated {ts(now)} by `tools/ci-watch/ci_watch.py` (every 10 minutes).", ""]
     problems = sorted(active.values(), key=lambda a: (-LEVELS[a["level"]], a["text"]))
     lines.append("## Problems")
@@ -359,6 +464,18 @@ def render_report(now: datetime, prs: list[dict], active: dict[str, dict], branc
         lines.append(f"Scanned {branches_at}. Listed only; deleting needs Justin's typed line.")
         lines.append("")
         lines += [f"- [{ORG}/{b['repo']} {b['branch']}]({b['url']})" for b in branches]
+    if upstream is not None:
+        lines += ["", "## Upstream drift", ""]
+        if not upstream.get("at"):
+            lines.append("Not scanned yet." + (f" Last try failed: {upstream['error']}" if upstream.get("error") else ""))
+        else:
+            lines.append(f"Scanned {upstream['at']}. Behind = upstream commits we do not have yet.")
+            if upstream.get("error"):
+                lines += ["", f"Last scan failed, showing the one before: {upstream['error']}"]
+            lines += ["", "| Ours | Upstream | Behind | Note |", "|---|---|---|---|"]
+            for r in upstream.get("rows", []):
+                behind = "?" if r["behind"] is None else str(r["behind"])
+                lines.append(f"| {r['what']} | {r['upstream']} | [{behind}]({r['url']}) | {r.get('note', '')} |")
     return "\n".join(lines) + "\n"
 
 
@@ -500,15 +617,31 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
         except RuntimeError as err:
             errors.append(f"branches: {str(err)[:160]}")
 
+    upstream = state.get("upstream", {})
+    last_up = sr.parse_ts(upstream.get("scan_iso"))
+    if args.upstream_hours > 0 and (last_up is None or now - last_up >= timedelta(hours=args.upstream_hours)):
+        try:
+            rows, drift = upstream_drift(gh, repos)
+            upstream = {"scan_iso": now.isoformat(), "at": ts(now), "rows": rows, "found": drift}
+        except RuntimeError as err:
+            # Keep the last scan's rows and findings and try again next interval. Not counted
+            # as a GitHub read error: upstream repos are not ours and a failure here is no outage.
+            upstream = dict(upstream, scan_iso=now.isoformat(), error=f"{ts(now)}: {str(err)[:200]}")
+    if args.upstream_hours > 0:
+        found.update(upstream.get("found", {}))
+    else:
+        upstream = {}
+
     new = [dict(v, key=k) for k, v in found.items() if k not in previous_active]
     cleared = [dict(v, key=k) for k, v in previous_active.items() if k not in found]
     if not state.get("initialized"):
         cleared = []  # first run: everything is "new", nothing has "cleared"
-    report = render_report(now, prs, found, branches, branches_at, errors)
+    report = render_report(now, prs, found, branches, branches_at, errors,
+                           upstream if args.upstream_hours > 0 else None)
     new_state = {
         "initialized": True, "at": now.isoformat(), "error_runs": error_runs,
         "active": found, "branches": branches, "branches_at": branches_at,
-        "branches_scan_iso": state.get("branches_scan_iso"),
+        "branches_scan_iso": state.get("branches_scan_iso"), "upstream": upstream,
         "prs": {f"{p['repo']}#{p['number']}": p for p in prs},
     }
     return new_state, report, {"new": new, "cleared": cleared, "events": events}
@@ -578,6 +711,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--stuck-hours", type=float, default=3.0, help="checks running this long alert")
     p.add_argument("--idle-hours", type=float, default=24.0, help="a ready PR untouched this long alerts")
     p.add_argument("--branch-hours", type=float, default=1.0, help="merged-branch scan interval (0 = off)")
+    p.add_argument("--upstream-hours", type=float, default=6.0,
+                   help="upstream drift scan interval: forks vs OpenMANET, firmware vs OpenWrt 24.10 (0 = off)")
     p.add_argument("--state-dir", default=STATE_DIR)
     p.add_argument("--json", action="store_true", help="print the run's alert batch as JSON")
     return p.parse_args(argv)
