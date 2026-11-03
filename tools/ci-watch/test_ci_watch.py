@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import plistlib
 import sys
 import tempfile
@@ -78,6 +79,9 @@ def args(**kw) -> argparse.Namespace:
     a.repos = "luci"
     a.branch_hours = 0
     a.upstream_hours = 0
+    a.self_update = False
+    a.clone = []
+    a.deploy_status = ""
     for k, v in kw.items():
         setattr(a, k, v)
     return a
@@ -342,6 +346,145 @@ class DeliverTest(unittest.TestCase):
         self.assertIn("(+2 more)", run.call_args.args[0][2])
 
 
+class FixOnceTest(unittest.TestCase):
+    """Checks added so a problem met once is caught by the script next time."""
+
+    def test_disabled_fork_links_the_actions_tab(self):
+        url, how = cw.enable_link("luci", "disabled_fork", ".github/workflows/gate.yml")
+        self.assertEqual(url, "https://github.com/ghostnet-labs/luci/actions")
+        self.assertIn("go ahead and enable them", how)
+
+    def test_inactive_workflow_links_its_own_page(self):
+        url, how = cw.enable_link("luci", "disabled_inactivity", ".github/workflows/gate.yml")
+        self.assertEqual(url, "https://github.com/ghostnet-labs/luci/actions/workflows/gate.yml")
+        self.assertIn("Enable workflow", how)
+
+    def test_disabled_workflow_alert_carries_the_link(self):
+        r = repo_routes(wf_state="disabled_inactivity")
+        r["/repos/ghostnet-labs/luci/actions/workflows?per_page=100"] = {"workflows": [
+            {"name": "Manet merge gate", "state": "disabled_inactivity", "path": ".github/workflows/gate.yml"}]}
+        found = cw.guard_findings(FakeGitHub(r), "luci", NOW)
+        item = next(v for k, v in found.items() if "workflow-off" in k)
+        self.assertEqual(item["url"], "https://github.com/ghostnet-labs/luci/actions/workflows/gate.yml")
+
+    def deploy_status(self, status, head="abc1234def"):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "deploy-status.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(status, f)
+            return cw.deploy_status(path, "/clone", NOW, git=lambda *a: (0, head))
+
+    def test_healthy_autodeploy_is_quiet(self):
+        found = self.deploy_status({"ok": True, "commit": "abc1234def", "at": NOW.isoformat()})
+        self.assertEqual(found, {})
+
+    def test_autodeploy_failure_alerts_with_reason(self):
+        found = self.deploy_status({"ok": False, "commit": "abc1234def", "reason": "local edits",
+                                    "at": NOW.isoformat()})
+        self.assertIn("local edits", found["deploy-status"]["text"])
+        self.assertIn("tools/runner-status", found["deploy-status"]["url"])
+
+    def test_autodeploy_saying_ok_on_an_old_commit_alerts(self):
+        found = self.deploy_status({"ok": True, "commit": "0000000aaa", "at": NOW.isoformat()})
+        self.assertIn("clone is at abc1234", found["deploy-status"]["text"])
+
+    def test_autodeploy_that_stopped_writing_alerts(self):
+        found = self.deploy_status({"ok": True, "commit": "abc1234def",
+                                    "at": (NOW - timedelta(hours=2)).isoformat()})
+        self.assertIn("last ran", found["deploy-status"]["text"])
+
+    def test_missing_deploy_status_file_is_quiet(self):
+        self.assertEqual(cw.deploy_status("/nonexistent/deploy-status.json", "/clone", NOW), {})
+
+    def test_unreadable_deploy_status_alerts(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "deploy-status.json")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("{not json")
+            found = cw.deploy_status(path, "/clone", NOW, git=lambda *a: (0, "x"))
+        self.assertIn("cannot read", found["deploy-status"]["text"])
+
+    def state(self, *runners):
+        return {"alerts": [], "machines": [{"name": "Mac Studio", "runners": list(runners)}]}
+
+    def test_long_offline_runner_is_a_stale_registration(self):
+        found = cw.stale_registrations(self.state(
+            {"name": "studio-ubuntu-3", "id": 42, "status": "offline", "offline_min": 13 * 60}), 12)
+        item = found["stale-runner:studio-ubuntu-3"]
+        self.assertEqual(item["url"], "https://github.com/organizations/ghostnet-labs/settings/actions/runners/42")
+
+    def test_runner_with_no_service_is_stale_after_an_hour(self):
+        found = cw.stale_registrations(self.state(
+            {"name": "gone", "status": "offline", "offline_min": 61, "why": {"cause": "no-service"}}), 12)
+        self.assertIn("stale-runner:gone", found)
+
+    def test_short_outage_and_maintenance_are_not_stale(self):
+        found = cw.stale_registrations(self.state(
+            {"name": "a", "status": "offline", "offline_min": 30},
+            {"name": "b", "status": "offline", "offline_min": 2000, "why": {"cause": "maintenance"}},
+            {"name": "c", "status": "idle"}), 12)
+        self.assertEqual(found, {})
+
+    def drift_gh(self, files):
+        return FakeGitHub({
+            "/repos/ghostnet-labs/docs/commits/main": {"sha": "new"},
+            "/repos/ghostnet-labs/docs/compare/old...new": {
+                "ahead_by": 3, "html_url": "https://github.com/ghostnet-labs/docs/compare/old...new",
+                "files": [{"filename": f} for f in files]}})
+
+    def test_deploy_drift_alerts_after_the_grace_hour(self):
+        git = lambda path, *a: (0, "old")  # noqa: E731
+        gh = self.drift_gh(["tools/runner-status/runner_status.py"])
+        found, seen = cw.deploy_drift(gh, ["/x/runner-status-src"], NOW, {}, git=git)
+        self.assertEqual(found, {})  # first sighting starts the clock
+        later = NOW + timedelta(minutes=61)
+        found, _ = cw.deploy_drift(gh, ["/x/runner-status-src"], later, seen, git=git)
+        item = found["deploy:/x/runner-status-src"]
+        self.assertIn("tools/runner-status", item["text"])
+        self.assertEqual(item["url"], "https://github.com/ghostnet-labs/docs/compare/old...new")
+
+    def test_deploy_drift_ignores_non_tool_changes_and_current_clones(self):
+        gh = self.drift_gh(["project/decisions.md"])
+        found, seen = cw.deploy_drift(gh, ["/x"], NOW, {}, git=lambda p, *a: (0, "old"))
+        self.assertEqual((found, seen), ({}, {}))
+        found, _ = cw.deploy_drift(gh, ["/x"], NOW, {}, git=lambda p, *a: (0, "new"))
+        self.assertEqual(found, {})
+
+    def test_unreadable_clone_warns(self):
+        gh = self.drift_gh([])
+        found, _ = cw.deploy_drift(gh, ["/x"], NOW, {}, git=lambda p, *a: (128, "not a git repository"))
+        self.assertIn("deploy:/x:git", found)
+
+    def test_self_update_pulls_a_clean_clone_hourly(self):
+        calls = []
+
+        def git(path, *a):
+            calls.append(a)
+            return 0, ""
+        found, st = cw.update_self(NOW, {}, git=git, root="/r")
+        self.assertEqual(found, {})
+        self.assertEqual(calls, [("status", "--porcelain", "--untracked-files=no"), ("pull", "--ff-only", "--quiet")])
+        calls.clear()
+        cw.update_self(NOW + timedelta(minutes=10), st, git=git, root="/r")
+        self.assertEqual(calls, [])  # not again within the hour
+
+    def test_self_update_never_touches_local_edits(self):
+        calls = []
+
+        def git(path, *a):
+            calls.append(a)
+            return 0, " M tools/ci-watch/ci_watch.py"
+        found, _ = cw.update_self(NOW, {}, git=git, root="/r")
+        self.assertIn("local edits", found["self-update"]["text"])
+        self.assertEqual(len(calls), 1)
+
+    def test_self_update_failure_alerts(self):
+        def git(path, *a):
+            return (0, "") if a[0] == "status" else (1, "fatal: Not possible to fast-forward")
+        found, _ = cw.update_self(NOW, {}, git=git, root="/r")
+        self.assertIn("git pull failed", found["self-update"]["text"])
+
+
 class MainTest(unittest.TestCase):
     def test_launchd_plist_is_valid(self):
         out = []
@@ -362,7 +505,8 @@ class MainTest(unittest.TestCase):
                 mock.patch.object(cw.sr, "GitHub", return_value=FakeGitHub(repo_routes())), \
                 mock.patch.object(cw.sr, "utcnow", return_value=NOW), \
                 mock.patch("builtins.print"):
-            code = cw.main(["--repos", "luci", "--branch-hours", "0", "--state-dir", d])
+            code = cw.main(["--repos", "luci", "--branch-hours", "0", "--state-dir", d, "--no-self-update",
+                            "--deploy-status", ""])
             self.assertEqual(code, 0)
             self.assertIn("green, auto-merge on", Path(d, "report.md").read_text())
             self.assertTrue(json.loads(Path(d, "state.json").read_text())["initialized"])

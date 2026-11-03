@@ -1141,7 +1141,7 @@ def build_state(raw: dict, cfg: dict, now: datetime) -> dict:
     for r in sorted(raw.get("runners", []), key=lambda r: r.get("name", "")):
         status = "offline" if r.get("status") != "online" else ("busy" if r.get("busy") else "idle")
         hist = history.get(r.get("name")) or {}
-        runner = {"name": r.get("name"), "status": status, "os": r.get("os"),
+        runner = {"name": r.get("name"), "id": r.get("id"), "status": status, "os": r.get("os"),
                   "offline_min": age_minutes(hist.get("offline_since"), now)
                   if status == "offline" else None,
                   "flips": hist.get("flips_last_hour", 0),

@@ -258,7 +258,36 @@ def stale_gate_run(gates, gate_blockers):
     return int(found.group(1)) if found else None
 
 
-def handle(api, repo, number, profile):
+BEHIND = "GitHub merge criteria are not satisfied: behind"
+# PRs opened by Claude threads carry this footer; Justin's own (Codex) branches are never
+# updated without his say-so.
+CLAUDE_FOOTER = re.compile(r"Generated (?:with|by) \[Claude Code\]")
+
+
+def update_behind(updater, repo, number, pr):
+    """Merge the base into a PR whose only blocker is being behind it.
+
+    The push must come from a token other than the workflow's GITHUB_TOKEN:
+    GitHub starts no workflows for GITHUB_TOKEN pushes, so the PR would sit
+    with no checks on its new head.
+    """
+    if not CLAUDE_FOOTER.search(pr.get("body") or ""):
+        print(f"PR {number}: behind its base; not a Claude PR, so left for its author")
+        return
+    if updater is None:
+        print(f"PR {number}: behind its base; no UPDATE_TOKEN, so the branch was not updated")
+        return
+    try:
+        updater.call(f"repos/{repo}/pulls/{number}/update-branch",
+                     {"expected_head_sha": pr["head"]["sha"]}, method="PUT")
+    except urllib.error.HTTPError as error:
+        # 422: the head moved or the update would conflict; 403: token lacks access.
+        print(f"PR {number}: could not update the branch (HTTP {error.code}); left as is")
+        return
+    print(f"PR {number}: behind its base; merged the base into the branch so checks re-run")
+
+
+def handle(api, repo, number, profile, updater=None):
     pr, blockers = snapshot(api, repo, number, profile)
     gate_blockers = list(blockers)
     if pr["state"] != "open" or pr["draft"] or pr["base"]["ref"] != profile["branch"]:
@@ -293,10 +322,19 @@ def handle(api, repo, number, profile):
     rules = api.call(f"repos/{repo}/rules/branches/{profile['branch']}")
     if not protection_ready(rules, profile):
         blockers.append("Required gate, current-base testing, PR-only merging or conversation resolution is not enforced")
+    # "unstable" only means a check GitHub doesn't require is not green. Every check that
+    # matters was read above; what is left is this sweep's own run, often "cancelled" when a
+    # newer sweep replaced it, which must not hold the PR until someone re-runs the sweep.
+    mergeable = {"clean", "unstable"}
     # Without the up-to-date rule a PR behind its base is still mergeable.
-    mergeable = {"clean"} if requires_up_to_date(profile) else {"clean", "behind"}
+    if not requires_up_to_date(profile):
+        mergeable.add("behind")
     if pr["mergeable_state"] not in mergeable:
-        blockers.append("GitHub merge criteria are not satisfied: " + pr["mergeable_state"])
+        blockers.append(BEHIND if pr["mergeable_state"] == "behind"
+                        else "GitHub merge criteria are not satisfied: " + pr["mergeable_state"])
+    if blockers == [BEHIND]:
+        update_behind(updater, repo, number, pr)
+        return
     if blockers:
         print(f"PR {number}: " + "; ".join(blockers))
         return
@@ -332,8 +370,10 @@ def main():
     profile = json.loads(Path(__file__).with_name("merge_profiles.json").read_text())[args.repo.split("/")[1]]
     api = API(os.environ["GH_TOKEN"])
     if args.mode == "merge":
+        update_token = os.environ.get("UPDATE_TOKEN")
+        updater = API(update_token) if update_token else None
         for pr in api.pages(f"repos/{args.repo}/pulls?state=open"):
-            handle(api, args.repo, pr["number"], profile)
+            handle(api, args.repo, pr["number"], profile, updater)
         return
     deadline = time.monotonic() + args.timeout
     while True:

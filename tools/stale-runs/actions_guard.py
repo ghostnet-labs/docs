@@ -70,7 +70,7 @@ def check_repo(gh, repo: str, now: datetime, grace: timedelta, stale: timedelta)
     for wf in workflows:
         if wf.get("state") != "active":
             add("workflow-off", f"workflow '{wf.get('name')}' is {wf.get('state')}",
-                workflow=wf.get("name"), state=wf.get("state"))
+                workflow=wf.get("name"), state=wf.get("state"), path=wf.get("path", ""))
 
     prs = gh.get(f"{full}/pulls?state=open&per_page=100")
     for pull in prs:
