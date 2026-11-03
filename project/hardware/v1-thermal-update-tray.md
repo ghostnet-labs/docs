@@ -29,10 +29,10 @@ Ambient is the D-028 hot endpoint, **+43.3 °C** (110 °F). The brief rounds it 
 
 | Input | Thermal plan (main) | This update | Tag |
 |---|---|---|---|
-| Radio body height | 27 mm | **50 mm** (27 + 23.0 mm tray, D-048) | Calculated from Verified D-048 text. The floorplan already needs more than 26.66 mm above the PCB ([v1-bridge-selection.md](v1-bridge-selection.md) record conflict 6). A 66 mm body is run as a sensitivity case. |
+| Radio body height | 27 mm | **50 mm** (27 + 23.0 mm tray, D-048) | Calculated from Verified D-048 text. The floorplan already needs more than 26.66 mm above the PCB ([v1-bridge-selection.md](v1-bridge-selection.md) record conflict 1). A 66 mm body is run as a sensitivity case. |
 | Shedding area (top plus four sides; the pack covers the bottom) | 0.0107 + 0.0118 = 0.0226 m² | 0.0107 + 0.0219 = **0.0326 m²** | Calculated |
 | Wi-Fi card | 8 W typical, 10 W peak | **10 W sustained** worst case | Verified: AsiaRF S3 page, "10W maximum, 8W average" ([v1-gpio-and-m2-audit.md](v1-gpio-and-m2-audit.md) §2.1). Sustained 10 W is a bounding assumption. |
-| LTC3350 stage | not in the model | Top side, board X 55 to 85, Y 1.5 to 23 (D-047). Losses in §2. | Verified placement; losses Calculated |
+| LTC3350 stage | not in the model | Top side, board X 119.5 to 136.5, Y 36 to 60, beside the Wi-Fi card (firmware #71, docs #119; moved from X 55 to 85, Y 1.5 to 23, which is no longer free). Losses in §2. | Placement is a V1 working default (assumption); losses Calculated |
 | Supercaps | not in the model | 6 × SCCV60B107SRB in the tray, cells Z −24.1 to −5.1 | Verified (v1-bridge-selection.md §3.2) |
 | Finned lid (D-035) | "roughly doubles heat shedding", not modelled | Modelled as a fixed added conductance equal to the old flat-body value: +0.271 W/K (planning) or +0.384 W/K (good) | Unverified. It is the decision card's estimate, held constant. Fin geometry is still open under [GHO-7](https://linear.app/ghostnet-labs/issue/GHO-7). |
 
@@ -93,7 +93,7 @@ Primary column: 50 mm body, finned lid, planning h, 18.5 W. All values Calculate
 | LM76005 3.3 V buck die (not asked; see §4) | 125 °C | 120 to 131 (1.47 W × 29.6 °C/W JEDEC over 77 to 87 °C air) | **+5 to −6 K** | 112 to 122 | 147 to 157 (2.0 W) | **−22 to −32 K** |
 | Battery pack top cell (upper bound = case) | Charge 0 to 45 °C; discharge to 60 °C (Unverified); BQ7721602 secondary OT 70 °C blows the pack fuse | ≤ 72.0 | **Charge: fails at any pack temperature above 45 °C.** Discharge and OT: open, set by the pack interface (§5) | ≤ 63.7 | ≤ 82.7 | — |
 
-LTC3350 local board temperature is taken as case + 15 to 25 K, because the stage overlaps the bottom-side buck island at board X 55 to 66 (Unverified). Junction adds the +9.4 K of v1-bridge-selection.md §2.3, which assumes full switching, so it is conservative in standby.
+LTC3350 local board temperature is still taken as case + 15 to 25 K, but for a new reason. The stage no longer overlaps the bottom-side buck island. It now sits 1.5 mm east of the Wi-Fi card (X 88 to 118), which runs 10 W and is the hottest part on the board, under the same lid. The board there is warmed by the card's edge and by the stage's own charge-mode loss, so the buck-island figure is kept rather than lowered (Unverified; T2 must image this corner). The junction and inductor rows are unchanged: the stage passes with the same margins, and no conclusion in this file changes. Its 6.5 mm height must also clear the lid-to-board gap under the finned lid (GHO-7). Junction adds the +9.4 K of v1-bridge-selection.md §2.3, which assumes full switching, so it is conservative in standby.
 
 **Old geometry for comparison** (27 mm, finned, planning h, 18.5 W): case 77.5, CM5 88.7, Wi-Fi 102.5 °C. The tray buys 5.5 K on every part tied to the case. With a flat lid the gain would be 18.8 K (111.6 → 92.8 °C case).
 
@@ -182,7 +182,7 @@ The brief names T8 to T11. In [v1-thermal-rf-plan.md](v1-thermal-rf-plan.md) §4
 
 | Test | Relevance to this update |
 |---|---|
-| T8 spectrum scan | The LTC3350 is a new 490 to 510 kHz switcher. Harmonic 3151 of 500 kHz is 1575.5 MHz. The stage switches only while charging or in backup, so T8 must run it in charge mode (after a swap). |
+| T8 spectrum scan | The LTC3350 is a new 490 to 510 kHz switcher. Harmonic 3151 of 500 kHz is 1575.5 MHz. The stage switches only while charging or in backup, so T8 must run it in charge mode (after a swap). The stage now sits 15.0 mm from the GNSS block (was 35.5 mm), the minimum the rule allows, so T8 and C7 must scan this source first and with the shield lid on and off. |
 | T9 desense | Repeat the all-on case during a bridge recharge. |
 | T10 TTFF under load | No change. |
 | T11 antenna isolation | No change; the tray does not move the antennas. |

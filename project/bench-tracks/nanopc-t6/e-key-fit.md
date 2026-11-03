@@ -20,7 +20,7 @@ The same envelope over FriendlyElec's photo of the underside:
 |---|---|---|---|
 | The only E-key standoff is at the 30 mm point | (74.3, 42.8), SMTSO-M3-2.5ET, 2.5 mm tall | The card passes over it; there is no screw point at 52 mm | Verified from DXF and schematic |
 | No standoff or hole at the 52 mm point | (52.3, 42.8) lands in the RK3588 decoupling capacitor field | The free end is unsupported and sits over live parts | Verified from DXF |
-| Heatsink mounting hole inside the envelope | (66.01, 32.11) | A heatsink screw head on this side would press into the card | Verified from DXF; the screw head height depends on the heatsink fitted |
+| Heatsink mounting hole inside the envelope | (66.01, 32.11) | The heatsink screws go in from the top, so the screw tip (and any nut) comes through on this side, under the card | Verified from DXF; how far the tip protrudes depends on the heatsink screw length |
 | RK860 buck inductor L2303 | about (65.6 to 69.9, 42.3 to 46.3), WPN4020HR22MT, 4 x 4 x 2.0 mm | 2.0 mm tall under a card that sits about 2.5 mm off the board: about 0.5 mm clearance at the inductor, before card-side components | Verified part and footprint; clearance is **Unverified** (calculated) |
 | 2280 NVMe slot | The NVMe card's edge reaches y = 29.1 | Overlaps the 3052 envelope (y 27.8 to 57.8). A 3052 Wi-Fi card and a 2280 SSD cannot both be fitted | Verified from DXF |
 | Rail and signals | MP2143 3.3 V / 3 A buck, PCIe 2.1 x1 on `pcie2x1l1`, USB 2.0 from the on-board hub, PERST on GPIO4_A2, W_DISABLE on GPIO4_B5 with a 10K pull-up | Electrically the slot serves a 3052 card exactly like a 2230 one | Verified from schematic p.30 |
@@ -37,7 +37,7 @@ The same envelope over FriendlyElec's photo of the underside:
 2. **No 2280 SSD** in the M-key slot.
 3. **Kapton tape** over the board area under the card, from x = 52 to x = 74.
 4. **Hold the free end** with a non-conductive spacer: a 2.5 mm nylon standoff glued to the Kapton is enough on the bench. Do not drill the board.
-5. **Do not fit a heatsink screw at (66, 32)** on the underside, or use a low-profile nylon screw.
+5. **Check the heatsink screw tip at (66, 32).** The screw goes in from the top; make sure its tip does not protrude under the card, or use a shorter or nylon screw.
 6. **Keep TX power capped** until bring-up step 10 has passed ([bring-up.md](bring-up.md)).
 
 ## 5. Alternatives if the fit fails

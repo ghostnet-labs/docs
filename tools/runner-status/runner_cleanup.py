@@ -43,6 +43,7 @@ import os
 import platform
 import plistlib
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -513,8 +514,40 @@ def vm_script(apply: bool, work_days: int, log_days: int, actions_days: int = AC
     CAND <kb> <kind> <path> | REFUSE <path> | ERROR <path> | NOTE <text> | DONE.
     The literal process names are split so ps never matches this script."""
     wd, ld, ad = int(work_days), int(log_days), int(actions_days)
-    remove_link = '    rm -f -- "$p" || echo "ERROR $p"\n' if apply else ""
-    remove_tree = '  rm -rf --one-file-system -- "$p" || echo "ERROR $p"\n' if apply else ""
+    rm_link = '  rm -f -- "$p" || echo "ERROR $q"\n' if apply else "  :\n"
+    rm_tree = '  rm -rf --one-file-system -- "$r" || echo "ERROR $q"\n' if apply else "  :\n"
+    # Per-item worker, run as `sh -c ACT sh <kind> <fresh-days> <path>` once per
+    # NUL-delimited find result, so a newline in a filename can never split into
+    # extra paths. Every path is resolved with readlink -f and must lie under the
+    # runner's _work or _diag directory before it is touched; the resolved path,
+    # not the raw one, is what gets removed. No single quotes: it is quoted below.
+    act_src = (
+        'kind=$1; days=$2; p=$3\n'
+        'q=$(printf %s "$p" | tr "\\n" "?")\n'
+        'if [ "$days" -gt 0 ] && [ -n "$(find "$p" -maxdepth 1 -mtime -"$days" -print 2>/dev/null | head -n 1)" ]; then exit 0; fi\n'
+        'if [ -L "$p" ]; then\n'
+        '  pd=$(readlink -f -- "$(dirname -- "$p")") || { echo "REFUSE $q"; exit 0; }\n'
+        '  case "$pd" in\n'
+        '    "$W"|"$W"/*|"$G"|"$G"/*) ;;\n'
+        '    *) echo "REFUSE $q"; exit 0;;\n'
+        '  esac\n'
+        '  echo "CAND 0 $kind $q"\n'
+        + rm_link +
+        '  exit 0\n'
+        'fi\n'
+        'r=$(readlink -f -- "$p"; echo x) || { echo "REFUSE $q"; exit 0; }\n'
+        'r=${r%x}; r=${r%?}\n'
+        'if [ "$r" = "" ] || [ ! -e "$r" ]; then echo "REFUSE $q"; exit 0; fi\n'
+        'case "$r" in\n'
+        '  "$W"/_tool|"$W"/_tool/*|"$W"/_temp|"$W"/_actions|"$W"/_PipelineMapping) echo "REFUSE $q"; exit 0;;\n'
+        '  "$W"/?*|"$G"/?*) ;;\n'
+        '  *) echo "REFUSE $q"; exit 0;;\n'
+        'esac\n'
+        'kb=$(du -sxk -- "$r" 2>/dev/null | cut -f1)\n'
+        'echo "CAND ${kb:-0} $kind $q"\n'
+        + rm_tree
+    )
+    walk = 'xargs -0 -r -n1 sh -c "$ACT" sh'
     lines = [
         "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "RW=Runner; RW=\"$RW.Worker\"",
@@ -524,47 +557,27 @@ def vm_script(apply: bool, work_days: int, log_days: int, actions_days: int = AC
         '  cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null) || continue',
         '  case "$cwd" in */_work/*) echo "SKIPVM make running in $cwd"; exit 0;; esac',
         "done",
-        'fresh() { [ -n "$(find "$1" -maxdepth 1 -mtime -"$2" -print 2>/dev/null | head -n 1)" ]; }',
-        "act() {",
-        '  kind=$1; p=$2',
-        '  if [ -L "$p" ]; then',
-        '    echo "CAND 0 $kind $p"',
-        remove_link.rstrip("\n") if remove_link else "    :",
-        "    return",
-        "  fi",
-        '  r=$(readlink -f -- "$p") || { echo "REFUSE $p"; return; }',
-        '  case "$r" in',
-        '    "$W"/_tool|"$W"/_tool/*|"$W"/_temp|"$W"/_actions|"$W"/_PipelineMapping) echo "REFUSE $p"; return;;',
-        '    "$W"/?*|"$G"/?*) ;;',
-        '    *) echo "REFUSE $p"; return;;',
-        "  esac",
-        '  kb=$(du -sxk -- "$p" 2>/dev/null | cut -f1)',
-        '  echo "CAND ${kb:-0} $kind $p"',
-        remove_tree.rstrip("\n") if remove_tree else "  :",
-        "}",
+        "ACT=" + shlex.quote(act_src),
         "find / -xdev -maxdepth 4 -name .runner -type f 2>/dev/null | while IFS= read -r f; do",
         '  d=$(dirname -- "$f")',
+        '  [ -f "$d/.runner" ] || continue',
         '  case "$PS" in *"$d/_work/"*) echo "SKIP $d busy"; continue;; esac',
         '  echo "RUNNER $d"',
         '  W=$(readlink -f -- "$d/_work" 2>/dev/null || echo "$d/_work")',
         '  G=$(readlink -f -- "$d/_diag" 2>/dev/null || echo "$d/_diag")',
+        "  export W G",
         '  if [ -d "$d/_work/_temp" ]; then',
-        '    find "$d/_work/_temp" -mindepth 1 -maxdepth 1 -print | while IFS= read -r c; do act temp "$c"; done',
+        f'    find "$d/_work/_temp" -mindepth 1 -maxdepth 1 -print0 | {walk} temp 0',
         "  fi",
         '  if [ -d "$d/_work" ]; then',
         f'    find "$d/_work" -mindepth 1 -maxdepth 1 -type d ! -name _tool ! -name _actions ! -name _temp '
-        f'! -name _PipelineMapping -mtime +{wd} -print | while IFS= read -r c; do',
-        f'      fresh "$c" {wd + 1} || act checkout "$c"',
-        "    done",
+        f'! -name _PipelineMapping -mtime +{wd} -print0 | {walk} checkout {wd + 1}',
         "  fi",
         '  if [ -d "$d/_work/_actions" ]; then',
-        f'    find "$d/_work/_actions" -mindepth 1 -maxdepth 1 -mtime +{ad} -print | while IFS= read -r c; do',
-        f'      fresh "$c" {ad + 1} || act actions "$c"',
-        "    done",
+        f'    find "$d/_work/_actions" -mindepth 1 -maxdepth 1 -mtime +{ad} -print0 | {walk} actions {ad + 1}',
         "  fi",
         '  if [ -d "$d/_diag" ]; then',
-        f'    find "$d/_diag" -mindepth 1 -maxdepth 1 -type f -name \'*.log\' -mtime +{ld} -print '
-        '| while IFS= read -r c; do act diag-log "$c"; done',
+        f'    find "$d/_diag" -mindepth 1 -maxdepth 1 -type f -name \'*.log\' -mtime +{ld} -print0 | {walk} diag-log 0',
         "  fi",
         "done",
     ]

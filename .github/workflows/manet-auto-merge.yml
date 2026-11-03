@@ -7,10 +7,11 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled, edited]
   pull_request_review:
     types: [submitted, dismissed]
-  # Hourly fallback for dependencies and resolved conversations that have no
-  # local CI event; check results and reviews above trigger it right away.
+  # Low-frequency fallback for dependencies and resolved conversations that
+  # have no local CI event; check results and reviews above trigger it right
+  # away, so this only catches what no event announces.
   schedule:
-    - cron: '3 * * * *'
+    - cron: '3 */6 * * *'
   workflow_dispatch:
 permissions:
   contents: write
@@ -25,13 +26,19 @@ concurrency:
 jobs:
   merge:
     name: Handle passing PRs
+    # Same-repo and non-PR events use the self-hosted Linux ARM64 pool. Fork
+    # PRs (pull_request_target) stay on hosted runners. This job only runs the
+    # pinned policy script from the base repo and calls the API; it must never
+    # check out or execute PR-head code.
+    # Hosted on purpose: this job holds a write token, so it must not share a persistent
+    # self-hosted runner with jobs that run PR code. Revisit with dedicated JIT runners.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           repository: ghostnet-labs/docs
-          ref: 68563cbe2dec67b2c94780f75eda8f7b0bcf38ae
+          ref: 70153dca0a01be5c03958558e9d007800bd1fda8
           persist-credentials: false
       - name: Merge only eligible, protected PRs
         env:

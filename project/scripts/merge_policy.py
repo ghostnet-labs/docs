@@ -2,17 +2,28 @@
 """Fail-closed Manet CI gate and protected auto-merge, using only GitHub metadata."""
 import argparse
 import base64
+import http.client
 import json
 import os
 from pathlib import Path
 import re
 import time
+import urllib.error
 import urllib.request
 
 GATE = "Manet merge gate"
 AUTOMATION = "Handle passing PRs"
+MAX_GATE_ATTEMPTS = 3
 # Adds labels only and runs from the base branch, so it is not a test to wait on.
 LABELER = "Pull Request Labeler"
+# Cross-repo audit of default branches. A workflow_dispatch on a PR branch
+# attaches it to that head SHA, but it does not test the PR's diff.
+AUDIT = "Audit runner policy"
+# Firmware workflows and jobs that build only when a ci:kernel:* or ci:target:* label
+# is added. Every other label event (hold, for one) skips them. A skipped run tested
+# nothing, so it is ignored rather than passed: an earlier real run still decides.
+LABEL_WORKFLOWS = {".github/workflows/label-kernel.yml", ".github/workflows/label-target.yml"}
+LABEL_BUILDS = {"Build all affected Kernels from defined label", "Build target from defined label"}
 
 
 def matches(path, pattern):
@@ -57,6 +68,8 @@ def evaluate(profile, files, runs, sha, number):
         path = run["path"].split("@")[0]
         if path.endswith("manet-merge-gate.yml"):
             continue
+        if path in LABEL_WORKFLOWS and run["status"] == "completed" and run["conclusion"] == "skipped":
+            continue
         previous = latest.get(path)
         if previous is None or (run["id"], run.get("run_attempt", 1)) > (previous["id"], previous.get("run_attempt", 1)):
             latest[path] = run
@@ -72,6 +85,18 @@ def evaluate(profile, files, runs, sha, number):
     return blockers
 
 
+READ_ATTEMPTS = 5
+RETRY_BASE_DELAY = 2
+TRANSIENT_ERRORS = (urllib.error.URLError, http.client.HTTPException, ConnectionError, TimeoutError)
+
+
+def _transient(error):
+    """Connection drops, short reads and timeouts, plus GitHub 5xx/429 responses."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code == 429 or error.code >= 500
+    return True
+
+
 class API:
     def __init__(self, token):
         self.token = token
@@ -82,8 +107,17 @@ class API:
             method=method, headers={"Authorization": "Bearer " + self.token,
             "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28",
             "Content-Type": "application/json"})
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return json.load(response)
+        # Only reads are retried: replaying a write after a dropped connection could act twice.
+        attempts = READ_ATTEMPTS if request.get_method() == "GET" else 1
+        for attempt in range(1, attempts + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    body = response.read()
+                return json.loads(body) if body else {}
+            except TRANSIENT_ERRORS as error:
+                if attempt == attempts or not _transient(error):
+                    raise
+                time.sleep(RETRY_BASE_DELAY * 2 ** (attempt - 1))
 
     def pages(self, path, key=None):
         results = []
@@ -175,7 +209,9 @@ def reviews_clear(reviews):
 def check_blockers(checks):
     latest = {}
     for check in checks:
-        if check["name"] in {GATE, AUTOMATION, LABELER}:
+        if check["name"] in {GATE, AUTOMATION, LABELER, AUDIT}:
+            continue
+        if check["name"] in LABEL_BUILDS and check["status"] == "completed" and check["conclusion"] == "skipped":
             continue
         key = (check["name"], check["app"]["id"])
         if key not in latest or check["id"] > latest[key]["id"]:
@@ -197,8 +233,24 @@ def protection_ready(rules):
             for c in r["parameters"]["required_status_checks"]) for r in checks)
 
 
+def stale_gate_run(gates, gate_blockers):
+    """Return the run id of a finished, unsuccessful gate whose own blockers have cleared.
+
+    A gate can only poll for one hosted-runner job (6 hours), so a longer build
+    outlives it. Re-running it makes the gate re-check the current head in full.
+    """
+    if gate_blockers or not gates:
+        return None
+    gate = max(gates, key=lambda c: c["id"])
+    if gate["status"] != "completed" or gate["conclusion"] == "success":
+        return None
+    found = re.search(r"/actions/runs/(\d+)/", gate.get("details_url") or "")
+    return int(found.group(1)) if found else None
+
+
 def handle(api, repo, number, profile):
     pr, blockers = snapshot(api, repo, number, profile)
+    gate_blockers = list(blockers)
     if pr["state"] != "open" or pr["draft"] or pr["base"]["ref"] != profile["branch"]:
         return
     if pr["head"]["repo"]["full_name"] != repo:
@@ -215,6 +267,14 @@ def handle(api, repo, number, profile):
     gates = [c for c in checks if c["name"] == GATE and c["app"]["id"] == 15368]
     if not gates or max(gates, key=lambda c: c["id"])["conclusion"] != "success":
         blockers.append("Current-head Manet merge gate has not passed")
+        run_id = stale_gate_run(gates, gate_blockers)
+        # Cap re-runs so a gate that fails for some other reason cannot loop.
+        if run_id and api.call(f"repos/{repo}/actions/runs/{run_id}").get("run_attempt", 1) < MAX_GATE_ATTEMPTS:
+            try:
+                api.call(f"repos/{repo}/actions/runs/{run_id}/rerun", {}, method="POST")
+                print(f"PR {number}: applicable workflows now pass; re-running gate run {run_id}")
+            except urllib.error.HTTPError as error:
+                print(f"PR {number}: could not re-run gate run {run_id}: HTTP {error.code}")
     status = api.call(f"repos/{repo}/commits/{pr['head']['sha']}/status")
     if status["statuses"] and status["state"] != "success":
         blockers.append("Commit status has not passed")
@@ -228,8 +288,16 @@ def handle(api, repo, number, profile):
     if blockers:
         print(f"PR {number}: " + "; ".join(blockers))
         return
-    result = api.call(f"repos/{repo}/pulls/{number}/merge", {
-        "sha": pr["head"]["sha"], "merge_method": "merge"}, method="PUT")
+    try:
+        result = api.call(f"repos/{repo}/pulls/{number}/merge", {
+            "sha": pr["head"]["sha"], "merge_method": "merge"}, method="PUT")
+    except urllib.error.HTTPError as error:
+        # 405: GitHub refused the merge (a rule still blocks it); 409: the head
+        # moved. Leave the PR open and carry on with the other PRs.
+        if error.code not in (405, 409):
+            raise
+        print(f"PR {number}: GitHub refused the merge (HTTP {error.code}); left open")
+        return
     if not result.get("merged"):
         raise RuntimeError("GitHub did not merge the validated PR")
     print(f"PR {number} merged as {result['sha']}")
