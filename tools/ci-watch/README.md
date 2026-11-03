@@ -23,6 +23,18 @@ or writing.
 | Itself | GitHub unreadable three runs in a row | crit |
 | News | a PR opened, merged, closed, or no longer red | info |
 | Branches (hourly) | lists branches already in the default branch that no open PR uses; never deletes | report only |
+| Upstream drift (every 6 h, `--upstream-hours`) | an OpenMANET fork is behind its upstream branch; the firmware's OpenWrt base (`.openwrt-upstream`) is behind `openwrt-24.10`, or that file is missing; a firmware feed pin (openwrt packages, routing, telephony, OpenMANET luci, our packages) is behind its branch | warn |
+
+Upstream drift compares each fork with its upstream: `firmware` and
+`packages` with OpenMANET `24.10`, `luci` with `mm-23.05`, `openmanetd`,
+`OpenVLM` and `protobufs` with `main`. `docs` is left out because its history
+was rewritten and has nothing in common with OpenMANET's. `setup` is not a
+fork. The report's "Upstream drift" table lists every comparison with a link
+to the commits. A drift warning stays open until someone opens the sync PR and
+it merges. The script only reports drift; it never opens a sync PR, because
+merging upstream changes needs a person to resolve conflicts. The scan costs
+about 15 API calls. If it fails, the report keeps the previous scan's results
+and the failure does not count as a GitHub outage.
 
 Each problem alerts once when it appears and once when it clears. A repo that
 could not be read keeps its last state, so a network blip never looks like a
@@ -55,6 +67,8 @@ Make one fine-grained token for it (the Studio has no other GitHub token):
 1. Open <https://github.com/settings/personal-access-tokens/new>.
 2. Name `ci-watch`, expiration 1 year, **Resource owner: ghostnet-labs**,
    **All repositories**.
+   Fine-grained tokens can always read public repositories, so the upstream
+   checks of OpenMANET and openwrt need nothing extra.
 3. Repository permissions, all **Read-only**: Actions, Checks, Commit
    statuses, Contents, Pull requests. Plus **Issues: Read and write**, so it
    can keep setup #87 up to date.

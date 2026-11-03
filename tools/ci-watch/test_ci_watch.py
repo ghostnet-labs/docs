@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import plistlib
 import sys
@@ -76,6 +77,7 @@ def args(**kw) -> argparse.Namespace:
     a = cw.parse_args([])
     a.repos = "luci"
     a.branch_hours = 0
+    a.upstream_hours = 0
     for k, v in kw.items():
         setattr(a, k, v)
     return a
@@ -364,6 +366,116 @@ class MainTest(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertIn("green, auto-merge on", Path(d, "report.md").read_text())
             self.assertTrue(json.loads(Path(d, "state.json").read_text())["initialized"])
+
+
+FEEDS = """src-git openmanet https://github.com/ghostnet-labs/packages.git^6b4cf56f1e2e92495ff6288e8af6e306d4edb7c9
+src-git morse https://github.com/MorseMicro/morse-feed.git^fc332b01aa2df952e057efe73763de3ff71cb3b0
+src-git packages https://github.com/openwrt/packages.git^953b6d47b4e9f0ad3c39547c6d3f9a828f10e206
+src-git luci https://github.com/OpenMANET/luci.git^53e65158f7075109d140f8943b4a1f0eb6d84339
+"""
+OWRT = "34fa4b1af5a30d3a789f07078b91e23e78dad622"
+
+
+def b64(text: str) -> dict:
+    return {"content": base64.b64encode(text.encode()).decode()}
+
+
+def fork_cmp(repo: str, branch: str, behind: int) -> dict:
+    return {f"/repos/ghostnet-labs/{repo}/compare/{branch}...OpenMANET:{repo}:{branch}?per_page=1": {"ahead_by": behind}}
+
+
+def firmware_routes(fork_behind=1, marker=True, base_behind=0, packages_behind=500, luci_behind=0,
+                    own_behind=3) -> dict:
+    fw = "/repos/ghostnet-labs/firmware"
+    r = fork_cmp("firmware", "24.10", fork_behind)
+    r[f"{fw}/contents/feeds.conf.default?ref=24.10"] = b64(FEEDS)
+    if marker:
+        r[f"{fw}/contents/.openwrt-upstream?ref=24.10"] = b64(f"{OWRT} openwrt-24.10 r29306-34fa4b1af5\n")
+        r[f"/repos/openwrt/openwrt/compare/{OWRT}...openwrt-24.10?per_page=1"] = {"ahead_by": base_behind}
+    r["/repos/openwrt/openwrt/tags?per_page=100"] = [
+        {"name": "v24.10.8"}, {"name": "v24.10.10"}, {"name": "v23.05.6"}, {"name": "v24.10.9-rc1"}]
+    r["/repos/openwrt/packages/compare/953b6d47b4e9f0ad3c39547c6d3f9a828f10e206...openwrt-24.10?per_page=1"] = {
+        "ahead_by": packages_behind}
+    r["/repos/OpenMANET/luci/compare/53e65158f7075109d140f8943b4a1f0eb6d84339...mm-23.05?per_page=1"] = {
+        "ahead_by": luci_behind}
+    r["/repos/ghostnet-labs/packages/compare/6b4cf56f1e2e92495ff6288e8af6e306d4edb7c9...24.10?per_page=1"] = {
+        "ahead_by": own_behind}
+    return r
+
+
+class UpstreamTest(unittest.TestCase):
+    def test_fork_behind_warns_with_count_and_compare_link(self):
+        rows, found = cw.upstream_drift(FakeGitHub(fork_cmp("openmanetd", "main", 4)), ["openmanetd"])
+        self.assertEqual(rows[0]["behind"], 4)
+        item = found["upstream:openmanetd"]
+        self.assertEqual(item["level"], "warn")
+        self.assertIn("4 commits behind OpenMANET/openmanetd main", item["text"])
+        self.assertEqual(item["url"], "https://github.com/ghostnet-labs/openmanetd/compare/main...OpenMANET:openmanetd:main")
+
+    def test_fork_in_sync_is_a_row_not_a_finding(self):
+        rows, found = cw.upstream_drift(FakeGitHub(fork_cmp("luci", "mm-23.05", 0)), ["luci"])
+        self.assertEqual(rows[0]["behind"], 0)
+        self.assertEqual(found, {})
+
+    def test_docs_and_setup_are_not_compared(self):
+        rows, found = cw.upstream_drift(FakeGitHub({}), ["docs", "setup"])
+        self.assertEqual((rows, found), ([], {}))
+
+    def test_firmware_base_and_feed_pins(self):
+        rows, found = cw.upstream_drift(FakeGitHub(firmware_routes(base_behind=12)), ["firmware"])
+        self.assertIn("upstream:firmware", found)
+        base = found["upstream:openwrt-base"]
+        self.assertIn("12 commits behind openwrt/openwrt openwrt-24.10", base["text"])
+        self.assertIn("latest release v24.10.10", base["text"])
+        self.assertIn("500 commits behind openwrt/packages openwrt-24.10", found["upstream:feed:packages"]["text"])
+        self.assertIn("3 commits behind ghostnet-labs/packages 24.10", found["upstream:feed:openmanet"]["text"])
+        self.assertNotIn("upstream:feed:luci", found)  # in sync
+        self.assertNotIn("upstream:feed:morse", found)  # vendor feed, no branch to follow
+        self.assertEqual(len(rows), 5)  # fork, base, three tracked feeds
+
+    def test_missing_marker_warns_base_unknown(self):
+        _, found = cw.upstream_drift(FakeGitHub(firmware_routes(marker=False)), ["firmware"])
+        self.assertIn("base is unknown", found["upstream:openwrt-base"]["text"])
+
+    def test_scan_on_interval_and_findings_carry_over(self):
+        routes = repo_routes()
+        routes.update(fork_cmp("luci", "mm-23.05", 2))
+        gh = FakeGitHub(routes)
+        state, report, _ = cw.run_once(gh, args(upstream_hours=6), NOW, {})
+        self.assertIn("upstream:luci", state["active"])
+        self.assertIn("## Upstream drift", report)
+        self.assertIn("[2](https://github.com/ghostnet-labs/luci/compare/", report)
+        # An hour later the compare is not repeated, and the finding neither clears nor re-alerts.
+        del routes["/repos/ghostnet-labs/luci/compare/mm-23.05...OpenMANET:luci:mm-23.05?per_page=1"]
+        state2, _, batch2 = cw.run_once(gh, args(upstream_hours=6), NOW + timedelta(hours=1), state)
+        self.assertIn("upstream:luci", state2["active"])
+        self.assertEqual([i["key"] for i in batch2["new"] + batch2["cleared"]], [])
+
+    def test_sync_clears_the_finding(self):
+        routes = repo_routes()
+        routes.update(fork_cmp("luci", "mm-23.05", 2))
+        gh = FakeGitHub(routes)
+        state, _, _ = cw.run_once(gh, args(upstream_hours=6), NOW, {})
+        routes.update(fork_cmp("luci", "mm-23.05", 0))
+        _, _, batch = cw.run_once(gh, args(upstream_hours=6), NOW + timedelta(hours=7), state)
+        self.assertEqual([i["key"] for i in batch["cleared"]], ["upstream:luci"])
+
+    def test_failed_scan_keeps_findings_and_is_not_a_github_outage(self):
+        routes = repo_routes()
+        routes.update(fork_cmp("luci", "mm-23.05", 2))
+        gh = FakeGitHub(routes)
+        state, _, _ = cw.run_once(gh, args(upstream_hours=6), NOW, {})
+        del routes["/repos/ghostnet-labs/luci/compare/mm-23.05...OpenMANET:luci:mm-23.05?per_page=1"]
+        state2, report, batch = cw.run_once(gh, args(upstream_hours=6), NOW + timedelta(hours=7), state)
+        self.assertIn("upstream:luci", state2["active"])
+        self.assertEqual(batch["cleared"], [])
+        self.assertEqual(state2["error_runs"], 0)
+        self.assertIn("Last scan failed", report)
+
+    def test_off_means_no_section_and_no_calls(self):
+        state, report, _ = cw.run_once(FakeGitHub(repo_routes()), args(upstream_hours=0), NOW, {})
+        self.assertNotIn("Upstream drift", report)
+        self.assertEqual(state["upstream"], {})
 
 
 if __name__ == "__main__":
