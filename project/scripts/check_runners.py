@@ -35,8 +35,9 @@ runs. Each rule names a failure that already happened once:
                       fromJSON('["self-hosted", ...]') || 'ubuntu-latest' }}`
                     Reusable (workflow_call) workflows run with their caller's
                     event, so their self-hosted jobs need a guard as well.
-                    The exact ARC routes ARC_PR_ONLY_FALLBACK and
-                    ARC_FORK_FALLBACK below pass the same way. The event forms
+                    The exact ARC routes from arc_pr_only_fallback() and
+                    arc_fork_fallback() below, for each name in
+                    ARC_RUNNER_LABELS, pass the same way. The event forms
                     let push runs use self-hosted runners, so they pass only when
                     every trigger is pull_request, push, schedule,
                     workflow_dispatch or merge_group.
@@ -67,20 +68,31 @@ RULES = ("hosted-runner", "pr-concurrency", "hosted-cron", "pinned-reusable", "j
 PR_EVENTS = ("pull_request", "pull_request_target")
 SHA_RE = re.compile(r"@[0-9a-f]{40}$")
 # ARC scale sets route by their exact name rather than the self-hosted label.
-ARC_RUNNER_LABELS = frozenset({"ghostnet-linux-arm64"})
-# Only this reviewed expression sends trusted events to ARC and forks to hosted.
-ARC_FORK_FALLBACK = (
-    "${{ (github.event_name != 'pull_request' || "
-    "github.event.pull_request.head.repo.full_name == github.repository) "
-    "&& 'ghostnet-linux-arm64' || 'ubuntu-latest' }}"
-)
+# ghostnet-linux-arm64 is the standard pool (2 GiB pods); ghostnet-linux-arm64-large
+# holds one 4 GiB pod at a time for openmanetd's Go CodeQL analysis.
+ARC_RUNNER_LABELS = frozenset({"ghostnet-linux-arm64", "ghostnet-linux-arm64-large"})
 
-# Publishing/deletion jobs can keep their secrets on hosted runners.
-ARC_PR_ONLY_FALLBACK = (
-    "${{ github.event_name == 'pull_request' && "
-    "github.event.pull_request.head.repo.full_name == github.repository "
-    "&& 'ghostnet-linux-arm64' || 'ubuntu-latest' }}"
-)
+
+def arc_fork_fallback(label: str) -> str:
+    """The reviewed route that sends trusted events to ARC pool `label` and forks to hosted."""
+    return ("${{ (github.event_name != 'pull_request' || "
+            "github.event.pull_request.head.repo.full_name == github.repository) "
+            f"&& '{label}' || 'ubuntu-latest' }}}}")
+
+
+def arc_pr_only_fallback(label: str) -> str:
+    """The reviewed route that sends only same-repo pull requests to ARC pool `label`.
+
+    Publishing/deletion jobs can keep their secrets on hosted runners.
+    """
+    return ("${{ github.event_name == 'pull_request' && "
+            "github.event.pull_request.head.repo.full_name == github.repository "
+            f"&& '{label}' || 'ubuntu-latest' }}}}")
+
+
+# The standard pool's routes, kept as names for existing callers and tests.
+ARC_FORK_FALLBACK = arc_fork_fallback("ghostnet-linux-arm64")
+ARC_PR_ONLY_FALLBACK = arc_pr_only_fallback("ghostnet-linux-arm64")
 
 
 @dataclass(frozen=True)
@@ -119,6 +131,18 @@ def _expression_tokens(value: str) -> str:
                   lambda match: match[0] if match[0].startswith("'") else "", value)
 
 
+def _arc_route_tokens(builder) -> frozenset:
+    return frozenset(_expression_tokens(builder(label)) for label in ARC_RUNNER_LABELS)
+
+
+def is_arc_fork_fallback(runs_on) -> bool:
+    return isinstance(runs_on, str) and _expression_tokens(runs_on) in _arc_route_tokens(arc_fork_fallback)
+
+
+def is_arc_pr_only_fallback(runs_on) -> bool:
+    return isinstance(runs_on, str) and _expression_tokens(runs_on) in _arc_route_tokens(arc_pr_only_fallback)
+
+
 def is_self_hosted(runs_on) -> bool:
     """True when the job can run on a self-hosted runner.
 
@@ -130,9 +154,7 @@ def is_self_hosted(runs_on) -> bool:
     """
     if "self-hosted" in _runs_on_text(runs_on):
         return True
-    if isinstance(runs_on, str) and _expression_tokens(runs_on) in {
-        _expression_tokens(ARC_FORK_FALLBACK), _expression_tokens(ARC_PR_ONLY_FALLBACK)
-    }:
+    if is_arc_fork_fallback(runs_on) or is_arc_pr_only_fallback(runs_on):
         return True
     labels = runs_on.get("labels") if isinstance(runs_on, dict) else runs_on
     if isinstance(labels, str):
@@ -167,15 +189,25 @@ SAFE_FOR_EVENT_GUARD = frozenset({"pull_request", "push", "schedule", "workflow_
 
 def _guard_picks_self_hosted(m: "re.Match[str]") -> bool:
     sel = m.group("sel") or m.group("lit") or ""
-    return "self-hosted" in sel or any(label in sel for label in ARC_RUNNER_LABELS)
+    if "self-hosted" in sel:
+        return True
+    # ARC names must match exactly: 'ghostnet-linux-arm64-largeX' is not a pool.
+    if m.group("lit") is not None:
+        return sel in ARC_RUNNER_LABELS
+    try:
+        labels = json.loads(sel)
+    except ValueError:
+        return False
+    labels = labels if isinstance(labels, list) else [labels]
+    return any(isinstance(label, str) and label in ARC_RUNNER_LABELS for label in labels)
 
 
 def has_fork_guard(runs_on, allow_event_form: bool = True) -> bool:
     """True when runs-on is a recognised fork guard.
 
     Only the exact forms in _GUARD_PLAIN, _GUARD_PR_ONLY and _GUARD_EVENT pass,
-    plus the reviewed ARC routes (ARC_PR_ONLY_FALLBACK always, ARC_FORK_FALLBACK
-    like the event form). Anything else, such as an inverted `!=` or a stray
+    plus the reviewed ARC routes for each ARC_RUNNER_LABELS name (the PR-only
+    route always, the fork-fallback route like the event form). Anything else, such as an inverted `!=` or a stray
     `||`, is rejected rather than guessed at. The guard must select self-hosted
     labels for same-repository work and a GitHub-hosted label otherwise. Pass
     allow_event_form=False for workflows with any trigger outside
@@ -183,10 +215,9 @@ def has_fork_guard(runs_on, allow_event_form: bool = True) -> bool:
     """
     if not isinstance(runs_on, str):
         return False
-    tokens = _expression_tokens(runs_on)
-    if tokens == _expression_tokens(ARC_PR_ONLY_FALLBACK):
+    if is_arc_pr_only_fallback(runs_on):
         return True
-    if tokens == _expression_tokens(ARC_FORK_FALLBACK):
+    if is_arc_fork_fallback(runs_on):
         return allow_event_form
     text = " ".join(runs_on.split())
     m = _GUARD_PLAIN.match(text) or _GUARD_PR_ONLY.match(text)
@@ -246,10 +277,7 @@ def check_workflow(repo: str, name: str, doc: dict) -> list[Finding]:
             out.append(Finding(repo, name, job_id, "pr-concurrency",
                                "pull request runs are not cancelled by a newer push"))
         # The PR-only route deliberately uses hosted runners for scheduled events.
-        pr_only_route = job.get("runs-on")
-        scheduled_hosted = (isinstance(pr_only_route, str) and
-                            re.sub(r"\s+", "", pr_only_route) ==
-                            re.sub(r"\s+", "", ARC_PR_ONLY_FALLBACK))
+        scheduled_hosted = is_arc_pr_only_fallback(job.get("runs-on"))
         if (hosted or scheduled_hosted) and any(cron_is_subhourly(c) for c in crons):
             out.append(Finding(repo, name, job_id, "hosted-cron",
                                f"schedule {crons} fires more than hourly on a hosted runner"))
