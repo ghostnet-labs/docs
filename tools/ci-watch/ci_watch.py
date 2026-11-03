@@ -329,7 +329,41 @@ def enable_link(repo: str, state: str, path: str) -> tuple[str, str]:
             "open the workflow and click \"Enable workflow\"")
 
 
-def runner_findings(page: str, fetch=None, stale_hours: float = 12.0) -> dict[str, dict]:
+# Runners retired on purpose whose GitHub registrations are left to expire (Justin chose not
+# to delete them, 2026-11-03): the gh-ubuntu VM's studio-ubuntu-1..5. One info line, not crit.
+RETIRED_RUNNERS = (r"^studio-ubuntu-", r"^gh-ubuntu")
+OFFLINE_PREFIX = "Offline runners: "
+
+
+def is_retired(name: str, retired: list) -> bool:
+    return any(p.search(name or "") for p in retired)
+
+
+def offline_findings(state: dict, retired: list, crit_minutes: int = 30) -> dict[str, dict]:
+    """The page's offline-runner alert, rebuilt so retired runners do not turn it red."""
+    runners = [r for m in state.get("machines", []) for r in m.get("runners", [])]
+    down = [r for r in runners if r.get("status") == "offline"
+            and (r.get("why") or {}).get("cause") != "maintenance"]
+    live = [r for r in down if not is_retired(r.get("name"), retired)]
+    gone = sorted(r.get("name") or "?" for r in down if r not in live)
+    found = {}
+    if live:
+        def describe(r):
+            off = r.get("offline_min")
+            detail = (r.get("why") or {}).get("detail")
+            parts = ([minutes(timedelta(minutes=off))] if off else []) + ([detail] if detail else [])
+            return r.get("name", "?") + (f" ({'; '.join(parts)})" if parts else "")
+        level = "crit" if any((r.get("offline_min") or 0) >= crit_minutes for r in live) else "warn"
+        found["runner:offline"] = {"level": level, "url": RUNNERS_SETTINGS,
+                                   "text": "runner: " + OFFLINE_PREFIX + ", ".join(map(describe, live))}
+    if gone:
+        found["runner:retired"] = {"level": "info", "url": RUNNERS_SETTINGS,
+                                   "text": f"{len(gone)} retired runner registration(s) still listed, left for "
+                                           f"GitHub to expire: {', '.join(gone)}"}
+    return found
+
+
+def runner_findings(page: str, fetch=None, stale_hours: float = 12.0, retired=None) -> dict[str, dict]:
     """warn/crit alerts from the runner status page's /api/state (no token)."""
     url = page.rstrip("/") + "/api/state"
     if fetch is None:
@@ -341,22 +375,25 @@ def runner_findings(page: str, fetch=None, stale_hours: float = 12.0) -> dict[st
     except (OSError, ValueError) as err:
         return {"runner-page:down": {"level": "warn", "url": page,
                                      "text": f"runner status page unreachable: {err}"}}
-    found = {}
+    retired = [re.compile(p) for p in (RETIRED_RUNNERS if retired is None else retired)]
+    found = offline_findings(state, retired)
     for alert in state.get("alerts", []):
         if alert.get("level") not in ("warn", "crit"):
             continue
         text = alert.get("text", "")
+        if text.startswith(OFFLINE_PREFIX):
+            continue  # rebuilt above without the retired runners
         found["runner:" + DIGITS.sub("#", text)] = {
             "level": alert["level"], "url": alert.get("url") or page, "text": "runner: " + text}
-    found.update(stale_registrations(state, stale_hours))
-    found.update(starved_labels(state))
+    found.update(stale_registrations(state, stale_hours, retired))
+    found.update(starved_labels(state, retired=retired))
     return found
 
 
 STARVED_MINUTES = 15  # a queued self-hosted job this old with no online runner for its labels
 
 
-def starved_labels(state: dict, min_age: int = STARVED_MINUTES) -> dict[str, dict]:
+def starved_labels(state: dict, min_age: int = STARVED_MINUTES, retired=()) -> dict[str, dict]:
     """Queued self-hosted jobs whose labels no online runner carries.
 
     The page's queue alert only says jobs are waiting. This names the label set,
@@ -377,7 +414,12 @@ def starved_labels(state: dict, min_age: int = STARVED_MINUTES) -> dict[str, dic
         if any(r.get("status") != "offline" for r in able):
             continue  # a runner is up; the queue alert covers a busy pool
         names = ", ".join(sorted(r.get("name") or "?" for r in able))
-        who = f"its runners are offline: {names}" if able else "no runner with these labels is registered"
+        if able and all(is_retired(r.get("name"), retired) for r in able):
+            who = f"only retired runners carry these labels ({names}); point the workflow at a live label"
+        elif able:
+            who = f"its runners are offline: {names}"
+        else:
+            who = "no runner with these labels is registered"
         links = " ".join(j.get("url") or "" for j in jobs[:3])
         more = f" (+{len(jobs) - 3} more)" if len(jobs) > 3 else ""
         oldest = minutes(timedelta(minutes=max(j.get("age_min") or 0 for j in jobs)))
@@ -392,7 +434,7 @@ RUNNERS_SETTINGS = f"https://github.com/organizations/{ORG}/settings/actions/run
 GONE_CAUSES = {"no-service", "registration"}  # watchdog: nothing on this Mac runs it any more
 
 
-def stale_registrations(state: dict, stale_hours: float) -> dict[str, dict]:
+def stale_registrations(state: dict, stale_hours: float, retired=()) -> dict[str, dict]:
     """Self-hosted runners still registered with GitHub after their VM or service is gone.
 
     A retired VM leaves its runner listed as offline forever. The watchdog says
@@ -402,8 +444,8 @@ def stale_registrations(state: dict, stale_hours: float) -> dict[str, dict]:
     found = {}
     for machine in state.get("machines", []):
         for r in machine.get("runners", []):
-            if r.get("status") != "offline":
-                continue
+            if r.get("status") != "offline" or is_retired(r.get("name"), retired):
+                continue  # retired ones get the single info line from offline_findings
             minutes_off = r.get("offline_min") or 0
             cause = (r.get("why") or {}).get("cause", "")
             if cause == "maintenance":
@@ -793,7 +835,8 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
             errors.append(f"{repo}: {str(err)[:160]}")
     found.update(pr_findings(prs, now, timedelta(hours=args.stuck_hours), timedelta(hours=args.idle_hours)))
     if args.runner_page:
-        found.update(runner_findings(args.runner_page, runner_fetch, args.stale_runner_hours))
+        found.update(runner_findings(args.runner_page, runner_fetch, args.stale_runner_hours,
+                                     list(RETIRED_RUNNERS) + (args.retired_runner or [])))
 
     error_runs = state.get("error_runs", 0) + 1 if errors else 0
     if error_runs >= ERROR_RUNS_ALERT:
@@ -938,6 +981,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="runner-status autodeploy status file to check ('' = off)")
     p.add_argument("--no-self-update", dest="self_update", action="store_false",
                    help="do not fast-forward this clone of docs every hour")
+    p.add_argument("--retired-runner", action="append", metavar="REGEX",
+                   help="runner name pattern retired on purpose: one info line, never an alert "
+                        "(adds to ^studio-ubuntu-, ^gh-ubuntu)")
     p.add_argument("--stale-runner-hours", type=float, default=12.0,
                    help="an offline runner this long counts as a leftover registration")
     p.add_argument("--stuck-hours", type=float, default=3.0, help="checks running this long alert")

@@ -367,6 +367,38 @@ class FixOnceTest(unittest.TestCase):
         item = next(v for k, v in found.items() if "workflow-off" in k)
         self.assertEqual(item["url"], "https://github.com/ghostnet-labs/luci/actions/workflows/gate.yml")
 
+    def page(self, *runners):
+        return {"alerts": [{"level": "crit", "text": "Offline runners: " + ", ".join(r["name"] for r in runners)}],
+                "jobs": [], "machines": [{"name": "Mac Studio", "runners": list(runners)}]}
+
+    def test_retired_runners_are_one_info_line(self):
+        runners = [{"name": f"studio-ubuntu-{i}", "id": 2990 + i, "status": "offline", "offline_min": 900}
+                   for i in range(1, 6)]
+        found = cw.runner_findings("p", lambda u: self.page(*runners))
+        self.assertEqual(set(found), {"runner:retired"})
+        self.assertEqual(found["runner:retired"]["level"], "info")
+        self.assertIn("5 retired runner registration(s)", found["runner:retired"]["text"])
+
+    def test_live_offline_runner_stays_crit_beside_retired_ones(self):
+        found = cw.runner_findings("p", lambda u: self.page(
+            {"name": "studio-ubuntu-1", "status": "offline", "offline_min": 900},
+            {"name": "studio-build-1", "status": "offline", "offline_min": 45}))
+        self.assertEqual(found["runner:offline"]["level"], "crit")
+        self.assertIn("studio-build-1", found["runner:offline"]["text"])
+        self.assertNotIn("studio-ubuntu-1", found["runner:offline"]["text"])
+        self.assertNotIn("stale-runner:studio-ubuntu-1", found)
+
+    def test_extra_retired_pattern_from_flag(self):
+        found = cw.runner_findings("p", lambda u: self.page(
+            {"name": "old-mac-1", "status": "offline", "offline_min": 900}), retired=[r"^old-mac-"])
+        self.assertEqual(set(found), {"runner:retired"})
+
+    def test_queued_label_only_on_retired_runners_says_so(self):
+        found = cw.starved_labels(self.starved_state(
+            {"name": "studio-ubuntu-2", "status": "offline", "labels": ["openwrt-build"]}),
+            retired=[cw.re.compile(r"^studio-ubuntu-")])
+        self.assertIn("only retired runners", found["starved:openwrt-build"]["text"])
+
     def starved_state(self, *runners, age=30):
         job = {"status": "queued", "hosted": False, "age_min": age, "labels": ["self-hosted", "openwrt-build"],
                "url": "https://github.com/ghostnet-labs/firmware/actions/runs/1/job/2"}
