@@ -38,10 +38,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: ghostnet-labs/docs
-          ref: 70153dca0a01be5c03958558e9d007800bd1fda8
+          ref: ea86ea3986ca93b882b720b05ea5c21b7fbaa152
           persist-credentials: false
       - name: Merge only eligible, protected PRs
         env:
           GH_TOKEN: ${{ github.token }}
+          UPDATE_TOKEN: ${{ secrets.MANET_UPDATE_TOKEN }}
           REPO: ${{ github.repository }}
         run: python3 project/scripts/merge_policy.py merge --repo "$REPO"
