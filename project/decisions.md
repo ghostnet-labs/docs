@@ -61,7 +61,7 @@ Newest first. Add new rows at the top. Do not edit past rows except to fix a fac
 | D-002 | Not recorded (before 2026-09-30) | Track B input protection uses the TPS26633 eFuse with a fixed 32.8 V clamp, with the INA228 shunt after the eFuse. | Supersedes the adjustable overvoltage cutoff and 40 W limit (R-06). |
 | D-001 | Not recorded (before 2026-09-30) | Track B Wi-Fi is the Advantech AIW-170BQ. Track A rejected MT7921-class adapters. | MT7915 and MT7916 are retired for V1 (R-07). MT7921-class adapters lack 802.11s mesh-point support (R-08). |
 
-The next decision takes ID **D-052**. When you add a row, also add a row to Retired and rejected for anything the decision retires, and close or update the Linear issue the decision settles.
+The next decision takes ID **D-053**. When you add a row, also add a row to Retired and rejected for anything the decision retires, and close or update the Linear issue the decision settles.
 
 ## Retired and rejected
 
