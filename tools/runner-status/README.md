@@ -27,8 +27,10 @@ with a single call.
 
 ![Desktop view with several problems (dark)](screenshots/after-desktop.png)
 
-On a phone the same page reads top to bottom: verdict, who needs you, a
-swipeable strip of counts, what every runner is doing, then each machine.
+On a phone the same page reads top to bottom: verdict, who needs you, a compact
+two-column summary grid, what every runner is doing, then each machine. Secondary incidents
+stay collapsed until requested so the urgent item and activity remain near the
+top.
 
 ![Phone view](screenshots/after-phone.png)
 
@@ -39,14 +41,115 @@ swipeable strip of counts, what every runner is doing, then each machine.
   A runner whose auto-recovery gave up is called out as needing a human.
 - **Activity:** offline runners first, most urgent on top, then running jobs
   (longest first), jobs waiting for a runner (oldest first) and idle runners
-  (collapsed). Every row shows the job, its repo, PR link and a live timer.
+  (collapsed). Search stays beside the Activity heading. The single Filters
+  button opens Dashboard controls, where status filters and sorting/grouping
+  live together. A short active-filter summary has a one-click Clear action.
+  Every row shows the job, its repo, PR link and a live timer.
 - **Machines:** one card per machine with RAM, CPU and disk bars (tick marks
   show the warn and critical levels, a text label says HIGH or CRITICAL so
   colour is never the only signal), 1-hour CPU and RAM charts (hover, tap or
-  use the arrow keys for values), and its VMs.
+  use the arrow keys for values), swap and memory-pressure facts, report age,
+  and its VMs. Machine and VM rows can filter Activity; healthy cards can be
+  collapsed together.
 - **Freshness:** the pill in the top bar says Live, Stale or Connection lost,
-  and a banner appears when the data is more than 10 minutes old.
-- **Keys:** `/` filter, `t` theme, `a` alerts, `i` idle runners, `?` help.
+  and a banner appears when the data is more than 10 minutes old. Pause freezes
+  refreshes and timers while a snapshot is being investigated.
+- **Keys:** `Cmd/Ctrl-K` command palette, `/` search, `j` / `k` move between
+  dashboard items, `p` pause, `t` theme, `a` alerts, `i` idle
+  runners, `?` help.
+
+### Appearance and personal workflow
+
+The dashboard keeps the Synthesis II color scheme across eleven selectable styles.
+Open More → Appearance and layout → Style to switch instantly between
+GitHub, Synthesis II, Minimal, Outline, Editorial, Terminal, Blueprint, Soft, Studio,
+Ledger, and Command.
+The styles vary typography, corners, borders, spacing,
+and layout. Auto, Light, and Dark remain independent appearance choices.
+The selected style is saved on this device, included in saved views, and can
+be shared in a view link. GitHub is the default for new devices, with repository-style
+tabs, bordered panels, compact rows, subdued badges, and a flat mobile navigation
+bar. All styles use opaque surfaces, solid colors, crisp borders, and no gradients,
+backdrop blur, glow, or shadows. Charts use clean lines without tinted area fills.
+The glass styles have been retired; saved glass selections fall back to GitHub.
+Compressed memory remains identifiable as a lighter solid segment with a divider
+and descriptive accessible text. Other existing device selections remain intact.
+
+GitHub styling also uses Primer's system sans-serif and monospace font stacks,
+14px body text with 1.5 line height, and 400/500/600 type weights. Navigation,
+status, pull-request, search, settings, and utility symbols use official Octicons,
+bundled as a local 16px SVG sprite (no CDN or font download). The sprite's pinned
+source and MIT license are embedded in the program and in `OCTICONS-LICENSE.txt`.
+Status headings use “In progress” and “Queued”.
+
+Git references use GitHub Primer's reference presentation: linked owner/repository
+names, numbered PR links with state-specific Octicons, monospace BranchName
+labels, seven-character commit links, and PR-detail state labels. Git-specific
+colors match Primer primitives 11.10.0 in light/dark mode without changing the
+dashboard palette. Open, draft, closed, and merged states come from GitHub;
+unavailable states remain neutral. PR title/base/head details appear in the job
+inspector. At most 20 distinct active PRs are checked per sweep (busy self-hosted
+jobs first); available open-PR list metadata is reused and unchanged requests
+use the existing ETag cache. Commit links use the workflow run's actual head SHA.
+
+The GitHub style follows one component contract across dashboard cards and all
+secondary screens: scaled 12/13/14/16/20/24px type, 600-weight headings, shared
+6px control corners, bordered status badges, and a consistent spacing rhythm.
+Controls use 36px desktop targets and at least 44px targets on phones. Dialogs
+share opaque surfaces, title bars, labeled close icons, focus outlines, and
+footers where appropriate. Save view and reset confirmation stay in-app;
+reset remains an explicit destructive confirmation. Dashboard keyboard shortcuts
+do not fire behind open dialogs, and closing a dialog restores the entry-point
+focus. Filters opens directly at the Activity controls. Machine expand/collapse
+actions track the actual card state. Focus mode keeps dialog actions visible.
+
+Dashboard controls groups appearance, live data, machines, saved views and help
+into collapsed sections. It controls density, text size, activity-row layout, 15/30/60
+minute chart windows, activity-focused or machine-focused workspaces, binary or
+decimal units, 12/24-hour time, color-vision palettes, high contrast, reduced
+motion, queue SLA and visible sections. Settings, pinned machines, machine
+notes, incident acknowledgements, snoozes and saved views stay in that browser's
+local storage; none are sent to the server. A shareable view link includes only
+the current filter, order, workspace and style.
+
+Other built-in tools include machine comparison, a local alert/change timeline,
+plain-language status copying, JSON export, offline snapshot recovery,
+label-aware queue explanations, focus mode and a guided feature tour.
+Each machine has one More button for pinning, comparison, notes and its activity.
+Incident actions stay behind an Actions disclosure. The main summary shows
+running jobs, queued jobs and runners; health, API and billing detail is under
+Live data and history in Dashboard controls.
+The responsive layout uses a bottom navigation bar on iPhone, a stacked layout
+on iPad portrait, a split view on iPad landscape, and the full two-column
+dashboard on desktop.
+
+### More capability, less clutter
+
+Open **More → Explore** for queue insights, a repository overview, or the local
+watchlist. These sheets show oldest/median waits, jobs past the selected wait
+target, and queue groups by runner requirements. Repository rows drill into
+Activity. The normal queue shows the first 12 jobs; Show 12 more reveals the
+rest without changing the full counts or exports.
+
+Use **Details** on a job for its runner/machine/VM assignment, branch, requested
+labels, snapshot time, a copyable brief, and a GitHub link. Queued jobs explain
+label-matching capacity; this is not a start-time estimate. Repository access,
+runner groups, concurrency, approvals, and workflow dependencies may still
+affect scheduling. Hosted jobs never count local runners as compatible.
+
+Watch up to 50 jobs locally. A job missing from a later snapshot is marked
+outcome unknown, not completed. This is a follow-up list, not notifications.
+It is included in Reset personalization and makes no server-side changes.
+
+Activity search accepts combined words, quoted values, exclusions, and fields:
+`repo:firmware status:queued -branch:main`, `machine:"Mac Studio"`, `label:linux`,
+`runner:studio`, `vm:gh-build`, `workflow:build`, or `pr:42`.
+Cmd/Ctrl-K now finds active jobs, machines, saved views, and commands. It is
+also available as Find anything in More. Filters → Export matching jobs · CSV
+exports all jobs matching the search and status filter, including rows beyond
+the first page. CSV values are escaped and formula-prefixed cells neutralized.
+Offline/idle runners are not jobs and therefore do not appear in this export.
+All investigation tools reuse the existing snapshot without extra API calls.
 
 The 1-hour charts come from samples the server keeps in memory (one every 30
 seconds, 120 per series); they cost no GitHub calls and reset on restart.
@@ -106,8 +209,9 @@ included). The Studio's own stats are read in-process, so it needs no agent.
 Logs: `~/Library/Logs/runner-status-serve.log`. Update with `git pull` and
 `launchctl kickstart -k gui/$(id -u)/com.ghostnet.runner-status.serve`.
 
-The page shows runner names and job titles to anyone on the LAN. It has no
-controls and holds no token in the page.
+The page shows runner names and job titles to anyone on the LAN. Its controls
+change only the local presentation; the dashboard remains read-only and holds
+no token in the page.
 
 ## 3. Show the MacBook Pro (or another Mac)
 

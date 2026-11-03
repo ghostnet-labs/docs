@@ -634,23 +634,127 @@ class PageTest(unittest.TestCase):
         # Nothing may load from the network, and the triple-quote that ends the
         # Python string must not appear inside it.
         import re
-        self.assertNotRegex(rs.PAGE, r"(?i)(src|href)=[\"']https?://")
-        self.assertNotIn("@import", rs.PAGE)
+        bundle = rs.PAGE + rs.PAGE_CSS + rs.PAGE_JS
+        self.assertNotRegex(bundle, r"(?i)(src|href)=[\"']https?://")
+        self.assertNotIn("@import", bundle)
         self.assertEqual(rs.PAGE.count("</html>"), 1)
         self.assertLess(len(rs.PAGE), 90_000)
-        self.assertNotIn("\t", rs.PAGE)
+        self.assertNotIn("\t", bundle)
+        self.assertIn('href="/app.css"', rs.PAGE)
+        self.assertIn('src="/app.js"', rs.PAGE)
 
     def test_page_reads_the_state_keys_the_server_sends(self):
         cfg = json.loads(json.dumps(rs.DEFAULT_CONFIG))
         poller = rs.Poller(cfg, None, demo=True)
         poller.poll_once()
         state = poller.snapshot()
+        bundle = rs.PAGE + rs.PAGE_JS
         for key in ("machines", "jobs", "alerts", "counts", "rate", "history", "loading", "errors"):
             self.assertIn(key, state)
-            self.assertIn(key, rs.PAGE)  # the page reads every key it is sent
+            self.assertIn(key, bundle)  # the page reads every key it is sent
         job = state["jobs"][0]
         for key in ("workflow", "name", "repo", "prs", "age_min", "runner", "status", "url"):
             self.assertIn(key, job)
+
+    def test_page_has_incident_and_investigation_controls(self):
+        bundle = rs.PAGE + rs.PAGE_JS
+        for marker in (
+                'id="pause"', 'id="flt-clear"', 'data-qf="attention"',
+                'id="order"', 'id="collapse-healthy"', 'id="changes"',
+                'class="hero-all"', 'class="diag"', 'data-filter=',
+                'function incidentKey(', 'function trackIncidents(',
+                'function activeNav(', 'function setPaused('):
+            self.assertIn(marker, bundle)
+
+    def test_page_has_responsive_and_accessible_inspection_ui(self):
+        bundle = rs.PAGE + rs.PAGE_CSS + rs.PAGE_JS
+        self.assertIn('grid-template-columns:repeat(2,minmax(0,1fr))', bundle)
+        self.assertIn('aria-live="polite"', bundle)
+        self.assertIn('Tap to lock a point; use left and right arrow keys.', bundle)
+        self.assertIn('prefers-reduced-motion:reduce', bundle)
+        self.assertIn('aria-current', bundle)
+        self.assertIn('Warn below 10% free', bundle)
+        self.assertIn('Load average', bundle)
+
+    def test_quiet_investigation_tools_are_on_demand(self):
+        bundle = rs.PAGE + rs.PAGE_JS
+        for marker in ('id="explore"', 'id="inspect"', 'id="find-anything"',
+                       'id="export-csv"', 'function smartMatch(',
+                       'function compatibleRunners(', 'function queueStats(',
+                       'function toggleWatch(', 'ACT_LIMIT=12',
+                       'outcome unknown', '"rs-watch"'):
+            self.assertIn(marker, bundle)
+        self.assertNotIn('estimated start ~', bundle)
+        self.assertNotIn('blur(', rs.PAGE_CSS)
+        self.assertNotIn('gradient(', rs.PAGE_CSS)
+
+    def test_all_styles_obey_flat_surface_policy(self):
+        self.assertIn('--card:#ffffff', rs.PAGE_CSS)
+        self.assertIn('--card:#141c2c', rs.PAGE_CSS)
+        self.assertNotRegex(rs.PAGE_CSS, r'(?:linear|radial|conic)-gradient\(')
+        self.assertNotRegex(rs.PAGE_CSS, r'backdrop-filter:(?!none)[^;}]+')
+        self.assertNotRegex(rs.PAGE_CSS, r'box-shadow:(?!none)[^;}]+')
+        self.assertNotIn('id:"glass-', rs.PAGE_JS)
+        self.assertIn('.ch .ar,.mini .ar{display:none}', rs.PAGE_CSS)
+
+    def test_github_style_preserves_palette_and_responsive_controls(self):
+        self.assertIn('id:"github",name:"GitHub"', rs.PAGE_JS)
+        self.assertIn('const DEF={style:"github"', rs.PAGE_JS)
+        self.assertIn('[data-style=github] .jump a.active', rs.PAGE_CSS)
+        self.assertIn('[data-style=github] .bottom-nav', rs.PAGE_CSS)
+        import re
+        blocks = re.findall(r'[^{}]*\[data-style=github\][^{}]*\{([^{}]*)\}', rs.PAGE_CSS)
+        self.assertTrue(blocks)
+        for block in blocks:
+            self.assertNotRegex(block, r'--(?:bg|text|acc|ok|warn|crit)\s*:')
+
+    def test_octicons_and_primer_typography_are_local(self):
+        self.assertIn('GitHub Octicons. Source:', rs.PAGE_JS)
+        self.assertIn('MIT License', rs.PAGE_JS)
+        self.assertIn('Copyright (c) 2026 GitHub Inc.', rs.PAGE_JS)
+        self.assertIn('class="i octicon', rs.PAGE_JS)
+        self.assertIn('symbol id="i-${k}" viewBox="0 0 16 16"', rs.PAGE_JS)
+        self.assertIn('fill:currentColor;stroke:none', rs.PAGE_CSS)
+        self.assertIn("'.dialog-x[data-close],.flt-clear,#compareClear'", rs.PAGE_JS)
+        self.assertIn('data-close="settings">Done</button>', rs.PAGE)
+        self.assertIn('BlinkMacSystemFont,"Segoe UI","Noto Sans"', rs.PAGE_CSS)
+        for marker in ('data-icon="repo"', 'data-icon="filter"', 'data-icon="server"'):
+            self.assertIn(marker, rs.PAGE)
+
+    def test_refined_dialogs_have_consistent_chrome_and_keyboard_scope(self):
+        import re
+        for name in ('help', 'settings', 'explore', 'inspect', 'timeline',
+                     'compare', 'note', 'tour', 'view-name', 'reset-confirm'):
+            dialog = re.search(r'<dialog id="' + name + r'".*?</dialog>', rs.PAGE, re.S)
+            self.assertIsNotNone(dialog, name)
+            self.assertIn('<header>', dialog.group(), name)
+            self.assertIn('class="dialog-x"', dialog.group(), name)
+            self.assertIn('aria-label="Close"', dialog.group(), name)
+        self.assertNotIn('prompt(', rs.PAGE_JS)
+        self.assertNotIn('confirm(', rs.PAGE_JS)
+        self.assertIn('document.querySelector("dialog[open]"))return', rs.PAGE_JS)
+        self.assertIn('function syncMachineControls()', rs.PAGE_JS)
+        self.assertIn('openControls("filterControls")', rs.PAGE_JS)
+        self.assertIn('MODAL_SOURCE', rs.PAGE_JS)
+
+    def test_focus_mode_keeps_dialog_actions_and_scaling_contract(self):
+        self.assertNotIn('body.focus-mode footer{', rs.PAGE_CSS)
+        self.assertIn('body.focus-mode main.wrap>.foot{', rs.PAGE_CSS)
+        self.assertIn('--ui-control:44px', rs.PAGE_CSS)
+        self.assertIn('--type-base:calc(14px * var(--text-scale))', rs.PAGE_CSS)
+        self.assertIn('.inspect-facts dd{text-align:left', rs.PAGE_CSS)
+        self.assertIn('class="btn btn-primary" value="save"', rs.PAGE)
+        self.assertIn('aria-describedby="resetHelp"', rs.PAGE)
+
+    def test_refined_status_labels_and_comparison_semantics(self):
+        self.assertIn('function jobStatusLabel(status)', rs.PAGE_JS)
+        self.assertIn('jobStatusLabel(r.status)', rs.PAGE_JS)
+        self.assertNotIn('r.jobStatusLabel', rs.PAGE_JS)
+        self.assertIn('<table class="comparison-table">', rs.PAGE_JS)
+        self.assertIn('scope="col"', rs.PAGE_JS)
+        self.assertIn('scope="row"', rs.PAGE_JS)
+        self.assertIn('dialog.wide-dialog>header', rs.PAGE_CSS)
+
 
 class HygieneAlertTest(unittest.TestCase):
     def setUp(self):
@@ -806,7 +910,9 @@ class PrStateTest(unittest.TestCase):
                 if path == "/repos/o/luci/pulls/4":
                     return {"state": "closed", "merged_at": "2026-10-13T04:00:00Z"}
                 if path == "/repos/o/luci/pulls/5":
-                    return {"state": "open", "merged_at": None}
+                    return {"state": "open", "merged_at": None, "draft": True,
+                            "title": "Draft gate", "base": {"ref": "main"},
+                            "head": {"ref": "feature/gate"}}
                 if path.startswith("jobs/"):
                     return {"jobs": [job("in_progress", ["self-hosted"], 60,
                                          runner_name="studio-mac-1")]}
@@ -817,6 +923,37 @@ class PrStateTest(unittest.TestCase):
         self.assertEqual(sorted((j["prs"], j["closed_prs"]) for j in jobs),
                          [([4], [4]), ([5], [])])
         self.assertEqual(gh.calls.count("/repos/o/luci/pulls/4"), 1)
+        by_pr = {j["prs"][0]: j for j in jobs}
+        self.assertEqual(by_pr[4]["pr_details"]["4"]["state"], "merged")
+        self.assertTrue(by_pr[5]["pr_details"]["5"]["draft"])
+        self.assertEqual(by_pr[5]["pr_details"]["5"]["base"], "main")
+
+    def test_queued_pr_details_and_commit_are_carried_to_the_page(self):
+        class Fake(FakeGitHub):
+            def get(self, path, params=None):
+                self.calls.append(path)
+                if path.endswith('/actions/runs'):
+                    return {"workflow_runs": ([{"name": "Build", "jobs_url": "jobs/queued",
+                             "head_branch": "feature/pr", "head_sha": "a" * 40,
+                             "pull_requests": [{"number": 9}]}]
+                             if params['status'] == 'queued' else [])}
+                if path == 'jobs/queued':
+                    return {"jobs": [job('queued', ['ubuntu-latest'], 30)]}
+                if path.endswith('/pulls/9'):
+                    return {"state": "open", "draft": True, "title": "Draft build",
+                            "head": {"ref": "feature/pr"}, "base": {"ref": "main"}}
+                raise rs.GitHubError('not available')
+
+        gh = Fake()
+        jobs = rs.Poller.fetch_jobs(gh, 'o', ['firmware'], [])
+        self.assertEqual(gh.calls.count('/repos/o/firmware/pulls/9'), 1)
+        state = rs.build_state({'jobs': jobs}, {**rs.DEFAULT_CONFIG, 'org': 'o'}, NOW)
+        j = state['jobs'][0]
+        self.assertEqual(j['head_sha'], 'a' * 40)
+        self.assertEqual(j['repo_full_name'], 'o/firmware')
+        self.assertEqual(j['prs'][0]['state'], 'open')
+        self.assertTrue(j['prs'][0]['draft'])
+        self.assertEqual(j['prs'][0]['title'], 'Draft build')
 
 
 class MacParserTest(unittest.TestCase):
@@ -916,6 +1053,10 @@ class ServerTest(unittest.TestCase):
         def body(path):
             if path == "/":
                 return rs.PAGE, "text/html"
+            if path == "/app.css":
+                return rs.PAGE_CSS, "text/css"
+            if path == "/app.js":
+                return rs.PAGE_JS, "text/javascript"
             if path == "/api/state":
                 return json.dumps(poller.snapshot()), "application/json"
             return None, ""
@@ -931,7 +1072,9 @@ class ServerTest(unittest.TestCase):
         with opener.open(base + "/") as r:
             page = r.read()
         self.assertIn(b"<title>Runner Status</title>", page)
-        self.assertIn(b'fetch("api/state"', page)
+        self.assertIn(b'src="/app.js"', page)
+        with opener.open(base + "/app.js") as r:
+            self.assertIn(b'fetch("api/state"', r.read())
         with opener.open(base + "/api/state") as r:
             state = json.loads(r.read())
         self.assertEqual(state["machines"][0]["name"], "Mac Studio")
