@@ -274,6 +274,15 @@
     },
     {
       "repo": "openmanetd",
+      "workflow": "mesh-sim.yml",
+      "job": "mesh-sim",
+      "rules": [
+        "hosted-runner"
+      ],
+      "reason": "Virtual batman-adv mesh tests need root (sudo) to create network namespaces and load batman_adv. ARC runners have no sudo; GitHub-hosted Ubuntu does. Revisit when a self-hosted Linux VM with sudo and BATMAN_V is wired up (mesh simulation thread, 2026-11-03)."
+    },
+    {
+      "repo": "openmanetd",
       "workflow": "release.yml",
       "job": "release",
       "rules": [
