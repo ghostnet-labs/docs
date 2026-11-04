@@ -83,6 +83,7 @@ def args(**kw) -> argparse.Namespace:
     a.clone = []
     a.deploy_status = ""
     a.idle_restart_status = ""
+    a.host_memory = False
     for k, v in kw.items():
         setattr(a, k, v)
     return a
@@ -429,6 +430,43 @@ class FixOnceTest(unittest.TestCase):
         state["jobs"][0]["hosted"] = True
         self.assertEqual(cw.starved_labels(state), {})
 
+    def mem(self, swap="total = 2048.00M  used = 512.00M  free = 1536.00M  (encrypted)", level="1", idle=""):
+        out = {"vm.swapusage": swap, "kern.memorystatus_vm_pressure_level": level}
+
+        def run(*cmd):
+            if cmd[0] == "sysctl":
+                return out[cmd[-1]]
+            return "  9000000 /usr/bin/qemu-system-aarch64\n  2000000 /Applications/Docker.app/x\n   500 sh\n"
+        return cw.host_memory(idle, run=run)
+
+    def test_low_swap_normal_pressure_is_quiet(self):
+        self.assertEqual(self.mem(), {})
+
+    def test_swap_over_4_gib_warns_with_top_processes(self):
+        found = self.mem(swap="total = 6144.00M  used = 4608.00M  free = 1536.00M")
+        item = found["host:memory:warn"]
+        self.assertIn("swap 4.5 GiB of 6.0 GiB", item["text"])
+        self.assertIn("qemu-system-aarch64 8.6 GiB", item["text"])
+
+    def test_swap_over_8_gib_or_critical_pressure_is_crit(self):
+        self.assertIn("host:memory:crit", self.mem(swap="total = 10240.00M  used = 9216.00M  free = 1024.00M"))
+        self.assertIn("host:memory:crit", self.mem(level="4"))
+
+    def test_pressure_warn_level_warns(self):
+        self.assertIn("pressure warn", self.mem(level="2")["host:memory:warn"]["text"])
+
+    def test_nearly_full_swap_file_is_crit_only_when_large(self):
+        self.assertIn("host:memory:crit", self.mem(swap="total = 3072.00M  used = 2900.00M  free = 172.00M"))
+        self.assertEqual(self.mem(swap="total = 1024.00M  used = 1000.00M  free = 24.00M"), {})
+
+    def test_memory_alert_quotes_idle_restart_status(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "status.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"ok": True, "action": "wait", "reason": "jobs running"}, f)
+            found = self.mem(level="2", idle=path)
+        self.assertIn("idle-restart last said wait (jobs running)", found["host:memory:warn"]["text"])
+
     def idle(self, status, loaded=True):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "status.json")
@@ -603,7 +641,8 @@ class MainTest(unittest.TestCase):
                 mock.patch.object(cw.sr, "utcnow", return_value=NOW), \
                 mock.patch("builtins.print"):
             code = cw.main(["--repos", "luci", "--branch-hours", "0", "--state-dir", d, "--no-self-update",
-                            "--deploy-status", "", "--idle-restart-status", ""])
+                            "--deploy-status", "", "--idle-restart-status", "",
+                            "--no-host-memory"])
             self.assertEqual(code, 0)
             self.assertIn("green, auto-merge on", Path(d, "report.md").read_text())
             self.assertTrue(json.loads(Path(d, "state.json").read_text())["initialized"])

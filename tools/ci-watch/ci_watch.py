@@ -616,6 +616,69 @@ def idle_restart_status(path: str, now: datetime, loaded=None) -> dict[str, dict
     return found
 
 
+GIB = 1024 ** 3
+SWAP_WARN, SWAP_CRIT = 4 * GIB, 8 * GIB
+SWAP_FULL = 0.9            # swap files this full are crit ...
+SWAP_FULL_MIN = 2 * GIB    # ... once there is real swap (macOS grows the file to fit, so small is always "full")
+PRESSURE = {1: "normal", 2: "warn", 4: "critical"}  # kern.memorystatus_vm_pressure_level
+SWAP_FIELD = re.compile(r"(total|used)\s*=\s*([\d.]+)([KMGT])")
+UNIT = {"K": 1024, "M": 1024 ** 2, "G": GIB, "T": 1024 ** 4}
+
+
+def run_cmd(*cmd: str) -> str:
+    try:
+        done = subprocess.run(list(cmd), capture_output=True, text=True, timeout=15, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return done.stdout if done.returncode == 0 else ""
+
+
+def gib(n: float) -> str:
+    return f"{n / GIB:.1f} GiB"
+
+
+def host_memory(idle_status: str = "", run=None) -> dict[str, dict]:
+    """Swap and memory pressure of the Mac running ci-watch, read with sysctl.
+
+    Replaces the runner page's swap alerts, so nobody has to open a dashboard.
+    Read-only; warn at 4 GiB swap or pressure "warn", crit at 8 GiB, a swap
+    file 90% full, or pressure "critical". The finding clears by itself.
+    """
+    if run is None:
+        if platform.system() != "Darwin":
+            return {}
+        run = run_cmd
+    swap = {k: float(v) * UNIT[u] for k, v, u in SWAP_FIELD.findall(run("sysctl", "-n", "vm.swapusage"))}
+    used, total = swap.get("used", 0.0), swap.get("total", 0.0)
+    try:
+        level = int(run("sysctl", "-n", "kern.memorystatus_vm_pressure_level").strip() or 0)
+    except ValueError:
+        level = 0
+    full = total > 0 and used >= SWAP_FULL_MIN and used / total >= SWAP_FULL
+    if used >= SWAP_CRIT or level >= 4 or full:
+        severity = "crit"
+    elif used >= SWAP_WARN or level >= 2:
+        severity = "warn"
+    else:
+        return {}
+    top = []
+    for line in run("ps", "-axmo", "rss=,comm=").splitlines()[:3]:
+        rss, _, comm = line.strip().partition(" ")
+        if rss.isdigit():
+            top.append(f"{os.path.basename(comm.strip())} {gib(int(rss) * 1024)}")
+    text = (f"Mac memory: swap {gib(used)} of {gib(total)} used, pressure {PRESSURE.get(level, level)}"
+            + (f"; top: {', '.join(top)}" if top else ""))
+    if idle_status and os.path.exists(idle_status):
+        try:
+            with open(idle_status, encoding="utf-8") as f:
+                st = json.load(f)
+            text += f"; ci-k3s idle-restart last said {st.get('action')} ({str(st.get('reason') or '')[:80]})"
+        except (OSError, ValueError):
+            pass
+    url = f"https://github.com/{ORG}/setup/issues/87"
+    return {f"host:memory:{severity}": {"level": severity, "url": url, "text": text}}
+
+
 def update_self(now: datetime, previous: dict, git=None, root: str | None = None) -> tuple[dict, dict]:
     """Pull this clone hourly so new checks reach the Studio without anyone typing a line.
 
@@ -954,6 +1017,8 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
                                git=getattr(args, "git", None)))
     found.update(idle_restart_status(getattr(args, "idle_restart_status", IDLE_RESTART), now,
                                      loaded=getattr(args, "idle_restart_loaded", None)))
+    if getattr(args, "host_memory", True):
+        found.update(host_memory(getattr(args, "idle_restart_status", IDLE_RESTART), run=getattr(args, "run", None)))
     self_update = state.get("self_update", {})
     if args.self_update:
         self_found, self_update = update_self(now, self_update, git=getattr(args, "git", None))
@@ -1042,6 +1107,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="runner-status autodeploy status file to check ('' = off)")
     p.add_argument("--idle-restart-status", default=IDLE_RESTART, metavar="PATH",
                    help="ci-k3s idle-restart status file to check ('' = off)")
+    p.add_argument("--no-host-memory", dest="host_memory", action="store_false",
+                   help="skip the swap and memory pressure check of this Mac")
     p.add_argument("--no-self-update", dest="self_update", action="store_false",
                    help="do not fast-forward this clone of docs every hour")
     p.add_argument("--retired-runner", action="append", metavar="REGEX",

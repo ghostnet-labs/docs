@@ -27,6 +27,7 @@ or writing.
 | Deploy drift | a deployed docs clone (`~/ci-watch-src`, `~/runner-status-src`, `~/stale-runs-src`, or `--clone`) misses `tools/` changes on main for over an hour, so whatever updates it has stopped | warn |
 | Runner-status autodeploy (`--deploy-status`) | `~/.config/runner-status/deploy-status.json` says ok is false, names a commit that is not `~/runner-status-src`'s HEAD, or was last written over 30 min ago; links the runner-status history on main | warn |
 | ci-k3s idle restart (`--idle-restart-status`) | `~/.config/ci-k3s-idle-restart/status.json` says ok is false or is over 2 h old while `com.ghostnet.ci-k3s-idle-restart` is loaded (crit); one info line while the agent is not loaded, and one per restart with its reason | crit / info |
+| Mac memory (on by default, `--no-host-memory` turns it off) | read with `sysctl` on the Mac running it, no page needed: swap 4 GiB or pressure "warn" (warn); swap 8 GiB, a swap file 90% full once over 2 GiB, or pressure "critical" (crit). Names the top 3 processes by memory and the idle-restart agent's last action; clears by itself | warn / crit |
 | Itself | GitHub unreadable three runs in a row; the hourly self-update failed | crit / warn |
 | News | a PR opened, merged, closed, or no longer red | info |
 | Branches (hourly) | lists branches already in the default branch that no open PR uses; never deletes | report only |
