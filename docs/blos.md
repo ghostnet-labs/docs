@@ -59,7 +59,7 @@ BLOS builds a four-layer network stack on each gateway node:
 
 ### 1. WireGuard Tunnel (Tailscale) — `tailscale0`
 
-**Tailscale (or Headscale) provides an authenticated, encrypted WireGuard mesh between every BLOS-enabled gateway.** Each gateway registers with the coordination server using an auth key. The `tailscale0` interface is created in the UCI network configuration with `proto none` and added to the `ahwlan` firewall zone. The MTU is set to **1500** to allow room for VXLAN encapsulation overhead.
+**Tailscale (or Headscale) provides an authenticated, encrypted WireGuard mesh between every BLOS-enabled gateway.** Each gateway registers with the coordination server using an auth key. The `tailscale0` interface is created in the UCI network configuration with `proto none` and added to the `ahwlan` firewall zone. The MTU is set to **1280**, Tailscale's default, which leaves room for WireGuard's ~60 bytes of encapsulation overhead on a 1500-byte internet path.
 
 Tailscale preferences are configured automatically:
 - **RouteAll** — enabled, so Tailscale forwards all traffic
@@ -77,7 +77,7 @@ Tailscale preferences are configured automatically:
 | `vid`      | `1`          | VXLAN Network Identifier                            |
 | `learning` | `1`          | Enables MAC address learning                        |
 | `proxy`    | `1`          | Enables ARP proxying to reduce broadcast traffic    |
-| `mtu`      | `1450`       | Accounts for ~50 bytes of VXLAN encapsulation overhead |
+| `mtu`      | `1230`       | The `tailscale0` MTU (1280) minus ~50 bytes of VXLAN encapsulation overhead |
 
 ### 3. Batman-adv Hard Interface — `battunnel0`
 
@@ -120,8 +120,8 @@ graph BT
     BAT0["bat0<br/>(batman-adv mesh)"]
     HALOW["HaLow Radio<br/>(802.11s)"]
     BTUN["battunnel0<br/>(batadv_hardif)"]
-    VXLAN["vxlan0<br/>(VXLAN, VID 1, MTU 1450)"]
-    TS0["tailscale0<br/>(WireGuard, MTU 1500)"]
+    VXLAN["vxlan0<br/>(VXLAN, VID 1, MTU 1230)"]
+    TS0["tailscale0<br/>(WireGuard, MTU 1280)"]
     INET["Internet Backhaul<br/>(Starlink / LTE / Ethernet)"]
     BRAHWLAN["br-ahwlan<br/>(bridge: bat0 + eth0 + AP)"]
     CLIENTS["Connected Clients<br/>(TAK, laptops, etc.)"]
@@ -246,7 +246,7 @@ When BLOS is enabled for the first time (via the API's `UpdateBLOSConfig`), the 
 8. **System reboot** — The node reboots to cleanly apply all new network settings. This ensures `tailscale0`, `vxlan0`, and `battunnel0` come up in the correct order.
 
 After the reboot, `openmanetd` starts and detects that BLOS is already configured. It then:
-- Sets the MTU on `tailscale0` to **1500** and on `vxlan0` to **1450**
+- Sets the MTU on `tailscale0` to **1280** and on `vxlan0` to **1230**
 - Joins all multicast groups on the mesh interface
 - Starts the **status worker**, which begins polling Tailscale for peers and syncing VXLAN peer entries
 
@@ -272,9 +272,9 @@ This error means the node is not configured as a mesh gateway in batman-adv. BLO
 
 If you experience poor throughput or packet loss over the BLOS link:
 
-- Verify `tailscale0` MTU is **1500**: `ip link show tailscale0`
-- Verify `vxlan0` MTU is **1450**: `ip link show vxlan0`
-- If your internet backhaul has a lower-than-standard MTU (e.g., PPPoE at 1492), you may need to reduce both values proportionally to avoid fragmentation
+- Verify `tailscale0` MTU is **1280**: `ip link show tailscale0`
+- Verify `vxlan0` MTU is **1230**: `ip link show vxlan0`
+- 1280/1230 is a conservative default that should fit almost any internet path, including DERP relays. Do not go back to 1500/1450: that ignores WireGuard's ~60 bytes of overhead and fragments on a standard 1500-byte path. You can raise both values together only after measuring the path MTU (PMTUD) on a known-good, fixed-MTU underlay
 
 ### Peers Not Appearing
 
