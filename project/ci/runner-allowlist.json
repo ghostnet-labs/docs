@@ -20,7 +20,7 @@
         "hosted-runner",
         "pr-concurrency"
       ],
-      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token in one manet-auto-merge concurrency group; a newer trigger replaces a queued or running sweep (cancel-in-progress true). Stays hosted with a 6-hourly fallback cron ('N */6 * * *') until the merge pipeline thread ships its event-driven replacement."
     },
     {
       "repo": "OpenVLM",
@@ -61,7 +61,7 @@
         "hosted-runner",
         "pr-concurrency"
       ],
-      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token in one manet-auto-merge concurrency group; a newer trigger replaces a queued or running sweep (cancel-in-progress true). Stays hosted with a 6-hourly fallback cron ('N */6 * * *') until the merge pipeline thread ships its event-driven replacement."
     },
     {
       "repo": "firmware",
@@ -70,7 +70,7 @@
       "rules": [
         "fork-pr-self-hosted"
       ],
-      "reason": "Board build reusable workflow. It picks [self-hosted, openwrt-build] for same-repo pull_request callers, or when a non-pull_request caller sets self_hosted (build-full.yml: schedule and workflow_dispatch only, no secrets). Fork PRs and the release build, which carries the signing key, stay on ubuntu-24.04. The audit's fixed guard forms cannot express the self_hosted input."
+      "reason": "Board build reusable workflow. On 24.10, runs-on picks [self-hosted, openwrt-build] only for same-repo pull_request callers and ubuntu-24.04 otherwise, so fork PRs and the signed release build stay hosted. The entry is kept only for the self_hosted input and build-full.yml (schedule/workflow_dispatch caller), which exist only on the unmerged branch claude/project-thread-fsj8lm and are not yet on 24.10; the audit's fixed guard forms cannot express that input."
     },
     {
       "repo": "firmware",
@@ -215,7 +215,7 @@
         "hosted-runner",
         "pr-concurrency"
       ],
-      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token in one manet-auto-merge concurrency group; a newer trigger replaces a queued or running sweep (cancel-in-progress true). Stays hosted with a 6-hourly fallback cron ('N */6 * * *') until the merge pipeline thread ships its event-driven replacement."
     },
     {
       "repo": "luci",
@@ -247,7 +247,7 @@
         "hosted-runner",
         "pr-concurrency"
       ],
-      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token in one manet-auto-merge concurrency group; a newer trigger replaces a queued or running sweep (cancel-in-progress true). Stays hosted with a 6-hourly fallback cron ('N */6 * * *') until the merge pipeline thread ships its event-driven replacement."
     },
     {
       "repo": "openmanetd",
@@ -289,7 +289,7 @@
         "hosted-runner",
         "pr-concurrency"
       ],
-      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token in one manet-auto-merge concurrency group; a newer trigger replaces a queued or running sweep (cancel-in-progress true). Stays hosted with a 6-hourly fallback cron ('N */6 * * *') until the merge pipeline thread ships its event-driven replacement."
     },
     {
       "repo": "openmanetd",
@@ -388,7 +388,7 @@
         "hosted-runner",
         "pr-concurrency"
       ],
-      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token in one manet-auto-merge concurrency group; a newer trigger replaces a queued or running sweep (cancel-in-progress true). Stays hosted with a 6-hourly fallback cron ('N */6 * * *') until the merge pipeline thread ships its event-driven replacement."
     },
     {
       "repo": "packages",
@@ -418,7 +418,7 @@
         "hosted-runner",
         "pr-concurrency"
       ],
-      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token, one global lane on purpose (cancel-in-progress false). Hosted and 15-minute cron until the merge pipeline thread ships its event-driven replacement."
+      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token in one manet-auto-merge concurrency group; a newer trigger replaces a queued or running sweep (cancel-in-progress true). Stays hosted with a 6-hourly fallback cron ('N */6 * * *') until the merge pipeline thread ships its event-driven replacement."
     },
     {
       "repo": "protobufs",
