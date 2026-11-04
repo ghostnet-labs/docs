@@ -17,3 +17,4 @@ Select your device platform below for a step-by-step guide to downloading, flash
 | Raspberry Pi (4, CM4, 3B, Zero 2 W) | [Raspberry Pi Setup](./initial-setup/raspberry-pi) |
 | HaLowLink2 | [HaLowLink2 Setup](./initial-setup/halowlink2) |
 | Heltec | [Heltec Setup](./initial-setup/heltec) |
+| Gateworks Venice | [Gateworks Venice Setup](./initial-setup/venice) |

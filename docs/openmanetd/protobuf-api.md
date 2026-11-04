@@ -237,7 +237,7 @@ This pulls the schema directly from the BSR and generates code into `gen/go/`. A
 
 ## Next Steps
 
-- [OpenMANETd Daemon](/openmanetd) -- Full API endpoint reference with curl examples
+- [OpenMANETd Daemon]({{ '/openmanetd' | relative_url }}) -- Full API endpoint reference with curl examples
 - [ConnectRPC Documentation](https://connectrpc.com/docs/introduction) -- Protocol details and advanced client configuration
 - [Buf Schema Registry](https://buf.build/openmanet/protobufs) -- Browse the schema and view generated documentation
 - [Protocol Buffers Guide](https://protobuf.dev/) -- Protobuf language reference
