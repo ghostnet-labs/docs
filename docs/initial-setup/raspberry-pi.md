@@ -30,13 +30,12 @@ This page walks you through downloading, flashing, and configuring the OpenMANET
 3. **Initial connection**  
    On a fresh flash, the node boots with a static IP of `10.41.254.1`.  
    Connect your computer directly via Ethernet and set your computer to obtain an IP automatically.  
-   Your computer should get an IP address in that range from the node and you will be able to access it at `http://10.41.254.1` in a web browser.  
-   The default username is `root`, and the default password is blank.  
-   If your computer is connected to WiFi, you can plug the RPi into your Ethernet adapter and still stay connected to the internet at the same time.  
-   *Note: after running the initial wizard, you will use the password you set.*
+   Your computer should get an IP address in that range from the node. On first boot, open the OpenMANET setup wizard at `https://10.41.254.1:8081` in a web browser and accept the self-signed certificate warning.  
+   There is no out-of-the-box default login password; the wizard sets the login password for you.  
+   If your computer is connected to WiFi, you can plug the RPi into your Ethernet adapter and still stay connected to the internet at the same time.
 
 4. **Initial configuration**  
-   Follow the wizard to configure the node type (mesh gate vs mesh point) and your radio settings.
+   Follow the OpenMANET setup wizard (see [Web UI](../web-ui)) to configure the node type (mesh gate vs mesh point) and your radio settings. If you need to re-open the wizard later, run `openmanetd setup-reset` on the node.
 
    > **Important:** After initial configuration, the node performs address/DHCP reservation and will reboot to apply it. If it does not reboot on its own, reboot it manually.
    >
