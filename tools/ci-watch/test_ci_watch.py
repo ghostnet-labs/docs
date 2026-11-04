@@ -82,6 +82,7 @@ def args(**kw) -> argparse.Namespace:
     a.self_update = False
     a.clone = []
     a.deploy_status = ""
+    a.idle_restart_status = ""
     for k, v in kw.items():
         setattr(a, k, v)
     return a
@@ -428,6 +429,41 @@ class FixOnceTest(unittest.TestCase):
         state["jobs"][0]["hosted"] = True
         self.assertEqual(cw.starved_labels(state), {})
 
+    def idle(self, status, loaded=True):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "status.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(status, f)
+            return cw.idle_restart_status(path, NOW, loaded=loaded)
+
+    def test_idle_restart_not_loaded_is_one_info_line(self):
+        found = self.idle({"ok": True, "action": "skip", "at": NOW.isoformat()}, loaded=False)
+        self.assertEqual(found["idle-restart:agent"]["level"], "info")
+        self.assertIn("not loaded", found["idle-restart:agent"]["text"])
+
+    def test_idle_restart_healthy_skip_is_quiet(self):
+        self.assertEqual(self.idle({"ok": True, "action": "skip", "reason": "busy", "at": NOW.isoformat()}), {})
+
+    def test_idle_restart_error_is_crit(self):
+        found = self.idle({"ok": False, "action": "error", "reason": "kubectl failed", "at": NOW.isoformat()})
+        self.assertEqual(found["idle-restart"]["level"], "crit")
+        self.assertIn("kubectl failed", found["idle-restart"]["text"])
+
+    def test_idle_restart_stale_file_is_crit(self):
+        found = self.idle({"ok": True, "action": "wait", "at": (NOW - timedelta(hours=3)).isoformat()})
+        self.assertIn("last ran", found["idle-restart"]["text"])
+
+    def test_idle_restart_restart_is_info_once_per_run(self):
+        found = self.idle({"ok": True, "action": "restarted", "reason": "idle 6 h", "at": NOW.isoformat()})
+        (key, item), = found.items()
+        self.assertEqual(item["level"], "info")
+        self.assertIn("idle 6 h", item["text"])
+        self.assertIn(NOW.isoformat(), key)
+
+    def test_idle_restart_missing_file_when_loaded_is_crit(self):
+        found = cw.idle_restart_status("/nonexistent/status.json", NOW, loaded=True)
+        self.assertEqual(found["idle-restart"]["level"], "crit")
+
     def deploy_status(self, status, head="abc1234def"):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "deploy-status.json")
@@ -567,7 +603,7 @@ class MainTest(unittest.TestCase):
                 mock.patch.object(cw.sr, "utcnow", return_value=NOW), \
                 mock.patch("builtins.print"):
             code = cw.main(["--repos", "luci", "--branch-hours", "0", "--state-dir", d, "--no-self-update",
-                            "--deploy-status", ""])
+                            "--deploy-status", "", "--idle-restart-status", ""])
             self.assertEqual(code, 0)
             self.assertIn("green, auto-merge on", Path(d, "report.md").read_text())
             self.assertTrue(json.loads(Path(d, "state.json").read_text())["initialized"])
