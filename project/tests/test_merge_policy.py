@@ -160,6 +160,21 @@ class GateTests(unittest.TestCase):
             if name != "firmware":
                 self.assertTrue(profile.get("requireUpToDate", True), name)
 
+    def test_path_filtered_pr_workflows_are_gated(self):
+        profiles = json.loads((Path(__file__).resolve().parents[1] / "scripts" / "merge_profiles.json").read_text())
+        cases = [
+            ("firmware", ".github/workflows/build-pr-x86-64.yml", "boards/x86-64/config", "README.md"),
+            ("firmware", ".github/workflows/build-pr-nanopc-t6.yml", "target/linux/rockchip/Makefile", "README.md"),
+            ("firmware", ".github/workflows/build-pr-nanopc-t6.yml", "package/boot/uboot-rockchip/Makefile", "target/linux/x86/Makefile"),
+            ("openmanetd", ".github/workflows/mesh-sim.yml", "internal/meshsim/sim.go", "README.md"),
+            ("openmanetd", ".github/workflows/mesh-sim.yml", "internal/openmanet/server/handlers/mesh_status.go", "internal/mgmt/alfred.go"),
+            ("packages", ".github/workflows/decoder-replay.yml", "lib/soapysdr/Makefile", "net/test/Makefile"),
+        ]
+        for repo, workflow, changed, unrelated in cases:
+            blocker = "Missing applicable workflow: " + workflow
+            self.assertIn(blocker, evaluate(profiles[repo], [changed], [], "current", 7), changed)
+            self.assertNotIn(blocker, evaluate(profiles[repo], [unrelated], [], "current", 7), unrelated)
+
     def test_external_checks_and_skipped_tests_block(self):
         check = {"id": 1, "app": {"id": 99}, "name": "External security scan", "status": "completed", "conclusion": "success"}
         self.assertEqual(check_blockers([check]), [])
