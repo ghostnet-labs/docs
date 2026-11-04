@@ -26,7 +26,12 @@ Each run (every 10 minutes from a LaunchAgent on the Mac Studio):
      its upstream branch, the firmware's OpenWrt 24.10 base (.openwrt-upstream)
      against openwrt-24.10, and every firmware feed pin against its branch.
      A repo or pin that falls behind is a warn until it is synced.
-  6. This Mac's memory: swap in use (--swap-warn-gb 4 warn, --swap-crit-gb 8
+  6. Every --profile-hours (6): merge profile drift. Each repo's PR workflows
+     (on.pull_request.paths) against project/scripts/merge_profiles.json, both
+     the copy its merge gate pins and docs main. A profile path the workflow
+     ignores is crit (the gate waits for a run that never starts); a workflow
+     path or workflow the profile lacks is warn (the gate does not wait for it).
+  7. This Mac's memory: swap in use (--swap-warn-gb 4 warn, --swap-crit-gb 8
      crit) or macOS memory pressure warn/critical, naming the biggest
      processes, so nobody has to open a dashboard to see the Studio swapping.
 
@@ -821,6 +826,207 @@ def upstream_drift(gh, repos: list[str]) -> tuple[list[dict], dict[str, dict]]:
     return rows, found
 
 
+# ---------------------------------------------------------------- merge profile drift
+#
+# merge_profiles.json (project/scripts) copies each PR workflow's on.pull_request.paths so
+# the merge gate knows which workflows a PR must wait for. When a repo edits a workflow's
+# paths and the copy is not updated, the gate either waits for a run that never starts
+# (the profile lists a path the workflow ignores: the PR sits until the gate times out)
+# or merges without a check that did run (the workflow lists a path the profile lacks).
+# firmware #82 narrowed build-pr-nanopc-t6.yml and the profile kept the old paths.
+
+PROFILE_FILE = HERE.parents[1] / "project" / "scripts" / "merge_profiles.json"
+PROFILE_PATH = "project/scripts/merge_profiles.json"
+GATE_WORKFLOW = ".github/workflows/manet-merge-gate.yml"
+# Workflows the gate itself ignores (merge_policy.py: the gate, LABEL_WORKFLOWS).
+GATE_IGNORED = {GATE_WORKFLOW, ".github/workflows/label-kernel.yml", ".github/workflows/label-target.yml"}
+GATE_PIN = re.compile(r"repository:\s*['\"]?" + re.escape(ORG) + r"/docs['\"]?\s*\n\s*ref:\s*['\"]?([0-9a-f]{40})")
+YAML_KEY = re.compile(r"^(\s*)(['\"]?)([\w-]+)\2:\s*(.*)$")
+
+
+def _strip_comment(line: str) -> str:
+    out, quote = [], None
+    for i, ch in enumerate(line):
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "#" and (i == 0 or line[i - 1] in " \t"):
+            break
+        out.append(ch)
+    return "".join(out).rstrip()
+
+
+def _scalar(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+        return value[1:-1]
+    return value
+
+
+def _flow_list(value: str) -> list[str]:
+    return [_scalar(v) for v in value.strip()[1:-1].split(",") if v.strip()]
+
+
+def _block(lines: list[str], start: int, indent: int) -> list[str]:
+    """Lines after start that are indented deeper than indent (blank lines dropped)."""
+    out = []
+    for line in lines[start + 1:]:
+        if not line.strip():
+            continue
+        if len(line) - len(line.lstrip()) <= indent:
+            break
+        out.append(line)
+    return out
+
+
+def _sequence(lines: list[str], start: int, indent: int) -> list[str]:
+    """A block sequence under the key at lines[start]; YAML allows its "- " items at the key's own indent."""
+    items = []
+    for line in lines[start + 1:]:
+        if not line.strip():
+            continue
+        depth = len(line) - len(line.lstrip())
+        if depth < indent or (depth == indent and not line.lstrip().startswith("- ")):
+            break
+        if line.lstrip().startswith("- "):
+            items.append(_scalar(line.strip()[2:]))
+    return items
+
+
+def pr_trigger(text: str) -> tuple[bool, list[str] | None]:
+    """(runs on pull_request, its paths filter or None for every change) for a workflow file.
+
+    A small reader for the block-style YAML these workflows use, so the Mac needs no PyYAML.
+    Only on.pull_request.paths is read; pull_request_target does not count.
+    """
+    lines = [_strip_comment(line) for line in text.splitlines()]
+    for i, line in enumerate(lines):
+        m = YAML_KEY.match(line)
+        if not m or m.group(1) or m.group(3) != "on":
+            continue
+        inline = m.group(4).strip()
+        if inline:
+            names = _flow_list(inline) if inline.startswith("[") else [_scalar(inline)]
+            return "pull_request" in names, None
+        body = _block(lines, i, 0)
+        if not body:
+            return False, None
+        child = len(body[0]) - len(body[0].lstrip())
+        if body[0].lstrip().startswith("- "):
+            return "pull_request" in [_scalar(b.strip()[2:]) for b in body if b.strip().startswith("- ")], None
+        for j, b in enumerate(body):
+            k = YAML_KEY.match(b)
+            if not k or len(k.group(1)) != child or k.group(3) != "pull_request":
+                continue
+            rest = k.group(4).strip()
+            if rest and rest not in ("{}", "null", "~"):
+                return True, None
+            sub = _block(body, j, child)
+            if not sub:
+                return True, None
+            grand = len(sub[0]) - len(sub[0].lstrip())
+            for n, s in enumerate(sub):
+                km = YAML_KEY.match(s)
+                if not km or len(km.group(1)) != grand or km.group(3) != "paths":
+                    continue
+                val = km.group(4).strip()
+                if val.startswith("["):
+                    return True, _flow_list(val)
+                return True, _sequence(sub, n, grand)
+            return True, None
+        return False, None
+    return False, None
+
+
+def profile_gaps(profile: dict, workflows: dict[str, str]) -> dict[str, tuple[str, str]]:
+    """{workflow path: (level, problem)} where profile and workflow files disagree."""
+    gaps: dict[str, tuple[str, str]] = {}
+    listed = {w["path"]: w["paths"] for w in profile.get("workflows", [])}
+    for path, expected in listed.items():
+        if path not in workflows:
+            gaps[path] = ("crit", "is in the profile but the workflow file is gone, so the gate waits for it forever")
+            continue
+        runs, actual = pr_trigger(workflows[path])
+        if not runs:
+            gaps[path] = ("crit", "is in the profile but no longer runs on pull_request, so the gate waits for it")
+            continue
+        if expected is None and actual is None:
+            continue
+        if expected is None or actual is None:
+            what = "every change" if actual is None else "only some paths"
+            gaps[path] = ("crit" if actual is not None else "warn",
+                          f"runs on {what} but the profile says {'every change' if expected is None else 'some paths'}")
+            continue
+        extra = sorted(set(expected) - set(actual))
+        missing = sorted(set(actual) - set(expected))
+        if extra:
+            gaps[path] = ("crit", "profile lists paths the workflow ignores, so the gate waits for a run that "
+                                  "never starts: " + ", ".join(extra))
+        elif missing:
+            gaps[path] = ("warn", "workflow runs on paths the profile lacks, so the gate does not wait for it: "
+                                  + ", ".join(missing))
+    for path, text in workflows.items():
+        if path in listed or path in GATE_IGNORED:
+            continue
+        runs, _ = pr_trigger(text)
+        if runs:
+            gaps[path] = ("warn", "runs on pull requests but is not in the profile, so the gate does not wait for it")
+    return gaps
+
+
+def repo_workflows(gh, repo: str, ref: str) -> dict[str, str]:
+    listing = gh.get(f"/repos/{repo}/contents/.github/workflows?ref={urllib.parse.quote(ref, safe='')}")
+    out: dict[str, str] = {}
+    for item in listing:
+        if item.get("type") == "file" and item.get("name", "").endswith((".yml", ".yaml")):
+            out[item["path"]] = repo_file(gh, repo, item["path"], ref) or ""
+    return out
+
+
+def profile_drift(gh, repos: list[str], local: dict | None = None) -> dict[str, dict]:
+    """Findings for each repo whose workflows disagree with the profile its gate uses or with docs main."""
+    if local is None:
+        local = json.loads(PROFILE_FILE.read_text(encoding="utf-8"))
+    found: dict[str, dict] = {}
+    pinned_cache: dict[str, dict] = {}
+    for repo in repos:
+        if repo not in local:
+            continue
+        full = f"{ORG}/{repo}"
+        branch = local[repo]["branch"]
+        try:
+            workflows = repo_workflows(gh, full, branch)
+        except RuntimeError:
+            continue  # unreadable this time (the PR scan reports read errors); try again next interval
+        sources = [("docs main", local[repo], f"https://github.com/{ORG}/docs/blob/main/{PROFILE_PATH}")]
+        pin = GATE_PIN.search(workflows.get(GATE_WORKFLOW, ""))
+        if pin:
+            sha = pin.group(1)
+            if sha not in pinned_cache:
+                pinned_cache[sha] = json.loads(repo_file(gh, f"{ORG}/docs", PROFILE_PATH, sha) or "{}")
+            if repo in pinned_cache[sha]:
+                sources.insert(0, (f"the gate's pinned docs {sha[:7]}", pinned_cache[sha][repo],
+                                   f"https://github.com/{ORG}/docs/blob/{sha}/{PROFILE_PATH}"))
+        merged: dict[str, list] = {}
+        for label, profile, url in sources:
+            for path, (level, problem) in profile_gaps(profile, workflows).items():
+                merged.setdefault(path, []).append((level, problem, label, url))
+        for path, hits in merged.items():
+            level = max((h[0] for h in hits), key=LEVELS.get)
+            name = path.rsplit("/", 1)[-1]
+            problems: dict[str, list[str]] = {}
+            for _, problem, label, _ in hits:
+                problems.setdefault(problem, []).append(label)
+            detail = "; ".join(f"{problem} (merge_profiles.json in {' and '.join(labels)})"
+                               for problem, labels in problems.items())
+            found[f"profile:{repo}:{name}"] = {
+                "level": level, "repo": repo, "url": f"https://github.com/{full}/blob/{branch}/{path}",
+                "text": f"merge gate: {repo} {name}: {detail}"}
+    return found
+
+
 # ---------------------------------------------------------------- report
 
 
@@ -1026,6 +1232,20 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
     else:
         upstream = {}
 
+    profiles = state.get("profiles", {})
+    profile_hours = getattr(args, "profile_hours", 0)
+    last_prof = sr.parse_ts(profiles.get("scan_iso"))
+    if profile_hours > 0 and (last_prof is None or now - last_prof >= timedelta(hours=profile_hours)):
+        try:
+            profiles = {"scan_iso": now.isoformat(), "found": profile_drift(gh, repos)}
+        except (RuntimeError, OSError, ValueError) as err:
+            # Keep the last scan's findings and try again next interval, like the upstream scan.
+            profiles = dict(profiles, scan_iso=now.isoformat(), error=f"{ts(now)}: {str(err)[:200]}")
+    if profile_hours > 0:
+        found.update(profiles.get("found", {}))
+    else:
+        profiles = {}
+
     clones = args.clone if args.clone is not None else [c for c in DEFAULT_CLONES if os.path.isdir(c)]
     drift_state = state.get("deploy", {})
     try:
@@ -1054,7 +1274,7 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
         "initialized": True, "at": now.isoformat(), "error_runs": error_runs,
         "active": found, "branches": branches, "branches_at": branches_at,
         "branches_scan_iso": state.get("branches_scan_iso"), "upstream": upstream,
-        "deploy": drift_state, "self_update": self_update,
+        "deploy": drift_state, "self_update": self_update, "profiles": profiles,
         "prs": {f"{p['repo']}#{p['number']}": p for p in prs},
     }
     return new_state, report, {"new": new, "cleared": cleared, "events": events}
@@ -1143,6 +1363,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--branch-hours", type=float, default=1.0, help="merged-branch scan interval (0 = off)")
     p.add_argument("--upstream-hours", type=float, default=6.0,
                    help="upstream drift scan interval: forks vs OpenMANET, firmware vs OpenWrt 24.10 (0 = off)")
+    p.add_argument("--profile-hours", type=float, default=6.0,
+                   help="merge profile check interval: merge_profiles.json vs each repo's PR workflow paths (0 = off)")
     p.add_argument("--state-dir", default=STATE_DIR)
     p.add_argument("--json", action="store_true", help="print the run's alert batch as JSON")
     return p.parse_args(argv)

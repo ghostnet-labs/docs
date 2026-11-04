@@ -51,6 +51,8 @@
           "boards/common/**",
           "include/kernel*",
           "package/kernel/**",
+          "package/firmware/**",
+          "target/linux/generic/**",
           "target/linux/bcm27xx/**",
           "feeds.conf.default"
         ]
@@ -103,6 +105,7 @@
           "scripts/openmanet_setup.sh",
           ".github/workflows/build-firmware.yml",
           ".github/workflows/build-pr-x86-64.yml",
+          "scripts/qemu-e2e/**",
           "include/kernel*",
           "package/kernel/**",
           "target/linux/x86/**",
@@ -113,18 +116,13 @@
         "path": ".github/workflows/build-pr-nanopc-t6.yml",
         "paths": [
           "boards/nanopc-t6/**",
-          "boards/common/**",
-          "boards/common_extras/**",
           "patches/nanopc-t6/**",
-          "scripts/openmanet_setup.sh",
-          ".github/workflows/build-firmware.yml",
           ".github/workflows/build-pr-nanopc-t6.yml",
           "include/kernel*",
           "package/kernel/**",
           "package/boot/uboot-rockchip/**",
           "package/boot/arm-trusted-firmware-rockchip/**",
-          "target/linux/rockchip/**",
-          "feeds.conf.default"
+          "target/linux/rockchip/**"
         ]
       },
       {
@@ -133,6 +131,7 @@
           ".github/workflows/check-kernel-patches.yml",
           ".github/workflows/build.yml",
           ".github/workflows/kernel.yml",
+          ".github/workflows/reusable_*.yml",
           "include/kernel*",
           "package/kernel/**",
           "target/linux/**"
@@ -181,6 +180,7 @@
           "internal/**",
           "cmd/**",
           "proto/**",
+          "frontend/src/gen/**",
           "sqlc.yaml",
           "buf.yaml",
           "buf.gen.yaml",
