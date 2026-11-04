@@ -27,6 +27,7 @@ or writing.
 | Deploy drift | a deployed docs clone (`~/ci-watch-src`, `~/runner-status-src`, `~/stale-runs-src`, or `--clone`) misses `tools/` changes on main for over an hour, so whatever updates it has stopped | warn |
 | Runner-status autodeploy (`--deploy-status`) | `~/.config/runner-status/deploy-status.json` says ok is false, names a commit that is not `~/runner-status-src`'s HEAD, or was last written over 30 min ago; links the runner-status history on main | warn |
 | ci-k3s idle restart (`--idle-restart-status`) | `~/.config/ci-k3s-idle-restart/status.json` says ok is false or is over 2 h old while `com.ghostnet.ci-k3s-idle-restart` is loaded (crit); one info line while the agent is not loaded, and one per restart with its reason | crit / info |
+| Host memory (`--swap-warn-gb`, `--swap-crit-gb`) | the Mac running ci-watch has 4 GiB of swap in use or macOS memory pressure is warn (warn), or 8 GiB of swap or pressure critical (crit); names the biggest processes; clears below 3 GiB (75 %) so it does not flap. `--swap-warn-gb 0` turns it off. See [Host memory](#host-memory) | warn / crit |
 | Itself | GitHub unreadable three runs in a row; the hourly self-update failed | crit / warn |
 | News | a PR opened, merged, closed, or no longer red | info |
 | Branches (hourly) | lists branches already in the default branch that no open PR uses; never deletes | report only |
@@ -46,6 +47,17 @@ and the failure does not count as a GitHub outage.
 Each problem alerts once when it appears and once when it clears. A repo that
 could not be read keeps its last state, so a network blip never looks like a
 fix.
+
+## Host memory
+
+The Studio runs ci-k3s (12 GiB), gh-build (9 GiB) and Docker Desktop on 32 GiB.
+A running VM never hands back memory it touched, so after a day of jobs the
+Mac swaps. ci-watch checks `sysctl vm.swapusage` and
+`kern.memorystatus_vm_pressure_level` every run and alerts by banner and on the
+issue, with the four biggest processes in the text (`VM` is any Lima or
+Docker VM). What to do, in order: let the ci-k3s idle restart run (it frees
+ci-k3s when ARC is idle), lower Docker Desktop's memory, quit idle apps.
+This replaces the runner page's swap alert, so it works with `--runner-page` off.
 
 ## Where alerts go
 

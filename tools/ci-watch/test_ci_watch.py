@@ -7,6 +7,7 @@ import base64
 import json
 import os
 import plistlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -83,6 +84,7 @@ def args(**kw) -> argparse.Namespace:
     a.clone = []
     a.deploy_status = ""
     a.idle_restart_status = ""
+    a.swap_warn_gb = 0
     for k, v in kw.items():
         setattr(a, k, v)
     return a
@@ -460,6 +462,56 @@ class FixOnceTest(unittest.TestCase):
         self.assertIn("idle 6 h", item["text"])
         self.assertIn(NOW.isoformat(), key)
 
+    def mem(self, swap, pressure=1, previous=None):
+        return cw.host_memory({"swap_gib": swap, "pressure": pressure, "top": ["VM 12G", "Docker 8G"]},
+                              4.0, 8.0, previous or {})
+
+    def test_host_memory_quiet_below_threshold(self):
+        self.assertEqual(self.mem(2.5), {})
+
+    def test_host_memory_swap_warns_and_names_biggest(self):
+        found = self.mem(5.0)
+        self.assertEqual(set(found), {"host:memory"})
+        self.assertIn("5.0 GiB", found["host:memory"]["text"])
+        self.assertIn("VM 12G, Docker 8G", found["host:memory"]["text"])
+
+    def test_host_memory_pressure_warn_alone_warns(self):
+        self.assertEqual(set(self.mem(1.0, pressure=2)), {"host:memory"})
+
+    def test_host_memory_crit_adds_second_key(self):
+        self.assertEqual(set(self.mem(8.7)), {"host:memory", "host:memory:crit"})
+        self.assertEqual(self.mem(1.0, pressure=4)["host:memory:crit"]["level"], "crit")
+
+    def test_host_memory_active_alert_needs_to_drop_well_below_to_clear(self):
+        self.assertIn("host:memory", self.mem(3.5, previous={"host:memory": {}}))
+        self.assertEqual(self.mem(2.9, previous={"host:memory": {}}), {})
+
+    def test_host_memory_off_or_unreadable(self):
+        self.assertEqual(cw.host_memory(None, 4.0, 8.0, {}), {})
+        self.assertEqual(cw.host_memory({"swap_gib": 9, "pressure": 4, "top": []}, 0, 8.0, {}), {})
+
+    def test_read_host_memory_parses_sysctl_and_top(self):
+        outputs = {
+            "vm.swapusage": "total = 8192.00M  used = 7590.81M  free = 601.19M  (encrypted)\n",
+            "kern.memorystatus_vm_pressure_level": "2\n",
+            "top": "Processes: 900 total\n\nCOMMAND          MEM\ncom.apple.Virtua 9240M\nAgentWorkspace   1501M\n",
+        }
+
+        def run(cmd, **_):
+            key = cmd[2] if cmd[0] == "sysctl" else "top"
+            return subprocess.CompletedProcess(cmd, 0, stdout=outputs[key], stderr="")
+
+        with mock.patch.object(cw.platform, "system", return_value="Darwin"):
+            mem = cw.read_host_memory(run=run)
+        self.assertAlmostEqual(mem["swap_gib"], 7590.81 / 1024)
+        self.assertEqual(mem["pressure"], 2)
+        self.assertEqual(mem["top"], ["VM 9240M", "AgentWorkspace 1501M"])
+
+    def test_run_once_includes_host_memory(self):
+        a = args(swap_warn_gb=4.0, swap_crit_gb=8.0, host_memory={"swap_gib": 6.0, "pressure": 2, "top": []})
+        new_state, _, _ = cw.run_once(FakeGitHub(repo_routes()), a, NOW, {})
+        self.assertIn("host:memory", new_state["active"])
+
     def test_idle_restart_missing_file_when_loaded_is_crit(self):
         found = cw.idle_restart_status("/nonexistent/status.json", NOW, loaded=True)
         self.assertEqual(found["idle-restart"]["level"], "crit")
@@ -603,7 +655,7 @@ class MainTest(unittest.TestCase):
                 mock.patch.object(cw.sr, "utcnow", return_value=NOW), \
                 mock.patch("builtins.print"):
             code = cw.main(["--repos", "luci", "--branch-hours", "0", "--state-dir", d, "--no-self-update",
-                            "--deploy-status", "", "--idle-restart-status", ""])
+                            "--deploy-status", "", "--idle-restart-status", "", "--swap-warn-gb", "0"])
             self.assertEqual(code, 0)
             self.assertIn("green, auto-merge on", Path(d, "report.md").read_text())
             self.assertTrue(json.loads(Path(d, "state.json").read_text())["initialized"])
