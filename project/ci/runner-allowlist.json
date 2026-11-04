@@ -167,6 +167,16 @@
     },
     {
       "repo": "firmware",
+      "workflow": "hold-builds.yml",
+      "job": "hold",
+      "rules": [
+        "hosted-runner",
+        "pr-concurrency"
+      ],
+      "reason": "Pause board builds on hold: pull_request_target label job with an actions:write token that never checks out PR code; hosted like the other token-holding automation. Runs one at a time per PR in event order on purpose (cancel-in-progress false) so a pause is never dropped behind a resume."
+    },
+    {
+      "repo": "firmware",
       "workflow": "label-kernel.yml",
       "job": "build-kernels-label",
       "rules": [
