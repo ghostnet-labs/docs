@@ -37,7 +37,7 @@ Pick the control source that matches how you want to key the mic:
 
 
 ### Config File
-Add a `comms:` block to `/etc/openmanet-comms/config.yml`:
+Add a `comms:` block to `/etc/openmanetd/config.yml`:
 
 ```yaml
 comms:
