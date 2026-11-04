@@ -377,7 +377,17 @@ def main():
         return
     deadline = time.monotonic() + args.timeout
     while True:
-        pr, blockers = snapshot(api, args.repo, args.pr, profile)
+        try:
+            pr, blockers = snapshot(api, args.repo, args.pr, profile)
+        except TRANSIENT_ERRORS as error:
+            # The gate waits for hours; one GitHub outage longer than a read's retries
+            # (firmware #82 on 2026-11-04: HTTP 500 on commits/{sha}/status) must not fail
+            # it. Try again on the next poll until the deadline.
+            if not _transient(error) or time.monotonic() >= deadline:
+                raise
+            print(f"GitHub API error ({error}); checking again in 30s", flush=True)
+            time.sleep(30)
+            continue
         if pr["head"]["sha"] != args.sha:
             raise SystemExit("PR head changed; this result is stale")
         if not blockers:
