@@ -79,4 +79,4 @@ Camera services start only when `cam -l` detects a compatible sensor. See [Camer
 | [Cameras](./hardware/cameras) | Supported CSI cameras, MediaMTX RTSP streaming, and ATAK Sensor CoT integration |
 | [HaLowLink2](./hardware/halowlink2) | HaLowLink2-specific hardware notes |
 | [Heltec](./hardware/heltec) | Heltec hardware support |
-| [Gateworks Venice](./hardware/venic) | Gateworks Venice hardware support |
+| [Gateworks Venice](./hardware/venice) | Gateworks Venice hardware support |
