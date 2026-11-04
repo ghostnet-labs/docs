@@ -243,11 +243,9 @@
       "workflow": "manet-auto-merge.yml",
       "job": "merge",
       "rules": [
-        "hosted-cron",
-        "hosted-runner",
-        "pr-concurrency"
+        "hosted-runner"
       ],
-      "reason": "Handle passing PRs: pull_request_target/workflow_run job with a write token in one manet-auto-merge concurrency group; a newer trigger replaces a queued or running sweep (cancel-in-progress true). Stays hosted with a 6-hourly fallback cron ('N */6 * * *') until the merge pipeline thread ships its event-driven replacement."
+      "reason": "Hosted on purpose: the merge job holds a write token and must not share a persistent self-hosted runner with jobs that run PR code, until dedicated JIT runners exist. Its single global manet-auto-merge concurrency group cancels in progress so a stuck run cannot starve later runs."
     },
     {
       "repo": "openmanetd",
