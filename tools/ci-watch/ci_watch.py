@@ -26,6 +26,9 @@ Each run (every 10 minutes from a LaunchAgent on the Mac Studio):
      its upstream branch, the firmware's OpenWrt 24.10 base (.openwrt-upstream)
      against openwrt-24.10, and every firmware feed pin against its branch.
      A repo or pin that falls behind is a warn until it is synced.
+  6. This Mac's memory: swap in use (--swap-warn-gb 4 warn, --swap-crit-gb 8
+     crit) or macOS memory pressure warn/critical, naming the biggest
+     processes, so nobody has to open a dashboard to see the Studio swapping.
 
 A finding alerts once, when it first appears, and once more when it clears.
 If GitHub cannot be read three runs in a row, that is an alert too.
@@ -617,17 +620,18 @@ def idle_restart_status(path: str, now: datetime, loaded=None) -> dict[str, dict
 
 
 GIB = 1024 ** 3
-SWAP_WARN, SWAP_CRIT = 4 * GIB, 8 * GIB
 SWAP_FULL = 0.9            # swap files this full are crit ...
 SWAP_FULL_MIN = 2 * GIB    # ... once there is real swap (macOS grows the file to fit, so small is always "full")
+MEMORY_CLEAR_RATIO = 0.75  # an active swap alert clears only below this share of its threshold (4 GiB -> 3 GiB)
 PRESSURE = {1: "normal", 2: "warn", 4: "critical"}  # kern.memorystatus_vm_pressure_level
 SWAP_FIELD = re.compile(r"(total|used)\s*=\s*([\d.]+)([KMGT])")
 UNIT = {"K": 1024, "M": 1024 ** 2, "G": GIB, "T": 1024 ** 4}
+MEMORY_URL = f"https://github.com/{ORG}/docs/tree/main/tools/ci-watch#host-memory"
 
 
 def run_cmd(*cmd: str) -> str:
     try:
-        done = subprocess.run(list(cmd), capture_output=True, text=True, timeout=15, check=False)
+        done = subprocess.run(list(cmd), capture_output=True, text=True, timeout=30, check=False)
     except (OSError, subprocess.SubprocessError):
         return ""
     return done.stdout if done.returncode == 0 else ""
@@ -637,46 +641,62 @@ def gib(n: float) -> str:
     return f"{n / GIB:.1f} GiB"
 
 
-def host_memory(idle_status: str = "", run=None) -> dict[str, dict]:
-    """Swap and memory pressure of the Mac running ci-watch, read with sysctl.
+def biggest_processes(run) -> list[str]:
+    """The four biggest processes by memory footprint, as top shows them."""
+    lines = run("top", "-l", "1", "-o", "mem", "-n", "4", "-stats", "command,mem").strip().splitlines()
+    head = next((i for i, ln in enumerate(lines) if ln.split()[:1] == ["COMMAND"]), None)
+    if head is None:
+        return []
+    # top cuts names at 16 characters; every Lima and Docker VM shows as this one.
+    return [" ".join(ln.split()).replace("com.apple.Virtua", "VM", 1) for ln in lines[head + 1:] if ln.strip()]
+
+
+def host_memory(previous: dict | None = None, warn_gib: float = 4.0, crit_gib: float = 8.0,
+                idle_status: str = "", run=None) -> dict[str, dict]:
+    """Swap and memory pressure of the Mac running ci-watch, read with sysctl and top.
 
     Replaces the runner page's swap alerts, so nobody has to open a dashboard.
-    Read-only; warn at 4 GiB swap or pressure "warn", crit at 8 GiB, a swap
-    file 90% full, or pressure "critical". The finding clears by itself.
+    Read-only. warn at warn_gib of swap or pressure "warn"; crit at crit_gib,
+    a swap file 90% full, or pressure "critical". An active alert holds until
+    swap drops below MEMORY_CLEAR_RATIO of its threshold, so it does not flap.
+    warn_gib 0 turns the check off; crit_gib 0 means swap alone never makes it crit.
     """
+    if warn_gib <= 0:
+        return {}
     if run is None:
         if platform.system() != "Darwin":
             return {}
         run = run_cmd
+    previous = previous or {}
     swap = {k: float(v) * UNIT[u] for k, v, u in SWAP_FIELD.findall(run("sysctl", "-n", "vm.swapusage"))}
     used, total = swap.get("used", 0.0), swap.get("total", 0.0)
     try:
         level = int(run("sysctl", "-n", "kern.memorystatus_vm_pressure_level").strip() or 0)
     except ValueError:
         level = 0
-    full = total > 0 and used >= SWAP_FULL_MIN and used / total >= SWAP_FULL
-    if used >= SWAP_CRIT or level >= 4 or full:
+
+    def limit(gib_: float, *keys: str) -> float:
+        return gib_ * GIB * (MEMORY_CLEAR_RATIO if any(f"host:memory:{k}" in previous for k in keys) else 1)
+
+    full = crit_gib > 0 and total > 0 and used >= SWAP_FULL_MIN and used / total >= SWAP_FULL
+    if (crit_gib > 0 and used >= limit(crit_gib, "crit")) or level >= 4 or full:
         severity = "crit"
-    elif used >= SWAP_WARN or level >= 2:
+    elif used >= limit(warn_gib, "warn", "crit") or level >= 2:
         severity = "warn"
     else:
         return {}
-    top = []
-    for line in run("ps", "-axmo", "rss=,comm=").splitlines()[:3]:
-        rss, _, comm = line.strip().partition(" ")
-        if rss.isdigit():
-            top.append(f"{os.path.basename(comm.strip())} {gib(int(rss) * 1024)}")
-    text = (f"Mac memory: swap {gib(used)} of {gib(total)} used, pressure {PRESSURE.get(level, level)}"
-            + (f"; top: {', '.join(top)}" if top else ""))
+    top = ", ".join(biggest_processes(run)) or "unknown"
+    text = (f"Mac is swapping: {gib(used)} of {gib(total)} swap in use, memory pressure {PRESSURE.get(level, level)}. "
+            f"Biggest: {top}. The ci-k3s idle restart frees its VM when ARC is idle; "
+            "Docker Desktop and idle apps are the other usual causes")
     if idle_status and os.path.exists(idle_status):
         try:
             with open(idle_status, encoding="utf-8") as f:
                 st = json.load(f)
-            text += f"; ci-k3s idle-restart last said {st.get('action')} ({str(st.get('reason') or '')[:80]})"
+            text += f". Idle restart last said {st.get('action')} ({str(st.get('reason') or '')[:80]})"
         except (OSError, ValueError):
             pass
-    url = f"https://github.com/{ORG}/setup/issues/87"
-    return {f"host:memory:{severity}": {"level": severity, "url": url, "text": text}}
+    return {f"host:memory:{severity}": {"level": severity, "url": MEMORY_URL, "text": text}}
 
 
 def update_self(now: datetime, previous: dict, git=None, root: str | None = None) -> tuple[dict, dict]:
@@ -1017,8 +1037,8 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
                                git=getattr(args, "git", None)))
     found.update(idle_restart_status(getattr(args, "idle_restart_status", IDLE_RESTART), now,
                                      loaded=getattr(args, "idle_restart_loaded", None)))
-    if getattr(args, "host_memory", True):
-        found.update(host_memory(getattr(args, "idle_restart_status", IDLE_RESTART), run=getattr(args, "run", None)))
+    found.update(host_memory(previous_active, getattr(args, "swap_warn_gb", 4.0), getattr(args, "swap_crit_gb", 8.0),
+                             getattr(args, "idle_restart_status", IDLE_RESTART), run=getattr(args, "run", None)))
     self_update = state.get("self_update", {})
     if args.self_update:
         self_found, self_update = update_self(now, self_update, git=getattr(args, "git", None))
@@ -1107,8 +1127,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="runner-status autodeploy status file to check ('' = off)")
     p.add_argument("--idle-restart-status", default=IDLE_RESTART, metavar="PATH",
                    help="ci-k3s idle-restart status file to check ('' = off)")
-    p.add_argument("--no-host-memory", dest="host_memory", action="store_false",
-                   help="skip the swap and memory pressure check of this Mac")
+    p.add_argument("--swap-warn-gb", type=float, default=4.0,
+                   help="warn when this Mac has this much swap in use or memory pressure is warn (0 = off)")
+    p.add_argument("--swap-crit-gb", type=float, default=8.0,
+                   help="crit at this much swap in use or memory pressure critical (0 = no crit from swap)")
     p.add_argument("--no-self-update", dest="self_update", action="store_false",
                    help="do not fast-forward this clone of docs every hour")
     p.add_argument("--retired-runner", action="append", metavar="REGEX",

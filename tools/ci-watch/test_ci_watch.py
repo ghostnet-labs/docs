@@ -83,7 +83,8 @@ def args(**kw) -> argparse.Namespace:
     a.clone = []
     a.deploy_status = ""
     a.idle_restart_status = ""
-    a.host_memory = False
+    a.swap_warn_gb = 0
+    a.swap_crit_gb = 0
     for k, v in kw.items():
         setattr(a, k, v)
     return a
@@ -430,23 +431,30 @@ class FixOnceTest(unittest.TestCase):
         state["jobs"][0]["hosted"] = True
         self.assertEqual(cw.starved_labels(state), {})
 
-    def mem(self, swap="total = 2048.00M  used = 512.00M  free = 1536.00M  (encrypted)", level="1", idle=""):
+    TOP = ("Processes: 600 total\n\nCOMMAND          MEM\ncom.apple.Virtua 11G+\n"
+           "com.apple.Virtua 8900M\nDocker Desktop   2100M\nSafari           900M\n")
+
+    def mem(self, swap="total = 2048.00M  used = 512.00M  free = 1536.00M  (encrypted)", level="1", idle="",
+            previous=None, warn=4.0, crit=8.0):
         out = {"vm.swapusage": swap, "kern.memorystatus_vm_pressure_level": level}
 
         def run(*cmd):
             if cmd[0] == "sysctl":
                 return out[cmd[-1]]
-            return "  9000000 /usr/bin/qemu-system-aarch64\n  2000000 /Applications/Docker.app/x\n   500 sh\n"
-        return cw.host_memory(idle, run=run)
+            return self.TOP
+        return cw.host_memory(previous, warn, crit, idle, run=run)
 
     def test_low_swap_normal_pressure_is_quiet(self):
         self.assertEqual(self.mem(), {})
 
-    def test_swap_over_4_gib_warns_with_top_processes(self):
+    def test_swap_over_4_gib_warns_naming_biggest_processes_and_causes(self):
         found = self.mem(swap="total = 6144.00M  used = 4608.00M  free = 1536.00M")
         item = found["host:memory:warn"]
-        self.assertIn("swap 4.5 GiB of 6.0 GiB", item["text"])
-        self.assertIn("qemu-system-aarch64 8.6 GiB", item["text"])
+        self.assertIn("4.5 GiB of 6.0 GiB swap in use", item["text"])
+        self.assertIn("Biggest: VM 11G+, VM 8900M, Docker Desktop 2100M, Safari 900M", item["text"])
+        self.assertIn("ci-k3s idle restart", item["text"])
+        self.assertIn("Docker Desktop and idle apps", item["text"])
+        self.assertTrue(item["url"].endswith("#host-memory"))
 
     def test_swap_over_8_gib_or_critical_pressure_is_crit(self):
         self.assertIn("host:memory:crit", self.mem(swap="total = 10240.00M  used = 9216.00M  free = 1024.00M"))
@@ -459,13 +467,35 @@ class FixOnceTest(unittest.TestCase):
         self.assertIn("host:memory:crit", self.mem(swap="total = 3072.00M  used = 2900.00M  free = 172.00M"))
         self.assertEqual(self.mem(swap="total = 1024.00M  used = 1000.00M  free = 24.00M"), {})
 
+    def test_active_warn_holds_until_swap_is_under_3_gib(self):
+        swap35 = "total = 5120.00M  used = 3584.00M  free = 1536.00M"
+        self.assertEqual(self.mem(swap=swap35), {})
+        active = {"host:memory:warn": {}}
+        self.assertIn("host:memory:warn", self.mem(swap=swap35, previous=active))
+        self.assertEqual(self.mem(swap="total = 5120.00M  used = 3000.00M  free = 2120.00M", previous=active), {})
+
+    def test_active_crit_holds_until_swap_is_under_6_gib_then_warns(self):
+        active = {"host:memory:crit": {}}
+        self.assertIn("host:memory:crit", self.mem(swap="total = 8192.00M  used = 6400.00M", previous=active))
+        self.assertIn("host:memory:warn", self.mem(swap="total = 8192.00M  used = 3584.00M", previous=active))
+
+    def test_swap_thresholds_zero_turn_off_check_or_crit(self):
+        big = "total = 10240.00M  used = 9216.00M  free = 1024.00M"
+        self.assertEqual(self.mem(swap=big, level="4", warn=0), {})
+        self.assertIn("host:memory:warn", self.mem(swap=big, crit=0))
+
     def test_memory_alert_quotes_idle_restart_status(self):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "status.json")
             with open(path, "w", encoding="utf-8") as f:
                 json.dump({"ok": True, "action": "wait", "reason": "jobs running"}, f)
             found = self.mem(level="2", idle=path)
-        self.assertIn("idle-restart last said wait (jobs running)", found["host:memory:warn"]["text"])
+        self.assertIn("Idle restart last said wait (jobs running)", found["host:memory:warn"]["text"])
+
+    def test_swap_flags_parse(self):
+        a = cw.parse_args(["--swap-warn-gb", "0", "--swap-crit-gb", "6"])
+        self.assertEqual((a.swap_warn_gb, a.swap_crit_gb), (0.0, 6.0))
+        self.assertEqual(cw.parse_args([]).swap_warn_gb, 4.0)
 
     def idle(self, status, loaded=True):
         with tempfile.TemporaryDirectory() as d:
@@ -642,7 +672,7 @@ class MainTest(unittest.TestCase):
                 mock.patch("builtins.print"):
             code = cw.main(["--repos", "luci", "--branch-hours", "0", "--state-dir", d, "--no-self-update",
                             "--deploy-status", "", "--idle-restart-status", "",
-                            "--no-host-memory"])
+                            "--swap-warn-gb", "0"])
             self.assertEqual(code, 0)
             self.assertIn("green, auto-merge on", Path(d, "report.md").read_text())
             self.assertTrue(json.loads(Path(d, "state.json").read_text())["initialized"])
