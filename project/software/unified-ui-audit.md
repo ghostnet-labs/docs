@@ -10,7 +10,7 @@
 | ghostnet-labs/openmanetd `ekh-1.3.10` | `f8751da` | Pinned by packages `openmanetd/Makefile` (`PKG_SOURCE_VERSION`, release 1.3.10-8). |
 | ghostnet-labs/openmanetd `main` | `13b61a2` | 74 commits ahead of `ekh-1.3.10`. Not shipped. |
 | ghostnet-labs/packages | `b4faf12` | |
-| ghostnet-labs/luci `mm-23.05` | `cef427b` | firmware `feeds.conf.default` pins OpenMANET/luci `53e6515`, an ancestor of `cef427b` (8 commits behind). |
+| ghostnet-labs/luci `mm-23.05` | `cef427b` | firmware `feeds.conf.default` pins OpenMANET/luci `53e6515`, an ancestor of `cef427b` (8 commits behind `cef427b`, the revision this audit read). Note (2026-11-03): `mm-23.05` has since moved to `681a739e78` and is now 33 commits past the `53e6515` pin, which firmware `feeds.conf.default` still uses. |
 | ghostnet-labs/firmware `24.10` | `726c6a4` | |
 
 Paths are written `repo:path`. Branch marks: **[both]** = on `ekh-1.3.10` and `main`; **[main]** = only on `main`. "Inferred" marks anything not read directly from code or config.
