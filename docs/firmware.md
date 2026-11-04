@@ -43,6 +43,9 @@ Use this as a quick guide for the `rpiX` part of the filename:
 | Raspberry Pi 4 / CM4 | `rpi4` |
 | Raspberry Pi 3B | `rpi3` |
 | Raspberry Pi Zero 2 W (Pi2W) | `rpi3` |
+| Raspberry Pi 5 / CM5 | `rpi5-cm5` (image `rpi5-cm5-mm8108-usb`; the Ghostnet V1 carrier uses the separate `ghostnet-v1-cm5` image) |
+
+> Note: NanoPC-T6 LTS (`nanopc-t6`), x86-64 (`x86-64`) and RAVEN (`raven`) images are not included in published releases. Build them from source with the matching board config in `firmware/boards/`.
 
 ---
 

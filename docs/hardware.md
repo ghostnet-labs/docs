@@ -24,6 +24,10 @@ OpenMANET runs on Raspberry Pi–based devices paired with Wi‑Fi HaLow (802.11
 | HaLowLink2 | ✅ Supported | Integrated HaLow device — see [HaLowLink2](./hardware/halowlink2) |
 | Heltec | ✅ Supported  | See [Heltec](./hardware/heltec) for current status |
 | Gateworks Venice | ✅ Supported | See [Gateworks Venice](./hardware/venice) |
+| Raspberry Pi 5 / CM5 (bcm2712) | 🧪 Bench validation | Release image for a USB-connected MM8108 radio such as the Gateworks GW16167; a separate Ghostnet V1 CM5 carrier profile is also built. Not yet hardware qualified |
+| FriendlyElec NanoPC-T6 LTS (RK3588) | 🧪 Bench build | USB-connected MM8108 radio. Not in published releases; build from source |
+| x86-64 (generic UEFI/BIOS PC) | 🧪 Bench build | USB-connected MM8108 radio; Protectli VP2430 is the bench node. Not in published releases; build from source — see `firmware/boards/x86-64/README.md` |
+| RAVEN (bcm2711) | 🧪 Build from source only | MM8108 radio. Board config exists, but no CI or release image is built |
 
 ---
 
