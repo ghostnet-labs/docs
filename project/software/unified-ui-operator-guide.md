@@ -1,22 +1,24 @@
 # Unified UI operator guide
 
 **Owner:** [GHO-81](https://linear.app/ghostnet-labs/issue/GHO-81) (publish unified-UI guidance)  
-**Status:** Written 2026-10-09 from the code and open PRs listed below. No ghostnet-labs firmware release contains the unified UI yet, so check the "Before you rely on this guide" list against the image you run.  
+**Status:** Written 2026-10-09; updated for the current firmware feed pin. Check the caveats under "Before you rely on this guide" against the image you run.  
 **Design:** routing, sign-in and recovery are owned by [unified-ui-design.md](unified-ui-design.md) (D-037). This guide tells an operator how to use them.
 
 ## Before you rely on this guide
 
-This guide describes the integrated image. On 2026-10-09 these parts were not yet in any firmware image:
+This guide describes the integrated image. The firmware feed pin (`firmware/feeds.conf.default` pins packages `6b4cf56`) includes these parts:
 
 | Part | State | Link |
 |---|---|---|
-| LuCI proxy and the Advanced entry | Pending, openmanetd PR | [openmanetd#22](https://github.com/ghostnet-labs/openmanetd/pull/22) ([GHO-70](https://linear.app/ghostnet-labs/issue/GHO-70), [GHO-71](https://linear.app/ghostnet-labs/issue/GHO-71)) |
-| Reboot button on Settings | Pending, openmanetd PR | [openmanetd#24](https://github.com/ghostnet-labs/openmanetd/pull/24) ([GHO-76](https://linear.app/ghostnet-labs/issue/GHO-76)) |
-| A newer openmanetd in the package (the shipped package builds the `ekh-1.3.10` line) | Pending | [GHO-80](https://linear.app/ghostnet-labs/issue/GHO-80) |
-| "Back to OpenMANET" link in LuCI | Merged in packages `24.10` ([packages#14](https://github.com/ghostnet-labs/packages/pull/14)); not yet in a firmware feed pin | [GHO-73](https://linear.app/ghostnet-labs/issue/GHO-73) |
-| LuCI warnings on daemon-managed settings | Merged in packages `24.10` as openmanetd 1.3.10-9 ([packages#15](https://github.com/ghostnet-labs/packages/pull/15)); not yet in a firmware feed pin | [GHO-74](https://linear.app/ghostnet-labs/issue/GHO-74) |
-| OpenMANET wizard as the first-boot route | Decided (D-038), ships with the next openmanetd bump, gated on a CM5 bench run | [GHO-75](https://linear.app/ghostnet-labs/issue/GHO-75) |
-| Online updates from ghostnet-labs/firmware | Decided (D-039); `sha256sums` asset pending in [firmware#46](https://github.com/ghostnet-labs/firmware/pull/46); `sysupgrade.releasesRepo` pending in an openmanetd PR | [GHO-77](https://linear.app/ghostnet-labs/issue/GHO-77) |
+| LuCI proxy and the Advanced entry | In the feed pin ([openmanetd#22](https://github.com/ghostnet-labs/openmanetd/pull/22)); the proxy stays off until `frontend.luciProxy.enable` is set | [GHO-70](https://linear.app/ghostnet-labs/issue/GHO-70), [GHO-71](https://linear.app/ghostnet-labs/issue/GHO-71) |
+| Reboot button on Settings | In the feed pin ([openmanetd#24](https://github.com/ghostnet-labs/openmanetd/pull/24)) | [GHO-76](https://linear.app/ghostnet-labs/issue/GHO-76) |
+| A newer openmanetd in the package | In the feed pin: openmanetd at `a0711ed` (`PKG_RELEASE` 15), replacing the `ekh-1.3.10` line | [GHO-80](https://linear.app/ghostnet-labs/issue/GHO-80) |
+| "Back to OpenMANET" link in LuCI | In the feed pin ([packages#14](https://github.com/ghostnet-labs/packages/pull/14)) | [GHO-73](https://linear.app/ghostnet-labs/issue/GHO-73) |
+| LuCI warnings on daemon-managed settings | In the feed pin ([packages#15](https://github.com/ghostnet-labs/packages/pull/15)) | [GHO-74](https://linear.app/ghostnet-labs/issue/GHO-74) |
+| OpenMANET wizard as the first-boot route | In the feed pin (D-038, `setup.enabled: true`); the CM5 bench gate is still open | [GHO-75](https://linear.app/ghostnet-labs/issue/GHO-75) |
+| Online updates from ghostnet-labs/firmware | In the feed pin (D-039, `sysupgrade.releasesRepo: ghostnet-labs/firmware`); the `sha256sums` release asset is merged in firmware ([firmware#46](https://github.com/ghostnet-labs/firmware/pull/46), `8ec334db`) | [GHO-77](https://linear.app/ghostnet-labs/issue/GHO-77) |
+
+Two caveats remain. A published ghostnet-labs firmware release may not contain these parts yet, so check the image you run. And merging the wizard does not close its CM5 bench validation ([GHO-75](https://linear.app/ghostnet-labs/issue/GHO-75)).
 
 The firmware feed pin that brings package changes into an image is described in the [developer guide](unified-ui-developer-guide.md#4-release-procedure).
 
@@ -35,13 +37,13 @@ These live in the OpenMANET UI. The left sidebar (or the bottom bar on a phone) 
 
 | Task | Where |
 |---|---|
-| First-boot setup | Setup wizard, shown at `https://<node>:8081/` on a fresh node once D-038 ships. Until then, first boot is LuCI's wizard at `http://<node>/`. |
+| First-boot setup | Setup wizard, shown at `https://<node>:8081/` on a fresh node (D-038). On an older image without it, first boot is LuCI's wizard at `http://<node>/`. |
 | Node health | Dashboard (the node, mesh, GPS and battery chips also sit at the top of every page) |
 | Mesh view | Topology |
 | Voice / PTT | Comms |
 | GPS fix | GPS / GNSS |
 | Satellite / tunnel link | BLOS |
-| Hostname, password, restart the daemon, reboot | Settings → General (the reboot button is pending [openmanetd#24](https://github.com/ghostnet-labs/openmanetd/pull/24)) |
+| Hostname, password, restart the daemon, reboot | Settings → General |
 | HaLow channel, bandwidth, power; Wi-Fi mesh backhaul and AP | Settings → Wireless |
 | Interfaces, DHCP leases (view only) | Settings → Network |
 | Firmware update and factory reset | Settings → Firmware |
@@ -62,13 +64,13 @@ Use Advanced for anything not in the table above: firewall, LAN and DHCP editing
 
 ## 4. Reconnect after a reboot
 
-1. Start the reboot from Settings → General (pending [openmanetd#24](https://github.com/ghostnet-labs/openmanetd/pull/24)) or LuCI → System → Reboot. The OpenMANET page reports when the node goes down and when it answers again; it usually takes about a minute.
+1. Start the reboot from Settings → General or LuCI → System → Reboot. The OpenMANET page reports when the node goes down and when it answers again; it usually takes about a minute.
 2. Accept the new certificate warning.
 3. Sign in again. Sign in to LuCI again too if you use Advanced.
 
 If the node does not come back at the same address:
 
-- openmanetd can renumber the mesh bridge and reboot by itself after setup or on an address conflict (`openmanetd:internal/mgmt/address_reservation.go`). Try `https://<hostname>.local:8081/`. The `.local` name needs an openmanetd newer than the shipped `ekh-1.3.10` line ([GHO-80](https://linear.app/ghostnet-labs/issue/GHO-80)).
+- openmanetd can renumber the mesh bridge and reboot by itself after setup or on an address conflict (`openmanetd:internal/mgmt/address_reservation.go`). Try `https://<hostname>.local:8081/`. The `.local` name needs an openmanetd newer than the old `ekh-1.3.10` line; the feed pin's openmanetd has it ([GHO-80](https://linear.app/ghostnet-labs/issue/GHO-80)).
 - Or connect over Ethernet and use the address your DHCP server or the node's console shows.
 
 ## 5. Recovery
@@ -87,5 +89,5 @@ Try these in order.
 ## 6. Firmware updates
 
 - **Upload an image:** Settings → Firmware. Leave **Preserve configuration** checked to keep your settings. LuCI → System → Backup / Flash Firmware also works.
-- **Online updates:** Settings → Firmware → **Check for Updates** lists GitHub releases. A release is offered only if it has a `sha256sums` asset, which openmanetd uses to verify the download (`openmanetd:internal/sysupgrade/manager.go`). Nodes will check ghostnet-labs/firmware releases (D-039). Until the `releasesRepo` setting ships ([GHO-77](https://linear.app/ghostnet-labs/issue/GHO-77)) and ghostnet-labs/firmware publishes a release with that asset ([firmware#46](https://github.com/ghostnet-labs/firmware/pull/46)), do not install online updates on a ghostnet node: the current code checks upstream OpenMANET/firmware, whose images would replace the ghostnet build.
+- **Online updates:** Settings → Firmware → **Check for Updates** lists GitHub releases. A release is offered only if it has a `sha256sums` asset, which openmanetd uses to verify the download (`openmanetd:internal/sysupgrade/manager.go`). Nodes check the repository in `sysupgrade.releasesRepo`, which defaults to ghostnet-labs/firmware (D-039, [GHO-77](https://linear.app/ghostnet-labs/issue/GHO-77)), and ghostnet-labs/firmware release builds attach that asset ([firmware#46](https://github.com/ghostnet-labs/firmware/pull/46)). If no ghostnet-labs/firmware release with that asset has been published yet, the check offers nothing. An older image without `releasesRepo` checks upstream OpenMANET/firmware, whose images would replace the ghostnet build, so do not install online updates on such a node.
 - **Before any update**, download a backup from LuCI → System → Backup / Flash Firmware. To roll back, flash the previous image the same way, then restore the backup if needed.
