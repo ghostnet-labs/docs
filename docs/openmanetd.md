@@ -60,10 +60,10 @@ gnss:
 | `meshNetInterface` | `br-ahwlan` | Primary mesh network interface |
 | `dbFile` | `/etc/openmanetd/openmanetd.db` | SQLite database location |
 | `resetDBOnStart` | `false` | Clear database on daemon startup |
-| `gnss.enable` | `true` | Enable GNSS/GPS functionality |
+| `gnss.enable` | `false` | Enable GNSS/GPS functionality |
 | `gnss.source` | `internal` | Use a local gpsd receiver (`internal`) or CoT from a directly connected EUD (`external_cot`) |
-| `gnss.sendAsExternalGNSSSource.sendAsNMEA` | `true` | Send position as NMEA sentences |
-| `gnss.sendAsExternalGNSSSource.sendAsCoT` | `true` | Send position as CoT messages |
+| `gnss.sendAsExternalGNSSSource.sendAsNMEA` | `false` | Send position as NMEA sentences |
+| `gnss.sendAsExternalGNSSSource.sendAsCoT` | `false` | Send position as CoT messages |
 | `alfred.mode` | `primary` | Alfred synchronization mode |
 | `alfred.batInterface` | `bat0` | BATMAN-adv interface name |
 | `alfred.socketPath` | `/var/run/alfred.sock` | Alfred Unix socket |
