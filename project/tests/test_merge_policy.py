@@ -153,7 +153,8 @@ class GateTests(unittest.TestCase):
         paths = {w["path"]: w["paths"] for w in firmware["workflows"]}
         for smoke in ("build-pr-bcm2712.yml", "build-pr-halowlink2.yml"):
             self.assertIn("feeds.conf.default", paths[".github/workflows/" + smoke])
-        for board in ("build-pr-bcm2710.yml", "build-pr-bcm2711.yml", "build-pr-hd01v2.yml", "build-pr-venice.yml"):
+        for board in ("build-pr-bcm2710.yml", "build-pr-bcm2711.yml", "build-pr-hd01v2.yml", "build-pr-venice.yml",
+                      "build-pr-nanopc-t6.yml"):
             self.assertNotIn("feeds.conf.default", paths[".github/workflows/" + board])
             self.assertIn("package/kernel/**", paths[".github/workflows/" + board])
         for name, profile in profiles.items():

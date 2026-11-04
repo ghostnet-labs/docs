@@ -32,6 +32,7 @@ or writing.
 | News | a PR opened, merged, closed, or no longer red | info |
 | Branches (hourly) | lists branches already in the default branch that no open PR uses; never deletes | report only |
 | Upstream drift (every 6 h, `--upstream-hours`) | an OpenMANET fork is behind its upstream branch; the firmware's OpenWrt base (`.openwrt-upstream`) is behind `openwrt-24.10`, or that file is missing; a firmware feed pin (openwrt packages, routing, telephony, OpenMANET luci, our packages) is behind its branch | warn |
+| Merge profile drift (every 6 h, `--profile-hours`) | a repo's PR workflow `on.pull_request.paths` disagrees with `project/scripts/merge_profiles.json`, checked against both the copy its merge gate pins and docs main. A path in the profile that the workflow ignores, a listed workflow that is gone, or one narrowed to some paths makes the gate wait for a run that never starts (crit); a workflow path or PR workflow the profile lacks means the gate does not wait for it (warn). Links the workflow file | crit / warn |
 
 Upstream drift compares each fork with its upstream: `firmware` and
 `packages` with OpenMANET `24.10`, `luci` with `mm-23.05`, `openmanetd`,
@@ -43,6 +44,14 @@ it merges. The script only reports drift; it never opens a sync PR, because
 merging upstream changes needs a person to resolve conflicts. The scan costs
 about 15 API calls. If it fails, the report keeps the previous scan's results
 and the failure does not count as a GitHub outage.
+
+Merge profile drift exists because the gate's profile copies each workflow's
+path filter by hand. When firmware #82 narrowed `build-pr-nanopc-t6.yml`, the
+copy on docs main kept `feeds.conf.default` and `boards/common/**`, so a
+feeds-pin PR would have waited 12 hours for a NanoPC build that never starts.
+The fix is to update the profile in docs and then bump the gate's docs pin in
+the repo. The scan reads every workflow file in each repo (about 70 API calls)
+and parses the YAML with a small built-in reader, so the Mac needs no PyYAML.
 
 Each problem alerts once when it appears and once when it clears. A repo that
 could not be read keeps its last state, so a network blip never looks like a

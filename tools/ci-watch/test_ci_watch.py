@@ -788,5 +788,149 @@ class UpstreamTest(unittest.TestCase):
         self.assertEqual(state["upstream"], {})
 
 
+BOARD_WORKFLOW = """name: Build Firmware (PR) on bcm2710
+
+on:
+  pull_request:
+    # Changes that touch every board build only the smoke set.
+    paths:
+    - 'boards/ekh-bcm2710/**'
+    - "package/kernel/**"   # kernel bumps
+  workflow_dispatch:
+"""
+
+INDENTED_WORKFLOW = """on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - internal/**
+      - go.mod
+"""
+
+
+class PrTriggerTest(unittest.TestCase):
+    def test_paths_at_the_key_indent_and_comments(self):
+        self.assertEqual(cw.pr_trigger(BOARD_WORKFLOW), (True, ["boards/ekh-bcm2710/**", "package/kernel/**"]))
+
+    def test_paths_indented_under_the_key(self):
+        self.assertEqual(cw.pr_trigger(INDENTED_WORKFLOW), (True, ["internal/**", "go.mod"]))
+
+    def test_every_change_forms(self):
+        for text in ("on: pull_request\n", "on: [push, pull_request]\n", "on:\n  - push\n  - pull_request\n",
+                     "on:\n  pull_request:\n  push:\n", "on:\n  pull_request:\n    branches: [main]\n",
+                     "on:\n  pull_request: {}\n", "'on':\n  pull_request:\n    paths-ignore: ['docs/**']\n"):
+            self.assertEqual(cw.pr_trigger(text), (True, None), text)
+
+    def test_flow_paths(self):
+        self.assertEqual(cw.pr_trigger("on:\n  pull_request:\n    paths: ['a/**', b]\n"), (True, ["a/**", "b"]))
+
+    def test_not_a_pull_request_workflow(self):
+        for text in ("on: push\n", "on:\n  pull_request_target:\n    paths: [a]\n  push:\n",
+                     "on:\n  workflow_dispatch:\n", "name: x\n"):
+            self.assertEqual(cw.pr_trigger(text)[0], False, text)
+
+
+def profile(*entries) -> dict:
+    return {"branch": "24.10", "workflows": [{"path": p, "paths": paths} for p, paths in entries]}
+
+
+WF = ".github/workflows/"
+
+
+class ProfileGapsTest(unittest.TestCase):
+    def test_matching_profile_has_no_gaps(self):
+        prof = profile((WF + "build-pr-bcm2710.yml", ["boards/ekh-bcm2710/**", "package/kernel/**"]))
+        self.assertEqual(cw.profile_gaps(prof, {WF + "build-pr-bcm2710.yml": BOARD_WORKFLOW}), {})
+
+    def test_profile_path_the_workflow_ignores_is_crit(self):
+        # The firmware #82 case: the profile kept feeds.conf.default after the workflow dropped it.
+        prof = profile((WF + "build-pr-bcm2710.yml", ["boards/ekh-bcm2710/**", "package/kernel/**",
+                                                      "feeds.conf.default"]))
+        level, text = cw.profile_gaps(prof, {WF + "build-pr-bcm2710.yml": BOARD_WORKFLOW})[WF + "build-pr-bcm2710.yml"]
+        self.assertEqual(level, "crit")
+        self.assertIn("never starts: feeds.conf.default", text)
+
+    def test_workflow_path_the_profile_lacks_is_warn(self):
+        prof = profile((WF + "build-pr-bcm2710.yml", ["boards/ekh-bcm2710/**"]))
+        level, text = cw.profile_gaps(prof, {WF + "build-pr-bcm2710.yml": BOARD_WORKFLOW})[WF + "build-pr-bcm2710.yml"]
+        self.assertEqual(level, "warn")
+        self.assertIn("does not wait for it: package/kernel/**", text)
+
+    def test_missing_file_and_unlisted_workflow(self):
+        prof = profile((WF + "gone.yml", None))
+        gaps = cw.profile_gaps(prof, {WF + "new.yml": "on: pull_request\n", WF + "push.yml": "on: push\n",
+                                      WF + "manet-merge-gate.yml": "on: pull_request\n",
+                                      WF + "label-kernel.yml": "on: pull_request\n"})
+        self.assertEqual(gaps[WF + "gone.yml"][0], "crit")
+        self.assertEqual(gaps[WF + "new.yml"][0], "warn")
+        self.assertEqual(set(gaps), {WF + "gone.yml", WF + "new.yml"})
+
+    def test_narrowed_to_paths_is_crit_widened_is_warn(self):
+        narrowed = cw.profile_gaps(profile((WF + "a.yml", None)), {WF + "a.yml": BOARD_WORKFLOW})
+        widened = cw.profile_gaps(profile((WF + "a.yml", ["x/**"])), {WF + "a.yml": "on: pull_request\n"})
+        self.assertEqual(narrowed[WF + "a.yml"][0], "crit")
+        self.assertEqual(widened[WF + "a.yml"][0], "warn")
+
+    def test_shipped_profile_parses_and_lists_known_repos(self):
+        shipped = json.loads(cw.PROFILE_FILE.read_text(encoding="utf-8"))
+        self.assertIn("firmware", shipped)
+        self.assertTrue(all("branch" in p and "workflows" in p for p in shipped.values()))
+
+
+GATE_PINNED = """jobs:
+  gate:
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: ghostnet-labs/docs
+          ref: ea86ea3986ca93b882b720b05ea5c21b7fbaa152
+"""
+
+
+def listing(*paths) -> list[dict]:
+    return [{"type": "file", "name": p.rsplit("/", 1)[-1], "path": p} for p in paths]
+
+
+class ProfileDriftTest(unittest.TestCase):
+    def routes(self, pinned_paths) -> dict:
+        fw = "/repos/ghostnet-labs/firmware"
+        return {
+            f"{fw}/contents/.github/workflows?ref=24.10": listing(WF + "build-pr-bcm2710.yml", WF + "manet-merge-gate.yml"),
+            f"{fw}/contents/.github/workflows/build-pr-bcm2710.yml?ref=24.10": b64(BOARD_WORKFLOW),
+            f"{fw}/contents/.github/workflows/manet-merge-gate.yml?ref=24.10": b64(GATE_PINNED),
+            "/repos/ghostnet-labs/docs/contents/project/scripts/merge_profiles.json?ref="
+            "ea86ea3986ca93b882b720b05ea5c21b7fbaa152": b64(json.dumps(
+                {"firmware": profile((WF + "build-pr-bcm2710.yml", pinned_paths))})),
+        }
+
+    def test_checks_the_pinned_profile_and_docs_main(self):
+        good = ["boards/ekh-bcm2710/**", "package/kernel/**"]
+        local = {"firmware": profile((WF + "build-pr-bcm2710.yml", good + ["feeds.conf.default"]))}
+        found = cw.profile_drift(FakeGitHub(self.routes(good)), ["firmware", "luci"], local)
+        item = found["profile:firmware:build-pr-bcm2710.yml"]
+        self.assertEqual(item["level"], "crit")
+        self.assertIn("docs main", item["text"])
+        self.assertNotIn("ea86ea3", item["text"])
+        self.assertEqual(item["url"], "https://github.com/ghostnet-labs/firmware/blob/24.10/" + WF + "build-pr-bcm2710.yml")
+
+    def test_pinned_profile_drift_is_named(self):
+        good = ["boards/ekh-bcm2710/**", "package/kernel/**"]
+        local = {"firmware": profile((WF + "build-pr-bcm2710.yml", good))}
+        found = cw.profile_drift(FakeGitHub(self.routes(["boards/ekh-bcm2710/**"])), ["firmware"], local)
+        self.assertIn("pinned docs ea86ea3", found["profile:firmware:build-pr-bcm2710.yml"]["text"])
+
+    def test_run_once_scans_on_its_interval(self):
+        routes = repo_routes()
+        gh = FakeGitHub(routes)
+        state, _, _ = cw.run_once(gh, args(profile_hours=6, repos="luci"), NOW, {})
+        self.assertIn("scan_iso", state["profiles"])
+        self.assertEqual(state["profiles"]["found"], {})  # luci's workflows 404 in this fake: skipped, no finding
+        # An hour later the scan is not repeated.
+        state2, _, _ = cw.run_once(gh, args(profile_hours=6, repos="luci"), NOW + timedelta(hours=1), state)
+        self.assertEqual(state2["profiles"]["scan_iso"], state["profiles"]["scan_iso"])
+
+
 if __name__ == "__main__":
     unittest.main()
