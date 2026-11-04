@@ -72,7 +72,7 @@ Release 1 keeps the two sign-ins separate. Sessions are not bridged or shared.
 | | OpenMANET UI | LuCI through the proxy |
 |---|---|---|
 | Login | PAM, through `/auth/login` on the openmanetd API | LuCI's own login, rpcd `sysauth` |
-| Cookie | `session`, `Path=/`, HttpOnly | `sysauth_http`, `path=/cgi-bin/luci/`, `SameSite=strict`, HttpOnly |
+| Cookie | `__Host-session` (Secure, HttpOnly, SameSite=Lax, Path=/) over HTTPS :8081; `session` (HttpOnly, SameSite=Lax, Path=/, no Secure) over HTTP :8080 | `sysauth_http`, `path=/cgi-bin/luci/`, `SameSite=strict`, HttpOnly |
 | Gate on the proxied paths | none (the OpenMANET session is not required to reach LuCI) | LuCI enforces its own login |
 | CSRF | SPA calls carry the session cookie or a bearer token to the API | LuCI's per-session token is embedded in its pages and checked by LuCI, so it is unchanged |
 
@@ -81,7 +81,7 @@ Behavior the proxy guarantees:
 - `Set-Cookie` from LuCI reaches the browser unchanged.
 - `Location` is preserved. The one exception is an absolute `Location` that names the upstream itself (for example `http://127.0.0.1/cgi-bin/luci/`), which becomes path-only so the browser stays on the proxied origin. Redirects to any other host are untouched.
 - The browser's `Host` header is forwarded, so any absolute URL LuCI builds names the proxied origin. `X-Forwarded-For`, `-Host` and `-Proto` are set by the proxy and inbound copies are discarded.
-- The OpenMANET `session` cookie is not forwarded to LuCI. All other cookies are forwarded as sent.
+- Neither OpenMANET session cookie (`session` or `__Host-session`) is forwarded to LuCI; the proxy strips both via `auth.IsSessionCookieName` in `luci_proxy.go`. All other cookies are forwarded as sent.
 
 HTTPS: uhttpd sees plain HTTP from loopback, so LuCI runs with `HTTPS` unset and issues `sysauth_http` without the `Secure` flag, even when the browser is on `https://<node>:8081`. The browser stores and returns it on the HTTPS origin, so sign-in works. uhttpd does not read `X-Forwarded-Proto`. Cookies are scoped by host and not by port, so the same `sysauth_http` cookie also works on `http://<node>/` directly.
 

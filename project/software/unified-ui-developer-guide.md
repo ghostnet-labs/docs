@@ -18,9 +18,9 @@ Rules for new code:
 | | OpenMANET | LuCI |
 |---|---|---|
 | Code | `openmanetd:internal/auth` (PAM, in-memory sessions) | rpcd `sysauth`, `luci:modules/luci-base/ucode/dispatcher.uc` |
-| Cookie | `session`, `Path=/` | `sysauth_http`, `path=/cgi-bin/luci/` |
+| Cookie | `__Host-session` (Secure, HttpOnly, SameSite=Lax, Path=/) over HTTPS :8081; `session` (HttpOnly, SameSite=Lax, Path=/, no Secure) over HTTP :8080 | `sysauth_http`, `path=/cgi-bin/luci/` |
 
-The proxy strips the OpenMANET `session` cookie before forwarding to LuCI and never edits LuCI's `Set-Cookie`. Do not bridge the two sessions; that needs a new decision. Sign-in gaps (two logins, empty root password under PAM) belong to [GHO-72](https://linear.app/ghostnet-labs/issue/GHO-72).
+The proxy strips both OpenMANET session cookies (`session` and `__Host-session`, matched by `auth.IsSessionCookieName` in `luci_proxy.go`) before forwarding to LuCI and never edits LuCI's `Set-Cookie`. Do not bridge the two sessions; that needs a new decision. Sign-in gaps (two logins, empty root password under PAM) belong to [GHO-72](https://linear.app/ghostnet-labs/issue/GHO-72).
 
 **Configuration.** One persistent owner per setting ([design §6](unified-ui-design.md#6-configuration-ownership)):
 

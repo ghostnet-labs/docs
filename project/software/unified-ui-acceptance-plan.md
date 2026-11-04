@@ -78,7 +78,7 @@ Set `frontend.luciProxy.enable: true` in `/etc/openmanetd/config.yml` if the ima
 |---|---|---|---|
 | D1 | Reload `https://<node>:8081/`. | **Advanced** ("Full router settings (LuCI)") appears in the sidebar; on a 360 px phone it is in the More sheet with a 44 px row. | ☐ Pass ☐ Fail ☐ N/A |
 | D2 | Click Advanced. | Full page load of `https://<node>:8081/cgi-bin/luci/`, same origin, LuCI login. | ☐ Pass ☐ Fail ☐ N/A |
-| D3 | Sign in to LuCI. In dev tools, check cookies. | LuCI loads. `sysauth_http` with path `/cgi-bin/luci/`; the OpenMANET `session` cookie is unchanged. | ☐ Pass ☐ Fail ☐ N/A |
+| D3 | Sign in to LuCI. In dev tools, check cookies. | LuCI loads. `sysauth_http` with path `/cgi-bin/luci/`; the OpenMANET `__Host-session` cookie is unchanged. | ☐ Pass ☐ Fail ☐ N/A |
 | D4 | Open Status, Network, System pages and the Topology view in LuCI. | All load, no missing styles or scripts, no mixed-content errors. | ☐ Pass ☐ Fail ☐ N/A |
 | D5 | Download a backup and upload a small file (Backup / Flash Firmware, restore dialog, cancel before applying) through the proxy. | Download completes; upload reaches the confirm step. | ☐ Pass ☐ Fail ☐ N/A |
 | D6 | Click **Back to OpenMANET** in the LuCI header. | Returns to `https://<node>:8081/`, still signed in to OpenMANET. | ☐ Pass ☐ Fail ☐ N/A |
