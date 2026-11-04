@@ -128,6 +128,15 @@
     },
     {
       "repo": "firmware",
+      "workflow": "build-pr-x86-64.yml",
+      "job": "qemu-e2e",
+      "rules": [
+        "hosted-runner"
+      ],
+      "reason": "QEMU first boot and OTA test needs /dev/kvm, which the self-hosted runners do not offer (Studio VMs are ARM64). Read-only token; runs after the self-hosted x86-64 build (firmware #79, 2026-11-04)."
+    },
+    {
+      "repo": "firmware",
       "workflow": "build-release.yml",
       "job": "publish-packages",
       "rules": [
