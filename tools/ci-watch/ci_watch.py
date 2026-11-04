@@ -557,6 +557,65 @@ def deploy_status(path: str, clone: str, now: datetime, git=None) -> dict[str, d
                 + ". On the Studio check ~/Library/Logs and launchctl list com.ghostnet.runner-status.autodeploy"}}
 
 
+IDLE_RESTART = os.path.expanduser("~/.config/ci-k3s-idle-restart/status.json")
+IDLE_RESTART_AGENT = "com.ghostnet.ci-k3s-idle-restart"
+IDLE_RESTART_STALE = timedelta(hours=2)
+
+
+def agent_loaded(label: str) -> bool:
+    """True when launchd has this LaunchAgent loaded (macOS only)."""
+    try:
+        done = subprocess.run(["launchctl", "list", label], capture_output=True, timeout=15, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return done.returncode == 0
+
+
+def idle_restart_status(path: str, now: datetime, loaded=None) -> dict[str, dict]:
+    """Heartbeat of the ci-k3s idle-restart agent on the Studio.
+
+    Same idea as deploy_status: a stopped agent must not look like a quiet one.
+    Before the LaunchAgent is loaded there is one info line; after, a failure
+    or a status file older than IDLE_RESTART_STALE is crit, and each restart
+    is reported once as info.
+    """
+    if not path:
+        return {}
+    if loaded is None:
+        if platform.system() != "Darwin":
+            return {}
+        loaded = agent_loaded(IDLE_RESTART_AGENT)
+    url = f"https://github.com/{ORG}/docs/commits/main"
+    if not loaded:
+        return {"idle-restart:agent": {"level": "info", "url": url,
+                                       "text": f"idle-restart agent not loaded ({IDLE_RESTART_AGENT})"}}
+    short = path.replace(os.path.expanduser("~"), "~", 1)
+    hint = f"; on the Studio check launchctl list {IDLE_RESTART_AGENT} and its log"
+    try:
+        with open(path, encoding="utf-8") as f:
+            st = json.load(f)
+    except (OSError, ValueError) as err:
+        return {"idle-restart": {"level": "crit", "url": url,
+                                 "text": f"ci-k3s idle-restart: cannot read {short}: {str(err)[:120]}{hint}"}}
+    problems = []
+    if st.get("ok") is not True:
+        problems.append(f"it reports {st.get('action') or 'a failure'} ({str(st.get('reason') or 'no reason')[:120]})")
+    at = sr.parse_ts(st.get("at"))
+    if at is None:
+        problems.append("it has no time stamp")
+    elif now - at > IDLE_RESTART_STALE:
+        problems.append(f"it last ran {minutes(now - at)} ago")
+    found = {}
+    if problems:
+        found["idle-restart"] = {"level": "crit", "url": url,
+                                 "text": "ci-k3s idle-restart is not working: " + "; ".join(problems) + hint}
+    elif st.get("action") == "restarted":
+        found[f"idle-restart:restarted:{st.get('at')}"] = {
+            "level": "info", "url": url,
+            "text": f"ci-k3s idle-restart restarted the cluster: {str(st.get('reason') or 'no reason given')[:160]}"}
+    return found
+
+
 def update_self(now: datetime, previous: dict, git=None, root: str | None = None) -> tuple[dict, dict]:
     """Pull this clone hourly so new checks reach the Studio without anyone typing a line.
 
@@ -893,6 +952,8 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
         errors.append(f"deploy check: {str(err)[:160]}")
     found.update(deploy_status(getattr(args, "deploy_status", DEPLOY_STATUS), DEPLOY_STATUS_CLONE, now,
                                git=getattr(args, "git", None)))
+    found.update(idle_restart_status(getattr(args, "idle_restart_status", IDLE_RESTART), now,
+                                     loaded=getattr(args, "idle_restart_loaded", None)))
     self_update = state.get("self_update", {})
     if args.self_update:
         self_found, self_update = update_self(now, self_update, git=getattr(args, "git", None))
@@ -979,6 +1040,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="deployed docs clone to check against main (default: the usual ~/*-src clones)")
     p.add_argument("--deploy-status", default=DEPLOY_STATUS, metavar="PATH",
                    help="runner-status autodeploy status file to check ('' = off)")
+    p.add_argument("--idle-restart-status", default=IDLE_RESTART, metavar="PATH",
+                   help="ci-k3s idle-restart status file to check ('' = off)")
     p.add_argument("--no-self-update", dest="self_update", action="store_false",
                    help="do not fast-forward this clone of docs every hour")
     p.add_argument("--retired-runner", action="append", metavar="REGEX",
