@@ -162,6 +162,37 @@ The API specification is available on [Buf Build](https://buf.build/openmanet/pr
 - **Timeout**: 30 seconds for read/write operations
 - **Format**: Protocol Buffers (binary) or JSON
 
+### Authentication
+
+`auth.enable` defaults to `true`. With auth enabled, every RPC returns `401 Unauthorized` unless the request carries a valid session. The only endpoints that work without a session are:
+
+- `POST /auth/login`
+- `GET /auth/check`
+- `openmanet.dashboard.v1.DashboardService/GetDashboardStatus`
+- `openmanet.setup.v1.SetupService/GetSetupStatus` and `openmanet.setup.v1.SetupService/ApplySetup`
+
+To get a session token, log in with the node's system credentials. The response JSON includes a `token` field:
+
+```bash
+curl -X POST http://{MESH_NODE_IO}:8087/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"root","password":"..."}'
+
+# Response
+{
+  "username": "root",
+  "token": "..."
+}
+```
+
+Store the token and send it as an `Authorization: Bearer` header on every other request:
+
+```bash
+TOKEN=...   # the "token" value from the login response
+```
+
+All examples below assume `$TOKEN` is set.
+
 ### Service Endpoints
 
 #### NodeService
@@ -174,6 +205,7 @@ Manages mesh node information stored in the local database.
 # Using curl with JSON
 curl -X POST http://{MESH_NODE_IO}:8087/openmanet.service.v1.NodeService/ListNodes \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{}'
 
 # Response
@@ -198,6 +230,7 @@ curl -X POST http://{MESH_NODE_IO}:8087/openmanet.service.v1.NodeService/ListNod
 ```bash
 curl -X POST http://{MESH_NODE_IO}:8087/openmanet.service.v1.NodeService/GetNode \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"hostname": "mesh-node-01"}'
 
 # Response
@@ -219,6 +252,7 @@ Provides wireless interface information.
 ```bash
 curl -X POST http://{MESH_NODE_IO}:8087/openmanet.service.v1.InterfaceService/ListWirelessInterfaces \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{}'
 
 # Response
@@ -243,6 +277,7 @@ curl -X POST http://{MESH_NODE_IO}:8087/openmanet.service.v1.InterfaceService/Li
 ```bash
 curl -X POST http://{MESH_NODE_IO}:8087/openmanet.service.v1.InterfaceService/GetWirelessInterface \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"name": "wlan0"}'
 ```
 
@@ -255,6 +290,7 @@ Shows directly connected mesh neighbors.
 ```bash
 curl -X POST http://{MESH_NODE_IO}:8087/openmanet.service.v1.MeshNeighborService/ListMeshNeighbors \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{}'
 
 # Response
@@ -280,6 +316,7 @@ Provides mesh network status and health information.
 ```bash
 curl -X POST http://{MESH_NODE_IO}:8087/openmanet.service.v1.StatusService/GetServiceStatus \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{}'
 
 # Response
@@ -300,12 +337,14 @@ The API is fully compatible with standard gRPC tooling:
 ```bash
 # Using grpcurl
 grpcurl -plaintext -d '{}' \
+  -H "Authorization: Bearer $TOKEN" \
   {MESH_NODE_IO}:8087 \
   openmanet.service.v1.NodeService/ListNodes
 
 # Using buf curl (with Connect protocol)
 buf curl --http2-prior-knowledge \
   --protocol connect \
+  --header "Authorization: Bearer $TOKEN" \
   http://{MESH_NODE_IO}:8087/openmanet.service.v1.NodeService/ListNodes
 ```
 
@@ -363,7 +402,10 @@ ps aux | grep openmanetd
 netstat -tulpn | grep 8087
 
 # Test local connection
-curl http://127.0.0.1:8087/openmanet.service.v1.StatusService/GetServiceStatus
+curl -X POST http://127.0.0.1:8087/openmanet.service.v1.StatusService/GetServiceStatus \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{}'
 ```
 
 **Solutions**:
@@ -434,7 +476,10 @@ Check daemon health:
 logread | grep openmanetd
 
 # API health check
-curl http://127.0.0.1:8087/openmanet.service.v1.StatusService/GetServiceStatus
+curl -X POST http://127.0.0.1:8087/openmanet.service.v1.StatusService/GetServiceStatus \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{}'
 ```
 
 ---

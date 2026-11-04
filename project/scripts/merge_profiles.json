@@ -94,6 +94,40 @@
         ]
       },
       {
+        "path": ".github/workflows/build-pr-x86-64.yml",
+        "paths": [
+          "boards/x86-64/**",
+          "boards/common/**",
+          "boards/common_extras/**",
+          "patches/x86-64/**",
+          "scripts/openmanet_setup.sh",
+          ".github/workflows/build-firmware.yml",
+          ".github/workflows/build-pr-x86-64.yml",
+          "include/kernel*",
+          "package/kernel/**",
+          "target/linux/x86/**",
+          "feeds.conf.default"
+        ]
+      },
+      {
+        "path": ".github/workflows/build-pr-nanopc-t6.yml",
+        "paths": [
+          "boards/nanopc-t6/**",
+          "boards/common/**",
+          "boards/common_extras/**",
+          "patches/nanopc-t6/**",
+          "scripts/openmanet_setup.sh",
+          ".github/workflows/build-firmware.yml",
+          ".github/workflows/build-pr-nanopc-t6.yml",
+          "include/kernel*",
+          "package/kernel/**",
+          "package/boot/uboot-rockchip/**",
+          "package/boot/arm-trusted-firmware-rockchip/**",
+          "target/linux/rockchip/**",
+          "feeds.conf.default"
+        ]
+      },
+      {
         "path": ".github/workflows/kernel.yml",
         "paths": [
           ".github/workflows/check-kernel-patches.yml",
@@ -163,6 +197,19 @@
           "tools/ui-lab/tools/sample-api.py",
           ".github/workflows/e2e-frontend.yml"
         ]
+      },
+      {
+        "path": ".github/workflows/mesh-sim.yml",
+        "paths": [
+          "internal/batman-adv/**",
+          "internal/meshsim/**",
+          "internal/openmanet/server/handlers/mesh*.go",
+          "internal/openmanet/server/handlers/batctl_snapshot.go",
+          "go.mod",
+          "go.sum",
+          "Makefile",
+          ".github/workflows/mesh-sim.yml"
+        ]
       }
     ]
   },
@@ -211,6 +258,17 @@
       {
         "path": ".github/workflows/build-packages.yml",
         "paths": null
+      },
+      {
+        "path": ".github/workflows/decoder-replay.yml",
+        "paths": [
+          "utils/dump978-fa/**",
+          "utils/adsbtocot/**",
+          "lib/soapy*/**",
+          "lib/airspyone_host/**",
+          "tests/decoder-replay/**",
+          ".github/workflows/decoder-replay.yml"
+        ]
       }
     ]
   }
