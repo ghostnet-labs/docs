@@ -439,5 +439,41 @@ class AutoMergeTests(unittest.TestCase):
         self.assertIsNone(stale_gate_run([dict(gate, details_url="https://github.com/o/r/actions/runs/3/job/4"), newer], []))
 
 
+class GateLoopTests(unittest.TestCase):
+    """The gate's wait loop outlives GitHub outages longer than one read's retries."""
+
+    def run_gate(self, snapshots):
+        import os
+        from unittest import mock
+        import merge_policy
+        calls = iter(snapshots)
+
+        def fake_snapshot(*_args):
+            item = next(calls)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+        argv = ["merge_policy.py", "gate", "--repo", "ghostnet-labs/firmware", "--pr", "82", "--sha", "abc"]
+        with mock.patch.object(merge_policy, "snapshot", fake_snapshot), \
+                mock.patch.object(merge_policy.time, "sleep"), \
+                mock.patch.object(sys, "argv", argv), \
+                mock.patch.dict(os.environ, {"GH_TOKEN": "x"}), \
+                redirect_stdout(io.StringIO()) as out:
+            merge_policy.main()
+        return out.getvalue()
+
+    def test_server_error_is_retried_on_next_poll(self):
+        error = urllib.error.HTTPError("https://api.github.com/x", 500, "Internal Server Error", {}, None)
+        out = self.run_gate([error, ({"head": {"sha": "abc"}}, [])])
+        self.assertIn("checking again in 30s", out)
+        self.assertIn("completed successfully", out)
+
+    def test_client_error_still_fails(self):
+        error = urllib.error.HTTPError("https://api.github.com/x", 404, "Not Found", {}, None)
+        with self.assertRaises(urllib.error.HTTPError):
+            self.run_gate([error])
+
+
 if __name__ == "__main__":
     unittest.main()
