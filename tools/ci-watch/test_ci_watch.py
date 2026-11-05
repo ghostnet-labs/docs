@@ -85,6 +85,7 @@ def args(**kw) -> argparse.Namespace:
     a.idle_restart_status = ""
     a.swap_warn_gb = 0
     a.swap_crit_gb = 0
+    a.queue_check = False
     for k, v in kw.items():
         setattr(a, k, v)
     return a
@@ -425,6 +426,84 @@ class FixOnceTest(unittest.TestCase):
             {"name": "studio-build-1", "status": "busy", "labels": ["self-hosted", "OpenWrt-Build"]}))
         self.assertEqual(found, {})
 
+    def idle_runner_state(self, status="idle", age=20, n=1):
+        jobs = [{"status": "queued", "hosted": False, "age_min": age, "labels": ["self-hosted", "openwrt-build"],
+                 "url": f"https://github.com/ghostnet-labs/firmware/actions/runs/86/job/{i}"} for i in range(n)]
+        runner = {"name": "studio-build-1", "status": status, "labels": ["self-hosted", "macOS", "openwrt-build"]}
+        return {"jobs": jobs, "machines": [{"name": "GitHub", "runners": [runner]}]}
+
+    def test_idle_runner_with_queued_job_alerts_on_second_run(self):
+        state = self.idle_runner_state(n=5)
+        found, track = cw.idle_runners(state, {}, NOW)
+        self.assertEqual(found, {}, "first sighting may be the moment between two jobs")
+        found, track = cw.idle_runners(state, track, NOW + timedelta(minutes=10))
+        item = found["idle-runner:studio-build-1"]
+        self.assertEqual(item["level"], "crit")
+        self.assertIn("online but idle for 10m+", item["text"])
+        self.assertIn("5 job(s) for label openwrt-build", item["text"])
+        self.assertIn("/runs/86/job/2", item["text"])
+        self.assertNotIn("/runs/86/job/3", item["text"])
+        self.assertIn("(+2 more)", item["text"])
+
+    def test_busy_runner_or_young_queue_is_not_idle_alert(self):
+        found, _ = cw.idle_runners(self.idle_runner_state(status="busy"), {"idle_since": {}}, NOW)
+        self.assertEqual(found, {})
+        track = {"idle_since": {"studio-build-1": (NOW - timedelta(minutes=30)).isoformat()}}
+        found, _ = cw.idle_runners(self.idle_runner_state(age=5), track, NOW)
+        self.assertNotIn("idle-runner:studio-build-1", found)
+
+    def test_idle_gap_closes_into_24h_summary(self):
+        track = {"idle_since": {"studio-build-1": (NOW - timedelta(minutes=185)).isoformat()}}
+        found, track = cw.idle_runners(self.idle_runner_state(status="busy"), track, NOW)
+        self.assertEqual(track["idle_since"], {})
+        self.assertEqual(track["gaps"][0]["min"], 185)
+        self.assertEqual(found["idle-runner:gaps"]["level"], "info")
+        self.assertIn("longest 185 min on studio-build-1", found["idle-runner:gaps"]["text"])
+        found, track = cw.idle_runners(self.idle_runner_state(status="busy"), track, NOW + timedelta(hours=25))
+        self.assertEqual(found, {})
+        self.assertEqual(track["gaps"], [])
+
+    def queue_routes(self, runners):
+        base = "/repos/ghostnet-labs/firmware/actions/runs"
+        job = {"status": "queued", "labels": ["self-hosted", "openwrt-build"], "name": "build (bpi-r4)",
+               "created_at": ts(40), "html_url": "https://github.com/ghostnet-labs/firmware/actions/runs/86/job/1"}
+        routes = {f"{base}?status=queued&per_page=50": {"workflow_runs": []},
+                  f"{base}?status=in_progress&per_page=50": {"workflow_runs": [{"id": 86}]},
+                  f"{base}/86/jobs?per_page=100": {"jobs": [job, dict(job, status="completed")]}}
+        routes["/orgs/ghostnet-labs/actions/runners?per_page=100"] = runners
+        return routes
+
+    def test_queue_state_reads_runners_and_jobs_from_github(self):
+        runners = {"runners": [{"name": "studio-build-1", "id": 7, "status": "online", "busy": False,
+                                "labels": [{"name": "self-hosted"}, {"name": "openwrt-build"}]}]}
+        state = cw.queue_state(FakeGitHub(self.queue_routes(runners)), ["firmware"], NOW)
+        (runner,) = state["machines"][0]["runners"]
+        self.assertEqual((runner["name"], runner["status"]), ("studio-build-1", "idle"))
+        (job,) = state["jobs"]
+        self.assertEqual(job["status"], "queued")
+        self.assertFalse(job["hosted"])
+        self.assertAlmostEqual(job["age_min"], 40, delta=1)
+
+    def test_unreadable_runner_list_falls_back_to_stall_check(self):
+        routes = self.queue_routes(RuntimeError("GET runners: HTTP 403"))
+        state = cw.queue_state(FakeGitHub(routes), ["firmware"], NOW)
+        self.assertIn("403", state["runners_error"])
+        found = cw.stalled_labels(state)
+        self.assertIn("nothing with that label is running", found["stalled:openwrt-build"]["text"])
+        state["jobs"].append({"status": "in_progress", "labels": ["self-hosted", "openwrt-build"]})
+        self.assertEqual(cw.stalled_labels(state), {})
+
+    def test_run_once_tracks_idle_runner_between_runs(self):
+        runners = {"runners": [{"name": "studio-build-1", "id": 7, "status": "online", "busy": False,
+                                "labels": [{"name": "self-hosted"}, {"name": "openwrt-build"}]}]}
+        routes = dict(repo_routes(), **self.queue_routes(runners))
+        for path in list(routes):
+            routes[path.replace("/firmware/", "/luci/")] = routes[path]
+        state, _, _ = cw.run_once(FakeGitHub(routes), args(queue_check=True), NOW, {})
+        self.assertIn("studio-build-1", state["idle_runners"]["idle_since"])
+        state, _, batch = cw.run_once(FakeGitHub(routes), args(queue_check=True), NOW + timedelta(minutes=10), state)
+        self.assertIn("idle-runner:studio-build-1", [i["key"] for i in batch["new"]])
+
     def test_young_or_hosted_queue_is_not_starved(self):
         self.assertEqual(cw.starved_labels(self.starved_state(age=5)), {})
         state = self.starved_state()
@@ -672,7 +751,7 @@ class MainTest(unittest.TestCase):
                 mock.patch("builtins.print"):
             code = cw.main(["--repos", "luci", "--branch-hours", "0", "--state-dir", d, "--no-self-update",
                             "--deploy-status", "", "--idle-restart-status", "",
-                            "--swap-warn-gb", "0"])
+                            "--swap-warn-gb", "0", "--no-queue-check"])
             self.assertEqual(code, 0)
             self.assertIn("green, auto-merge on", Path(d, "report.md").read_text())
             self.assertTrue(json.loads(Path(d, "state.json").read_text())["initialized"])
