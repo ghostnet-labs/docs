@@ -31,7 +31,9 @@ Each run (every 10 minutes from a LaunchAgent on the Mac Studio):
      the copy its merge gate pins and docs main. A profile path the workflow
      ignores is crit (the gate waits for a run that never starts); a workflow
      path or workflow the profile lacks is warn (the gate does not wait for it).
-  7. This Mac's memory: swap in use (--swap-warn-gb 4 warn, --swap-crit-gb 8
+  7. Every scheduled workflow whose latest run failed (warn; crit for the
+     firmware full build, which blocks releases). No PR shows those runs.
+  8. This Mac's memory: swap in use (--swap-warn-gb 4 warn, --swap-crit-gb 8
      crit) or macOS memory pressure warn/critical, naming the biggest
      processes, so nobody has to open a dashboard to see the Studio swapping.
 
@@ -319,6 +321,37 @@ def guard_findings(gh, repo: str, now: datetime) -> dict[str, dict]:
             url, how = enable_link(repo, f.get("state", ""), f.get("path", ""))
             text += f"; {how}"
         found[f"guard:{repo}:{f['kind']}:{detail}"] = {"level": "crit", "repo": repo, "url": url, "text": text}
+    return found
+
+
+# A red scheduled run on the firmware full build blocks releases.
+SCHEDULE_CRIT = ("firmware", ".github/workflows/build-full.yml")
+
+
+def schedule_findings(gh, repo: str) -> dict[str, dict]:
+    """Scheduled workflows whose latest finished run failed. Nobody watches those runs: no PR
+    shows them, so a nightly or 6-hourly job can stay red for days. Clears on the next green run."""
+    try:
+        runs = gh.get(f"/repos/{ORG}/{repo}/actions/runs?event=schedule&status=completed&per_page=50")
+    except RuntimeError as err:
+        if "HTTP 404" in str(err):
+            return {}
+        raise
+    found: dict[str, dict] = {}
+    seen: set = set()
+    for run in runs.get("workflow_runs", []) if isinstance(runs, dict) else []:
+        wf = run.get("workflow_id") or run.get("path")
+        if wf in seen:
+            continue
+        seen.add(wf)  # newest first: only each workflow's latest run counts
+        if run.get("conclusion") not in ("failure", "timed_out", "startup_failure"):
+            continue
+        path = run.get("path", "")
+        level = "crit" if (repo, path) == SCHEDULE_CRIT else "warn"
+        found[f"schedule:{repo}:{path or wf}"] = {
+            "level": level, "repo": repo, "url": run.get("html_url", f"https://github.com/{ORG}/{repo}/actions"),
+            "text": f"{ORG}/{repo} scheduled run of {run.get('name', path)} failed "
+                    f"({run.get('conclusion')}, {str(run.get('created_at', ''))[:16].replace('T', ' ')}Z)"}
     return found
 
 
@@ -1298,6 +1331,7 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
     for repo in repos:
         try:
             found.update(guard_findings(gh, repo, now))
+            found.update(schedule_findings(gh, repo))
             prs += collect_prs(gh, repo, now)
             scanned.add(repo)
         except RuntimeError as err:

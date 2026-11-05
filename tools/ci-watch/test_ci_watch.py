@@ -1013,3 +1013,42 @@ class ProfileDriftTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScheduleFindingsTest(unittest.TestCase):
+    def runs(self, *items):
+        return {"/repos/ghostnet-labs/firmware/actions/runs?event=schedule&status=completed&per_page=50":
+                {"workflow_runs": list(items)}}
+
+    def run_(self, wf, path, conclusion, name="Full firmware build", run_id=1):
+        return {"workflow_id": wf, "path": path, "conclusion": conclusion, "name": name,
+                "html_url": f"https://github.com/ghostnet-labs/firmware/actions/runs/{run_id}",
+                "created_at": "2026-11-05T07:00:09Z"}
+
+    def test_latest_failure_of_full_build_is_crit(self):
+        gh = FakeGitHub(self.runs(self.run_(1, ".github/workflows/build-full.yml", "failure", run_id=7)))
+        found = cw.schedule_findings(gh, "firmware")
+        item = found["schedule:firmware:.github/workflows/build-full.yml"]
+        self.assertEqual(item["level"], "crit")
+        self.assertIn("/runs/7", item["url"])
+        self.assertIn("Full firmware build failed (failure, 2026-11-05 07:00Z)", item["text"])
+
+    def test_only_latest_run_per_workflow_counts(self):
+        gh = FakeGitHub(self.runs(
+            self.run_(1, ".github/workflows/build-full.yml", "success", run_id=8),
+            self.run_(1, ".github/workflows/build-full.yml", "failure", run_id=7),
+            self.run_(2, ".github/workflows/sweep.yml", "timed_out", name="Sweep", run_id=6)))
+        found = cw.schedule_findings(gh, "firmware")
+        self.assertEqual(list(found), ["schedule:firmware:.github/workflows/sweep.yml"])
+        self.assertEqual(found["schedule:firmware:.github/workflows/sweep.yml"]["level"], "warn")
+
+    def test_cancelled_and_missing_are_quiet(self):
+        gh = FakeGitHub(self.runs(self.run_(1, ".github/workflows/build-full.yml", "cancelled")))
+        self.assertEqual(cw.schedule_findings(gh, "firmware"), {})
+        self.assertEqual(cw.schedule_findings(FakeGitHub({}), "luci"), {})
+
+    def test_other_errors_propagate(self):
+        gh = FakeGitHub({"/repos/ghostnet-labs/luci/actions/runs?event=schedule&status=completed&per_page=50":
+                         RuntimeError("HTTP 500")})
+        with self.assertRaises(RuntimeError):
+            cw.schedule_findings(gh, "luci")

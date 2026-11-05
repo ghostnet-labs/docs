@@ -70,7 +70,16 @@
       "rules": [
         "fork-pr-self-hosted"
       ],
-      "reason": "Board build reusable workflow. On 24.10, runs-on picks [self-hosted, openwrt-build] only for same-repo pull_request callers and ubuntu-24.04 otherwise, so fork PRs and the signed release build stay hosted. The entry is kept only for the self_hosted input and build-full.yml (schedule/workflow_dispatch caller), which exist only on the unmerged branch claude/project-thread-fsj8lm and are not yet on 24.10; the audit's fixed guard forms cannot express that input."
+      "reason": "Board build reusable workflow. runs-on picks [self-hosted, openwrt-build] for same-repo pull_request callers and for the build-full.yml schedule/workflow_dispatch caller (self_hosted input), and ubuntu-24.04 otherwise, so fork PRs and the signed release build stay hosted. The audit only accepts the event-guard form for workflows whose own triggers are all in SAFE_FOR_EVENT_GUARD; this one is workflow_call, and every caller (build-pr-*.yml, build-full.yml, build-release.yml, pr-gate.yml) triggers only on pull_request, schedule or workflow_dispatch."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "build-firmware.yml",
+      "job": "reuse",
+      "rules": [
+        "fork-pr-self-hosted"
+      ],
+      "reason": "Looks for an earlier green build of the same inputs (firmware #88). runs-on is the event guard `(github.event_name != 'pull_request' || HEAD) && Macs || 'ubuntu-24.04'`, so fork PRs stay hosted and the schedule/workflow_dispatch full build uses the Macs. Allowlisted for the same reason as the build job: the audit rejects the event form in a workflow_call workflow, and every caller of build-firmware.yml triggers only on pull_request, schedule or workflow_dispatch."
     },
     {
       "repo": "firmware",
