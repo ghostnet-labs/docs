@@ -438,6 +438,127 @@ def starved_labels(state: dict, min_age: int = STARVED_MINUTES, retired=()) -> d
     return found
 
 
+HOSTED_LABELS = re.compile(r"^(ubuntu|windows|macos)-", re.I)  # same rule as runner_status.py
+IDLE_CONFIRM_MINUTES = 5   # an idle runner must stay idle across two runs before it alerts (not between jobs)
+STALLED_MINUTES = 30       # without a runner list: a self-hosted label queued this long with nothing running
+GAP_WINDOW = timedelta(hours=24)
+
+
+def want_labels(job: dict) -> tuple:
+    return tuple(sorted({lbl.lower() for lbl in job.get("labels") or []} - {"self-hosted"}))
+
+
+def queue_state(gh, repos: list[str], now: datetime) -> dict:
+    """Runners and active jobs read straight from GitHub, in the runner page's /api/state shape.
+
+    Lets the starved and idle-runner checks run with the runner page off. Listing
+    org runners needs "Self-hosted runners: read"; without it "runners_error" is
+    set and only the job-based stall check runs.
+    """
+    state: dict = {"jobs": [], "machines": [{"name": "GitHub", "runners": []}]}
+    try:
+        for r in gh.get(f"/orgs/{ORG}/actions/runners?per_page=100").get("runners", []):
+            status = "offline" if r.get("status") != "online" else ("busy" if r.get("busy") else "idle")
+            state["machines"][0]["runners"].append({
+                "name": r.get("name"), "id": r.get("id"), "status": status,
+                "labels": [lbl.get("name", "") for lbl in r.get("labels") or []]})
+    except RuntimeError as err:
+        state["runners_error"] = str(err)[:160]
+    seen: set = set()
+    for repo in repos:
+        for status in ("queued", "in_progress"):
+            path = f"/repos/{ORG}/{repo}/actions/runs?status={status}&per_page=50"
+            for run in gh.get(path).get("workflow_runs", []):
+                if run.get("id") in seen:
+                    continue
+                seen.add(run.get("id"))
+                for j in gh.get(f"/repos/{ORG}/{repo}/actions/runs/{run['id']}/jobs?per_page=100").get("jobs", []):
+                    if j.get("status") not in ("queued", "in_progress"):
+                        continue
+                    labels = j.get("labels") or []
+                    since = sr.parse_ts(j.get("started_at") if j["status"] == "in_progress" else j.get("created_at"))
+                    state["jobs"].append({
+                        "repo": repo, "name": j.get("name"), "status": j["status"], "labels": labels,
+                        "hosted": any(HOSTED_LABELS.match(lbl) for lbl in labels) and "self-hosted" not in labels,
+                        "runner": j.get("runner_name"), "url": j.get("html_url"),
+                        "age_min": max(0.0, (now - since).total_seconds() / 60) if since else 0})
+    return state
+
+
+def stalled_labels(state: dict, min_age: int = STALLED_MINUTES) -> dict[str, dict]:
+    """Without a runner list: self-hosted label sets with old queued jobs and nothing running."""
+    running = [set(want_labels(j)) for j in state.get("jobs", []) if j.get("status") == "in_progress"]
+    waiting: dict[tuple, list] = {}
+    for j in state.get("jobs", []):
+        if j.get("status") == "queued" and not j.get("hosted") and (j.get("age_min") or 0) >= min_age:
+            if want_labels(j):
+                waiting.setdefault(want_labels(j), []).append(j)
+    found = {}
+    for want, jobs in waiting.items():
+        if any(set(want) <= have for have in running):
+            continue
+        links = " ".join(j.get("url") or "" for j in jobs[:3])
+        oldest = minutes(timedelta(minutes=max(j.get("age_min") or 0 for j in jobs)))
+        found["stalled:" + ",".join(want)] = {
+            "level": "crit", "url": jobs[0].get("url") or RUNNERS_SETTINGS,
+            "text": f"{len(jobs)} job(s) for label {'+'.join(want)} queued {oldest} and nothing with that label "
+                    f"is running (ci-watch cannot list runners: {state.get('runners_error', '?')}). "
+                    f"Runs: {links}. Runners: {RUNNERS_SETTINGS}"}
+    return found
+
+
+def idle_runners(state: dict, track: dict, now: datetime, min_age: int = STARVED_MINUTES,
+                 confirm: int = IDLE_CONFIRM_MINUTES) -> tuple[dict, dict]:
+    """Online, idle runners that carry every label of a job queued min_age+ minutes.
+
+    That runner is not picking jobs up (firmware #86's board jobs waited three hours
+    with studio-build-1 online). It alerts once the runner has been seen idle with
+    work waiting for `confirm` minutes, so the moment between two jobs never counts.
+    Also keeps the idle-while-queued gaps of the last 24 h for one info line.
+    Returns (findings, track to store for the next run).
+    """
+    queued = [j for j in state.get("jobs", []) if j.get("status") == "queued" and not j.get("hosted")
+              and want_labels(j)]
+    idle_now: dict[str, list] = {}
+    for m in state.get("machines", []):
+        for r in m.get("runners", []):
+            have = {lbl.lower() for lbl in r.get("labels") or []}
+            match = [j for j in queued if set(want_labels(j)) <= have]
+            if r.get("status") == "idle" and match and r.get("name"):
+                idle_now[r["name"]] = match
+    since = dict(track.get("idle_since", {}))
+    gaps = [g for g in track.get("gaps", []) if (sr.parse_ts(g.get("end")) or now) >= now - GAP_WINDOW]
+    for name in [n for n in since if n not in idle_now]:
+        start = sr.parse_ts(since.pop(name)) or now
+        gaps.append({"runner": name, "start": start.isoformat(), "end": now.isoformat(),
+                     "min": round((now - start).total_seconds() / 60)})
+    found = {}
+    for name, jobs in sorted(idle_now.items()):
+        start = sr.parse_ts(since.setdefault(name, now.isoformat())) or now
+        idle = now - start
+        old = sorted((j for j in jobs if (j.get("age_min") or 0) >= min_age), key=lambda j: -(j.get("age_min") or 0))
+        if not old or idle < timedelta(minutes=confirm):
+            continue
+        labels = "+".join(want_labels(old[0]))
+        links = " ".join(j.get("url") or "" for j in old[:3])
+        more = f" (+{len(old) - 3} more)" if len(old) > 3 else ""
+        found[f"idle-runner:{name}"] = {
+            "level": "crit", "url": old[0].get("url") or RUNNERS_SETTINGS,
+            "text": f"{name} is online but idle for {minutes(idle)}+ while {len(old)} job(s) for label {labels} "
+                    f"wait (oldest {minutes(timedelta(minutes=old[0].get('age_min') or 0))}); it is not picking "
+                    f"jobs up, restart its runner service. Runs: {links}{more}. Runners: {RUNNERS_SETTINGS}"}
+    spans = gaps + [{"runner": n, "start": v, "end": now.isoformat(),
+                     "min": round((now - (sr.parse_ts(v) or now)).total_seconds() / 60)} for n, v in since.items()]
+    long_ = [g for g in spans if g["min"] >= min_age]
+    if long_:
+        worst = max(long_, key=lambda g: g["min"])
+        found["idle-runner:gaps"] = {
+            "level": "info", "url": RUNNERS_SETTINGS,
+            "text": f"Idle while jobs waited, last 24 h: longest {worst['min']} min on {worst['runner']} "
+                    f"(from {ts(sr.parse_ts(worst['start']))}); {len(long_)} gap(s) of {min_age}+ min"}
+    return found, {"idle_since": since, "gaps": gaps[-200:]}
+
+
 RUNNERS_SETTINGS = f"https://github.com/organizations/{ORG}/settings/actions/runners"
 GONE_CAUSES = {"no-service", "registration"}  # watchdog: nothing on this Mac runs it any more
 
@@ -1182,9 +1303,26 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
         except RuntimeError as err:
             errors.append(f"{repo}: {str(err)[:160]}")
     found.update(pr_findings(prs, now, timedelta(hours=args.stuck_hours), timedelta(hours=args.idle_hours)))
+    retired_patterns = list(RETIRED_RUNNERS) + (args.retired_runner or [])
     if args.runner_page:
-        found.update(runner_findings(args.runner_page, runner_fetch, args.stale_runner_hours,
-                                     list(RETIRED_RUNNERS) + (args.retired_runner or [])))
+        found.update(runner_findings(args.runner_page, runner_fetch, args.stale_runner_hours, retired_patterns))
+    idle_track = state.get("idle_runners", {})
+    if getattr(args, "queue_check", True):
+        try:
+            queue = queue_state(gh, repos, now)
+            if queue.get("runners_error"):
+                found["queue:runners-unreadable"] = {
+                    "level": "info", "url": "https://github.com/settings/personal-access-tokens",
+                    "text": "ci-watch cannot list org runners, so the idle-runner check is off and only the stall "
+                            "check runs. Give its token Organization permissions > Self-hosted runners: Read-only "
+                            f"({queue['runners_error']})"}
+                found.update(stalled_labels(queue))
+            else:
+                found.update(starved_labels(queue, retired=[re.compile(p) for p in retired_patterns]))
+                idle_found, idle_track = idle_runners(queue, idle_track, now)
+                found.update(idle_found)
+        except RuntimeError as err:
+            errors.append(f"runner queue: {str(err)[:160]}")
 
     error_runs = state.get("error_runs", 0) + 1 if errors else 0
     if error_runs >= ERROR_RUNS_ALERT:
@@ -1275,6 +1413,7 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
         "active": found, "branches": branches, "branches_at": branches_at,
         "branches_scan_iso": state.get("branches_scan_iso"), "upstream": upstream,
         "deploy": drift_state, "self_update": self_update, "profiles": profiles,
+        "idle_runners": idle_track,
         "prs": {f"{p['repo']}#{p['number']}": p for p in prs},
     }
     return new_state, report, {"new": new, "cleared": cleared, "events": events}
@@ -1351,6 +1490,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="warn when this Mac has this much swap in use or memory pressure is warn (0 = off)")
     p.add_argument("--swap-crit-gb", type=float, default=8.0,
                    help="crit at this much swap in use or memory pressure critical (0 = no crit from swap)")
+    p.add_argument("--no-queue-check", dest="queue_check", action="store_false",
+                   help="skip reading runners and queued jobs from GitHub (starved label, idle runner)")
     p.add_argument("--no-self-update", dest="self_update", action="store_false",
                    help="do not fast-forward this clone of docs every hour")
     p.add_argument("--retired-runner", action="append", metavar="REGEX",
