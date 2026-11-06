@@ -9,7 +9,7 @@ The prior selected bench and V1 component registers remain implementation baseli
 | Requirement | Accepted behavior | Qualification evidence |
 |---|---|---|
 | Band roles | HaLow, 2.4 GHz and 5 GHz each support node transport/backhaul, control/discovery/recovery, telemetry, voice/application traffic and access for compatible EUDs | With the other two bands disabled, demonstrate the surviving band's required services and missed-switch recovery |
-| Preferred paths | HaLow will often serve long-range contact and 5 GHz nearby EUD access, but neither assignment is permanent | Measured selection follows conditions rather than fixed band labels |
+| Preferred paths | HaLow will often serve long-range contact and 5 GHz nearby EUD access, but neither assignment is permanent. Out of the box the EUD access point is on 5 GHz and the 2.4 GHz radio stays enabled so Wi-Fi backhaul is available as needed (D-055, [GHO-89](https://linear.app/ghostnet-labs/issue/GHO-89)) | Measured selection follows conditions rather than fixed band labels; a fresh node offers its EUD access point on 5 GHz |
 | EUD compatibility | Direct HaLow access requires a HaLow-capable EUD or adapter/bridge; conventional phone Wi-Fi is not assumed to support HaLow | Endpoint and connection method recorded for every access test |
 | Redundancy | Independent usable paths protect management and essential communications during failures or migrations where physically possible | Identify shared hardware, antenna, power and firmware failure points; record interruption limits |
 | Concurrency | Supporting all roles is distinct from supporting every role simultaneously on separate channels | Exact AP/mesh/interface combinations, channel constraints and scheduling controls tested per radio/driver |
