@@ -24,6 +24,7 @@ This file models heat and GNSS interference for the V1 carrier and sets the firs
 | HaLow, GW16170 | 1 (estimate) | 3.3 | 1.0 A peak at 3.3 V, earlier estimate in v1-3v3-rail.md. Typical to measure. |
 | GNSS, MAX-M10S plus antenna bias | 0.03 | 0.33 | 25 mW tracking (u-blox datasheet); peak is the 0.1 A rail allocation. |
 | USB hub, TUSB4041I | 0.2 (estimate) | 0.3 (estimate) | To measure. |
+| Control radio, RAK3172 (B-28) | 0.02 | 0.3 | RAK3172 datasheet: 5.22 mA receive, 87 mA transmitting at 20 dBm, at 3.3 V. Transmits only for channel-migration messages. |
 | Misc 3.3 V (INA228, supervisor, pull-ups) | 0.3 | 0.8 | 0.25 A misc allocation, v1-3v3-rail.md. |
 | LiPo bridge path and charger (B-24) | under 0.1 (estimate) | about 0.3 while recharging after a swap (estimate) | [v1-lipo-bridge.md](v1-lipo-bridge.md). The LTC4121 delivers about 1.5 W into the cell for a few minutes after each swap; the ideal-diode path carries nothing while a pack is in. Efficiency not yet read from the datasheet (Unverified). |
 | 3.3 V buck loss (LM76005) | 1.2 | 2.0 | v1-3v3-rail.md: 3 A typical, 4.5 A peak, about 88 % efficient. |

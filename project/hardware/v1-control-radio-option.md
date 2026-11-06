@@ -1,7 +1,7 @@
 # V1 control radio option (LoRa)
 
 **Owner:** [GHO-90](https://linear.app/ghostnet-labs/issue/GHO-90). Channel migration design stays in [software/channel-migration.md](../software/channel-migration.md); requirements stay in [requirements/maer-capabilities.md §3](../requirements/maer-capabilities.md#3-channel-migration-and-returning-node-recovery).
-**Status:** Option, 2026-11-06. Justin asked for it to be written up as an option; it is not selected. This file edits no register and assigns no B, D or R number. Nothing was bought.
+**Status:** Adopted, 2026-11-06 (D-057). The control radio is B-28 in [v1-selections.md](v1-selections.md); this file keeps the rationale, parts compared and alternatives. Nothing was bought.
 
 ## Why this exists
 
@@ -30,7 +30,7 @@ A small, low-rate LoRa radio would carry only migration traffic: adverts with th
 | RAKwireless RAK3172 (H variant, US915) | STM32WLE5 SoC with an SX126x-class radio in a module | UART AT commands; LoRa P2P mode supported | −40 to +85 °C on the -T and -F variants; 2.0 to 3.6 V; FCC, IC and RCM marked variant offered (Verified, RAK3172 datasheet). Max TX power not stated beyond the 20 dBm test point |
 | Semtech SX1262 on the carrier | Bare transceiver, +22 dBm, 150 to 960 MHz, up to 62.5 kbps LoRa | SPI plus BUSY, DIO1 and reset GPIOs | Needs RF layout, a TCXO and matching on the carrier, and SPI pins the CM5 no longer has free (SPI0 and SPI1 pins are allocated in [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md)) |
 
-**Working preference: RAK3172 behind a USB-UART bridge on TUSB4041I port 2** (B-04 lists ports 2 and 4 as spare). It needs no new CM5 GPIO, keeps the RF design inside a certified module, and Linux sees it as a serial port.
+**Working preference: RAK3172 behind a USB-UART bridge on TUSB4041I port 2** (B-04 now gives port 2 to B-28). It needs no new CM5 GPIO, keeps the RF design inside a certified module, and Linux sees it as a serial port.
 
 ## 2. How it fits channel migration
 

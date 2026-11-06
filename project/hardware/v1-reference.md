@@ -42,7 +42,7 @@ The 138 x 67 mm PCB target is important but not sacred. Do not compromise RF, th
 ## 3. System architecture
 
 - PCIe: CM5 PCIe Gen2 x1 to the AsiaRF AW7916-AED Wi-Fi 6E module (three IPEX antenna connectors)
-- USB: the USB 2.0 pair of CM5 USB3-0 (pins 134/136) to the four-port TI TUSB4041I hub; port 1 to the GW16170 HaLow module, port 2 spare (V1 has no Bluetooth, D-026), port 3 to a dedicated sealed USB-C host connector for external OpenVLM VLMKW0100, and port 4 is spare. B-07 remains the separate USB-C charge/service port; its data lines go only to the CM5's dedicated USB 2.0 port (pins 103/105), as a USB device (console and network gadget, rpiboot) (D-044).
+- USB: the USB 2.0 pair of CM5 USB3-0 (pins 134/136) to the four-port TI TUSB4041I hub; port 1 to the GW16170 HaLow module, port 2 to the B-28 control radio (D-057), port 3 to a dedicated sealed USB-C host connector for external OpenVLM VLMKW0100, and port 4 is spare. B-07 remains the separate USB-C charge/service port; its data lines go only to the CM5's dedicated USB 2.0 port (pins 103/105), as a USB device (console and network gadget, rpiboot) (D-044).
 - Ethernet: CM5 integrated Gigabit PHY to discrete magnetics and the sealed Amphenol LTW Ethernet connector
 - GNSS: CM5 UART, I2C, and PPS to the MAX-M10S, with an external active antenna
 - Power path: battery spring contacts, SMBJ33CA bidirectional TVS, CSD19533Q5A blocking FET, TPS26633 eFuse (where the TVS, blocking FET and eFuse sit now that charging is in the radio is under review, section 12), then the 10 mOhm Kelvin shunt (INA228 monitoring) and VBAT_PROTECTED
@@ -99,7 +99,7 @@ Control pin drive: the pull-ups return to the card's switched rail, so the CM5 G
 
 Decision (B-04, B-22, B-23, D-023): replace the two-port TI TUSB4020BI with the four-port TI TUSB4041IPAPRG4 USB 2.0 hub. The two-port selection was sized exactly for the HaLow and Bluetooth devices and cannot support node-side OpenVLM voice/PTT. V1 has since dropped Bluetooth (D-026), which leaves port 2 spare. The V1 voice endpoint is the external OpenMANET VLMKW0100 USB audio/PTT module; the carrier does not integrate a CM108B audio codec or analog speaker/microphone path.
 
-Topology: CM5 USB3-0's USB 2.0 pair (pins 134/136) upstream to TUSB4041I (D-044); downstream port 1 to GW16170 HaLow; port 2 spare (no Bluetooth, D-026); port 3 to the dedicated sealed GCT USB4720-03-A receptacle for OpenVLM; port 4 reserved. Keep the existing B-07 USB-C DATA / CHARGE service port electrically separate: its data lines go only to CM5 pins 103/105, as a USB device. Hub core: HUB_1V1 from a TLV62568 buck on CM5_3V3 (B-26); HUB_3V3 = CM5_3V3. The OpenVLM port is a USB 2.0 host/DFP: implement USB-C source advertisement (Rp), switched and current-limited +5V VBUS, per-port overcurrent sensing, and USB data-line ESD. Validate signal integrity and hub strap/reset behavior against the TUSB4041I reference design before schematic release.
+Topology: CM5 USB3-0's USB 2.0 pair (pins 134/136) upstream to TUSB4041I (D-044); downstream port 1 to GW16170 HaLow; port 2 to the B-28 control radio (D-057); port 3 to the dedicated sealed GCT USB4720-03-A receptacle for OpenVLM; port 4 reserved. Keep the existing B-07 USB-C DATA / CHARGE service port electrically separate: its data lines go only to CM5 pins 103/105, as a USB device. Hub core: HUB_1V1 from a TLV62568 buck on CM5_3V3 (B-26); HUB_3V3 = CM5_3V3. The OpenVLM port is a USB 2.0 host/DFP: implement USB-C source advertisement (Rp), switched and current-limited +5V VBUS, per-port overcurrent sensing, and USB data-line ESD. Validate signal integrity and hub strap/reset behavior against the TUSB4041I reference design before schematic release.
 
 The OpenVLM module presents CM108B USB audio and HID PTT controls, and its Kenwood accessory jack connects to the supported handset/PTT. It removes analog audio and physical PTT circuitry from the carrier. Do not route the external VLM into the B-07 charging/service port.
 
@@ -267,7 +267,7 @@ This file does not own or duplicate the GPIO allocation. The canonical CM5 physi
 
 - 01_CM5: CM5, two Amphenol connectors, +5V_CM5, GPIO_VREF, PCIe, USB2, Ethernet, UART, I2C, PPS, PMIC_Enable, internal test pads
 - 02_PCIE_WIFI: AW7916-AED, M.2 E-key socket, PCIe Gen2 x1, 100 MHz REFCLK, PERST#, CLKREQ#, 0 Ω links in card TX capacitor footprints, Wi-Fi TPS22975 sized for at least 3 A, three IPEX
-- 03_USB_HALOW_AUDIO: TUSB4041I, 24 MHz crystal, CM5 USB3-0 USB 2.0 pair upstream, HUB_1V1 buck (TLV62568) from CM5_3V3, HUB_3V3 = CM5_3V3, GRSTz held low by 2.2 kΩ until firmware release, GW16170 on port 1, port 2 spare, external OpenVLM USB-C DFP on port 3, port 4 reserved, switched/current-limited VBUS, CC pull-up, USB ESD, hub reset, per-port overcurrent signals
+- 03_USB_HALOW_AUDIO: TUSB4041I, 24 MHz crystal, CM5 USB3-0 USB 2.0 pair upstream, HUB_1V1 buck (TLV62568) from CM5_3V3, HUB_3V3 = CM5_3V3, GRSTz held low by 2.2 kΩ until firmware release, GW16170 on port 1, port 2 to the B-28 control radio (D-057), external OpenVLM USB-C DFP on port 3, port 4 reserved, switched/current-limited VBUS, CC pull-up, USB ESD, hub reset, per-port overcurrent signals
 - 04_ETHERNET: CM5 PHY interface, discrete 1000BASE-T magnetics, sealed Ethernet connector, four MDI differential pairs, Ethernet ESD, chassis and shield, ETH_SYNC_OUT
 - 05_GNSS: MAX-M10S-00B, UART, I2C, PPS, reset, VCC_RF, active antenna, optional RF protection and filter footprints, backup provision, test pads
 - 06_POWER: battery contacts, 10 mOhm shunt, INA228, SMBJ33CA, CSD19533Q5A, Q2 pulldown FET, TPS26633, LM76005 5 V, LM76005 3.3 V, HaLow TPS22975 (the Wi-Fi TPS22975 is on 02_PCIE_WIFI), USB-C charge input from the B-07 port, TPS25751A PD controller (B-08), BQ25798 charger and power path (B-09), pack-swap bridge (B-24: LiPo cell, LM7480x-Q1 path and LTC4121 charger, D-053), GNSS filtering, protection, fault, and telemetry
@@ -389,7 +389,7 @@ Still to define: radio power-management software, the hardware telemetry API, ha
 
 ## 25. Bill of materials and status
 
-Parts and their status are kept in the selections register ([v1-selections.md](v1-selections.md), B-01 to B-27). Open parts are listed in section 26.
+Parts and their status are kept in the selections register ([v1-selections.md](v1-selections.md), B-01 to B-28). Open parts are listed in section 26.
 
 Project status by area:
 
