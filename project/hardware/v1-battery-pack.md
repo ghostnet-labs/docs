@@ -1,14 +1,14 @@
 # Track B battery pack and interface (V0 mechanical baseline)
 
-The parameter table tags each value as Locked, Target, or CAD-verify. Do not treat Target or CAD-verify values as fabrication dimensions. The geometry conflicts found on 2026-09-30 (C-01 to C-05) were resolved by D-016 and D-017.
+The parameter table tags each value as Locked, Target, or CAD-verify. Do not treat Target or CAD-verify values as fabrication dimensions. D-054 (2026-11-06) set the current layout: six cells one cell deep, stacked six high, docking on the bottom end of an upright radio body. Rows whose positions came from the earlier 145 x 74 mm under-board frame are Open under GHO-8.
 
-**Coordinates.** View the radio from the battery side, with X along the 145 mm length and Y along the 74 mm width. The contact and electronics end is at X = 145 mm and the fixed-hook end is at X = 0 mm. Datum A is the pack-to-radio mating plane, Datum B is the X = 0 hook-end plane, and Datum C is the Y = 0 left sidewall plane when viewing the pack from above.
+**Coordinates.** View the pack from its mating face, the face that meets the radio's bottom end. X runs along the 76 mm width (the cell axis), Y along the 27.6 mm depth from the back (MOLLE) face to the front (lid) face, and Z down the 132 mm height from the mating face. Datum A is the pack-to-radio mating plane, Datum B is the X = 0 side face, and Datum C is the Y = 0 back face.
 
 ## Design rules
 
 - **Sourcing.** Prefer active, catalog-orderable parts that can be bought in small quantities from major authorized distributors such as DigiKey, Mouser, Newark, or Arrow. Avoid RFQ-only parts, custom connector builds, manufacturer-specific tooling, and large minimum order quantities unless no reasonable catalog alternative meets the requirement.
-- **Priority order.** Preserve the 145 x 74 mm footprint first, keep safe cell clearances and sealing second, keep pack replacement easy third, and let pack height grow if needed. Do not reduce cell insulation or gasket and hard-stop robustness only to hold the 46 mm height target.
-- **Modularity.** Standard and future higher-capacity packs share the same 145 x 74 mm footprint and radio-side mating interface, and extra capacity mainly adds height. The pack enclosure is sealed and not meant for routine field disassembly.
+- **Priority order.** Preserve the mating-face envelope (M-01) first, keep safe cell clearances and sealing second, keep pack replacement easy third, and let pack height grow if needed. Do not reduce cell insulation or gasket and hard-stop robustness only to hold the M-02 height target.
+- **Modularity.** Standard and future higher-capacity packs share the same mating-face envelope (M-01) and radio-side mating interface, and extra capacity mainly adds height. The pack enclosure is sealed and not meant for routine field disassembly.
 - **Sealing.** The radio and the pack are each independently sealed, so removing the pack does not open either enclosure to water. A replaceable silicone face seal around the mating and contact cavity adds secondary protection against water, mud, and debris. The contacts sit inside that cavity and do not need an IP rating.
 - **Attachment and install sequence.** Bottom-mount hook and latch. The fixed hooks engage first, then the latch end pivots or presses upward and a positive recessed latch locks the pack. Asymmetric keying (an offset boss) prevents installing the pack reversed by 180 degrees. The release is glove-operable, recessed against accidental activation, and needs no tools.
 - **Load path.** Hooks, locating bosses, hard stops, and the latch carry shock, shear, and gasket preload. The pogo contacts carry no structural load and are never used as hard stops. The pack-side target PCB and the radio-side pogo daughterboard carry electrical load only.
@@ -24,28 +24,28 @@ Each row is the single owner of its value. Status is Locked, Target, or CAD-veri
 
 | ID | Parameter | Value | Status |
 |---|---|---|---|
-| M-01 | Plan-view envelope | About 145 x 74 mm, matching the radio enclosure footprint (138 x 67 mm board plus walls and clearance). The board grew from 117 mm for the M.2 3052 Wi-Fi card (D-026, [GHO-37](https://linear.app/ghostnet-labs/issue/GHO-37)); the pack grew 21 mm with it, all of it in the M-22 spare zone, so the interface zone keeps its distance from the contact end. Shrink toward MPU5 size if CAD allows (D-016). The coordinates in this table use the 145 x 74 mm frame. | Target. Shrinks if CAD allows (D-016). |
-| M-02 | Height | About 46.0 mm standard, and it may increase if safe packaging, latch, or sealing requires. Cell-zone structural height about 42 to 44 mm (two 18.6 mm cells, about 1 mm layer gap, 1.5 to 2 mm insulation and support above and below, plus wall and clearance). | Target |
-| M-03 | Perimeter structure | 4.0 mm nominal wall and edge margin around the plan-view perimeter, with a continuous structural load path along both 145 mm sidewalls from hook end to latch end. Corner radii and draft depend on the enclosure process. | Target. Radii and draft CAD-verify. |
-| M-04 | Cells | Six Molicel INR-18650-M35A, modeled at 65.2 mm max length x 18.6 mm max diameter, along X. Three across Y and two layers, with the lower layer directly under the upper. | Locked |
-| M-05 | Cell Y centerlines | 17.4, 37.0, and 56.6 mm (19.6 mm spacing, about 8.1 mm margin from the outer can to each 74 mm sidewall) | Target |
+| M-01 | Mating-face envelope | About 76 x 27.6 mm, inside the bottom end face of the upright radio body (about 76 x 34 mm, D-054). Packing rules from the enclosure model: 1 mm between cells, 1.5 mm insulation, 3 mm wall, 2 mm cell end supports. | Target. CAD-verify. |
+| M-02 | Height | About 132 mm: six 18.6 mm cell layers, 1 mm gaps, insulation, walls and a 6 mm BMS layer (D-054). It may increase if safe packaging, latch, or sealing requires. | Target |
+| M-03 | Perimeter structure | 3.0 mm wall in the D-054 envelope, with a continuous structural load path along both long side faces. A 4.0 mm wall adds about 2 mm to each plan dimension. Corner radii and draft depend on the enclosure process. | Target. Wall thickness, radii and draft CAD-verify. |
+| M-04 | Cells | Six Molicel INR-18650-M35A, modeled at 65.2 mm max length x 18.6 mm max diameter, along X, one cell deep, stacked six high along Z. Electrically 3S2P. | Cells Locked. Layout Target (D-054). |
+| M-05 | Cell centerlines | Y about 13.8 mm (mid-depth). Z on 19.6 mm pitch (18.6 mm cells plus 1 mm gap); first-layer position follows the BMS layer (M-08). | Target. Z positions CAD-verify. |
 | M-06 | Cell spacing | At least 1.0 mm between adjacent cans and between layers, plus separate insulation bodies | Target |
-| M-07 | Cell zone | X = 6.0 to 74.0 mm (68 mm). Reserve about 68 x 61 x 41 mm for the insulated cell zone. | Target |
-| M-08 | Electronics bay | X = 100.0 to 141.0 mm and Y = 4.0 to 70.0 mm, with a 5.0 mm structural and insulation corridor (X = 95 to 100 mm) between it and the M-22 spare zone | Target |
-| M-09 | BMS PCB | Envelope about 32 x 48 mm, long axis along Y, in the lower portion of the bay. Keep the pack fuse and protection close to the BAT+ and BAT- pads and thermally separate from the cell ends. | Target. Z placement CAD-verify. |
-| M-10 | Contact array | Eight Mill-Max 7911-0-15-20-86-14-11-0 probes in a 4 x 2 grid on 4.0 mm pitch, centered at X = 117.0 mm and Y = 37.0 mm. Offsets from center: X = -6, -2, +2, +6 mm and Y = -2, +2 mm (a 12 x 4 mm center span). | Pitch Locked. Center Target. |
+| M-07 | Cell zone | About 69 x 22 x 120 mm insulated cell zone (cells, end supports, gaps and insulation). | Target |
+| M-08 | Electronics bay | A layer about 6 mm thick across the plan area for the BMS, fuse and target PCB. Which end (mating face or far end) and the corridor between it and the cells are Open (D-054). | Open |
+| M-09 | BMS PCB | Must fit about 70 x 21 mm of plan area in the M-08 layer. Keep the pack fuse and protection close to the BAT+ and BAT- pads and thermally separate from the cell ends. | Open (D-054) |
+| M-10 | Contact array | Eight Mill-Max 7911-0-15-20-86-14-11-0 probes in a 4 x 2 grid on 4.0 mm pitch, a 12 x 4 mm center span, long axis along X on the mating face. Center position Open (D-054). | Pitch Locked. Center Open. |
 | M-11 | Contact allocation | Two BAT+ in parallel, two BAT- in parallel, SDA, SCL, PACK_PRESENT/ID, and one spare or wake contact | Selected |
 | M-12 | Probe working height | About 6.79 mm recommended. Target 6.8 +/- 0.25 mm effective in the locked condition, with worst case between 6.25 and 7.14 mm, which includes the probe's ±0.15 mm length tolerance and a 0.2 mm minimum preload. | Target. Tolerance study CAD-verify. |
 | M-13 | Pack-side target pads | Eight round or rounded hard-gold-over-nickel pads, at least 2.5 mm diameter, on the same 4.0 mm grid. Increase the size if the process allows without reducing creepage or short-circuit tolerance. | Target. Finish thickness, shape, and vendor capability CAD-verify. |
 | M-14 | Target PCB and pogo daughterboard | Each about 24 x 16 mm (the daughterboard plus mounting ears), separately replaceable on the radio side. Both PCBs are located by their contact faces against datum shoulders, so board thickness stays out of the probe stack. | Target. Mounting ears and fasteners CAD-verify. |
-| M-15 | Dry contact cavity | About 28 x 20 mm internal, centered on the contact array, with at least 5 mm of land between the outermost target pad and the gasket | Target |
-| M-16 | Secondary gasket | Replaceable solid silicone rectangular gasket or cord, a closed rounded rectangle around the contact cavity only (not the whole pack face). Centerline envelope about 34 x 26 mm centered at X = 117 mm and Y = 37 mm (X = 100 to 134 mm, Y = 24 to 50 mm). 2.0 mm cross-section, precision molded loop (or cord to an equivalent tolerance), about 22 to 25 percent nominal axial compression, below about 30 percent worst case, with the gland-plus-face-gap stack held to ±0.10 mm worst case (D-050). | Target. Gland geometry CAD-verify. |
-| M-17 | Hard-stop lands | Four broad lands outside the gasket perimeter, two on each side in the Y margins (X about 109 and 125 mm, Y about 10 and 64 mm), coplanar with Datum A | Target. Positions CAD-verify. |
-| M-18 | Locating bosses | Two tapered bosses at X about 117 mm and Y about 12 and 60 mm, outside the gasket and asymmetric about the Y = 37 mm centerline so they key the pack, engaging before the probes reach working compression and before meaningful gasket compression | Target. Diameter, taper, clearance, and depth CAD-verify. |
-| M-19 | Fixed hooks | Two hooks at X about 1 to 6 mm in the hook bay (which includes the 4 mm end wall), near Y = 14 and 60 mm, tied into sidewall and endwall ribs rather than the cell support structure. Keepers are open enough for first engagement and tapered to guide the pack without scraping the gasket. | Target. Width, undercut, and thickness CAD-verify. |
-| M-20 | Latch zone | Two end-face pockets for Southco 97-30-160-12 draw latches (B-13), at about Y 14 and Y 60, X 136 to 145, Z 0 to about 16 mm on the pack (D-050). Keepers on the radio end face | Target. Pocket size, keeper position and lever access CAD-verify. |
-| M-21 | Interface zone | Reserve the final 50 mm of length (X = 95 to 145 mm) for the corridor, contact cavity and gasket, latch pocket, locating features, and electronics bay, and the first 74 mm for the hook bay and cell block | Target |
-| M-22 | Spare zone | X = 74 to 95 mm (21 mm) between the cell block and the corridor, added when the pack grew to 145 mm (D-026). Unassigned: it can take the BMS, wiring slack, or a longer cell support, or be cut if the radio shrinks again. | Target |
+| M-15 | Dry contact cavity | About 28 x 20 mm internal, centered on the contact array, with at least 5 mm of land between the outermost target pad and the gasket. Fit on the 27.6 mm deep mating face is Open (D-054). | Target. Fit Open. |
+| M-16 | Secondary gasket | Replaceable solid silicone gasket or cord, a closed rounded rectangle around the contact cavity only (not the whole pack face). 2.0 mm cross-section, precision molded loop or cord to an equivalent tolerance (D-050). The earlier 34 x 26 mm centerline envelope does not fit inside the 27.6 mm deep face; size and position Open (D-054). | Open |
+| M-17 | Hard-stop lands | Four broad lands outside the gasket perimeter, coplanar with Datum A. Positions Open (D-054). | Open |
+| M-18 | Locating bosses | Two tapered bosses outside the gasket, asymmetric so they key the pack, engaging before the probes reach working compression and before meaningful gasket compression. Positions Open (D-054). | Open. Diameter, taper, clearance, and depth CAD-verify. |
+| M-19 | Fixed hooks | Two hooks at one end of the mating face, tied into side and end wall ribs rather than the cell support structure. Keepers are open enough for first engagement and tapered to guide the pack without scraping the gasket. Positions Open (D-054). | Open |
+| M-20 | Latch zone | Pockets for Southco 97-30-160-12 draw latches (B-13, D-050) with keepers on the radio body. Pocket positions Open (D-054). | Open. Pocket size, keeper position and lever access CAD-verify. |
+| M-21 | Interface zone | The mating face holds the contact cavity and gasket, hard stops, locating features, hooks and latch keepers. Zone allocation Open (D-054). | Open |
+| M-22 | Spare zone | None reserved in the D-054 layout. | Open |
 
 ## CAD assembly bodies
 
@@ -53,12 +53,10 @@ Create these bodies first: radio-bottom interface plate, pack outer shell, pack 
 
 ## CAD review gates
 
-1. Fit check. All bodies sit inside the 145 x 74 mm footprint.
+1. Fit check. All bodies sit inside the M-01 and M-02 envelope.
 2. Motion check. Hook-first installation, pivot path, locating engagement, pogo compression, gasket compression, and latch travel work without interference.
 3. Tolerance study. Hard-stop stack, gasket squeeze, pogo stroke, and PCB positional tolerance.
 4. Structural review. Identify the hook and latch load paths and the weak enclosure sections.
 5. Electrical and mechanical review. Freeze the target-pad geometry and contact pin allocation before BMS PCB routing.
-
-Confirm the D-017 length budget in gate 1. The 145 mm frame adds 21 mm of spare length (M-22), which covers the earlier 128 mm fallback.
 
 Open design work is tracked in [GHO-8](https://linear.app/ghostnet-labs/issue/GHO-8). Gate results: [v1-battery-pack-gates.md](v1-battery-pack-gates.md).

@@ -16,7 +16,7 @@ This file owns none of the facts it uses. If it disagrees with an owning record,
 | Calculated values (eFuse, bucks, shunt, supervisor) | [v1-reference.md](v1-reference.md) §12 and §13, [v1-3v3-rail.md](v1-3v3-rail.md) |
 | OpenVLM host port behavior | [v1-openvlm-usbc-power.md](v1-openvlm-usbc-power.md) |
 | Routing and impedance | [v1-stackup-routing.md](v1-stackup-routing.md) (proposal, GHO-14/GHO-15) |
-| Pack-swap bridge | [v1-hot-swap-bridge.md](v1-hot-swap-bridge.md) and B-24 (candidate) |
+| Pack-swap bridge | [v1-lipo-bridge.md](v1-lipo-bridge.md) and B-24 (D-053) |
 
 Candidate documents still in open pull requests were read from their branches on 2026-10-09. Anything taken from them is marked **(PR #nn, candidate)** and is not a record yet:
 
@@ -38,7 +38,7 @@ Datasheets checked for pin names on 2026-10-09:
 | LM76005 | [TI SNVSBK5A](https://www.ti.com/lit/ds/symlink/lm76005.pdf): Pin Functions |
 | MAX-M10S | [u-blox UBX-20035208 R08](https://content.u-blox.com/sites/default/files/MAX-M10S_DataSheet_UBX-20035208.pdf): Table 10, Table 11 |
 
-Not fetched, so no pin numbers are given for them: TPS25751A (package not recorded, PR #61 conflict C-9), BQ25798, LTC3350, GCT USB4720-03-A, the TE 2199119-6 socket, the Molex 504050-0891 land pattern, and every part still open.
+Not fetched, so no pin numbers are given for them: TPS25751A (package not recorded, PR #61 conflict C-9), BQ25798, LM7480x-Q1, LTC4121, GCT USB4720-03-A, the TE 2199119-6 socket, the Molex 504050-0891 land pattern, and every part still open.
 
 ## Conventions
 
@@ -63,7 +63,7 @@ These names are not in any record. They follow the ledger's style (upper case, `
 | Battery and charge | VBAT_PACK (pack BAT+ contacts), PACK_SDA, PACK_SCL, PACK_SPARE, VBUS_SVC, SVC_CC1, SVC_CC2, SVC_DP, SVC_DM, VSYS_CHG, EFUSE_OUT, EFUSE_PGOOD, EFUSE_BGATE, EFUSE_DRV, BUCK_EN |
 | Supervisor | SUP_SENSE1 to SUP_SENSE4, SUP_RESET1_N to SUP_RESET4_N, SUP_MR_N |
 
-Names that do come from the records and are used as is: the ledger signal names, VBAT_PROTECTED, IN_SYS, +VBUS_HOLD, BRIDGE_ACTIVE_N and PACK_PRESENT (bridge study), SYS_PMIC_EN (§13 and the bridge study), +5V_SYS, +5V_CM5, +3V3_RADIO, WIFI_3V3, HALOW_3V3, +3V3_GNSS, CM5_3V3 (written "CM5 3.3 V" in the ledger), CHASSIS_GND, GND, ETH_SYNC_OUT, TP_ETH_SYNC, TP_PWR_BUTTON and TP_NBOOT.
+Names that do come from the records and are used as is: the ledger signal names, VBAT_PROTECTED, IN_SYS, +VBUS_HOLD, BRIDGE_ACTIVE_N and PACK_PRESENT (bridge design), SYS_PMIC_EN (§13), +5V_SYS, +5V_CM5, +3V3_RADIO, WIFI_3V3, HALOW_3V3, +3V3_GNSS, CM5_3V3 (written "CM5 3.3 V" in the ledger), CHASSIS_GND, GND, ETH_SYNC_OUT, TP_ETH_SYNC, TP_PWR_BUTTON and TP_NBOOT.
 
 ## Inter-sheet ports
 
@@ -79,14 +79,14 @@ Each row is one hierarchical port. "Fixed" means a record fixes the connection, 
 | +3V3_GNSS | 06_POWER (filter from +3V3_RADIO) | 05_GNSS | Record: §9 |
 | CM5_3V3 | 01_CM5 (pins 84, 86) | 01 (GPIO_VREF), 06 (INA228 VS), 07 (pull-ups, sense), 03 (HUB_3V3, Proposed) | Record: §4, §12 |
 | VBAT_PROTECTED | 06_POWER | 06, 07 (SVS4 sense, see K-13) | Record: §3 |
-| +VBUS_HOLD | 06_POWER (LTC3350, candidate) | 06 (buck inputs) | Candidate: B-24, bridge study §4 |
+| +VBUS_HOLD | 06_POWER (pack path, and the LiPo through the LM7480x-Q1) | 06 (buck inputs) | Selected: B-24, D-053, [v1-lipo-bridge.md](v1-lipo-bridge.md) §1 |
 | GND | all | all | Record |
 | CHASSIS_GND | 04, 05, 06 (connector shells) | wall bonds | Record: reserved (§10). Strategy open, GHO-11 |
 | USB_UP_DP / USB_UP_DM | 01_CM5 | 03 | Record: ledger pins 103/105, §3 |
 | PCIE_* (TX, RX, REFCLK, RST_N, CLKREQ_N) | 01_CM5 | 02 | Record: ledger, §6 |
 | ETH_TRD0..3_P/N | 01_CM5 | 04 | Record: CM5 Table 4, §10 |
 | ETH_SYNC_OUT | 01_CM5 | 04 (TP_ETH_SYNC) | Record: D-033 |
-| SYS_I2C_SDA / SYS_I2C_SCL | 01_CM5 | 06 (INA228, charger, PD controller, bridge controller), 05 (optional), 06 (pack bus, open) | Record: ledger. Device list Proposed |
+| SYS_I2C_SDA / SYS_I2C_SCL | 01_CM5 | 06 (INA228, charger, PD controller, bridge cell monitor), 05 (optional), 06 (pack bus, open) | Record: ledger. Device list Proposed |
 | GNSS_UART_TX, GNSS_UART_RX, GNSS_RESET_N, GNSS_PPS | 01_CM5 | 05 | Record: ledger |
 | HALOW_PWR_EN, WIFI_PWR_EN | 01_CM5 | 06 (TPS22975 ON) | Record: ledger |
 | HALOW_RESET_N, HALOW_WAKE_N | 01_CM5 | 03 (GW16170 pins 56, 54) | Record: ledger |
@@ -100,7 +100,7 @@ Each row is one hierarchical port. "Fixed" means a record fixes the connection, 
 | POWER_GOOD | 06 via a translator in 07 (open) | 01_CM5 | Record: ledger |
 | EFUSE_FAULT | 06 (TPS26633 FLT) | 01_CM5 | Record: ledger |
 | INA228_ALERT_N | 06 (INA228 ALERT) | 01_CM5 | Record: ledger |
-| PACK_PRESENT, BRIDGE_ACTIVE_N | 06 | 01_CM5 | Candidate: bridge study. No GPIO allocated (K-19) |
+| PACK_PRESENT, BRIDGE_ACTIVE_N | 06 | 01_CM5 | D-053: BRIDGE_ACTIVE_N is a comparator on VBAT_PROTECTED. No GPIO allocated (K-19) |
 
 ---
 
@@ -361,7 +361,7 @@ TP_GNSS_SAFEBOOT, TP_GNSS_EXTINT (Record §9), TP_GNSS_PPS (Proposed; GHO-13 ask
 
 ## 06_POWER
 
-**Scope (§17):** battery contacts, 10 mΩ shunt, INA228, SMBJ33CA, CSD19533Q5A, Q2 pull-down FET, TPS26633, LM76005 5 V, LM76005 3.3 V, two TPS22975, GNSS filtering, protection, fault and telemetry. The charge path (B-07, B-08, B-09) and the bridge (B-24) are not in the §17 list but sit in this power path (§11, bridge study §4), so this plan places them here (K-2).
+**Scope (§17):** battery contacts, 10 mΩ shunt, INA228, SMBJ33CA, CSD19533Q5A, Q2 pull-down FET, TPS26633, LM76005 5 V, LM76005 3.3 V, two TPS22975, GNSS filtering, protection, fault and telemetry. The charge path (B-07, B-08, B-09) and the bridge (B-24) are not in the §17 list but sit in this power path (§11, [v1-lipo-bridge.md](v1-lipo-bridge.md) §1), so this plan places them here (K-2).
 
 **Parts:** B-12 contact interface, B-17 (candidate), B-16 (candidate), Q2 BSS138 or equivalent (candidate), B-15, B-14 (INA228 and shunt), B-18 x 2, B-19 x 2, B-07, B-08, B-09, B-24 (candidate). Pack-side parts B-10, B-11 and B-13 are not on the carrier.
 
@@ -372,7 +372,7 @@ The order is not settled (GHO-10; PR #61 conflict C-15). The two recorded versio
 | Source | Order |
 |---|---|
 | §3 and §20 | Contacts → SMBJ33CA → CSD19533Q5A → TPS26633 → shunt (INA228) → VBAT_PROTECTED → both LM76005 |
-| §11 and bridge study §4 (newer) | Contacts (VBAT_PACK) → BQ25798 BAT to SYS (VSYS_CHG) → TVS, Q1, TPS26633 → shunt → VBAT_PROTECTED → LTC3350 input ideal diode → +VBUS_HOLD → both LM76005 |
+| §11 and [v1-lipo-bridge.md](v1-lipo-bridge.md) §1 (newer, D-053) | Contacts (VBAT_PACK) → BQ25798 BAT to SYS (VSYS_CHG) → TVS, Q1, TPS26633 → shunt → VBAT_PROTECTED, which joins +VBUS_HOLD → both LM76005. The LiPo joins +VBUS_HOLD through the LM7480x-Q1 and two back-to-back FETs; the LTC4121 charges it from VSYS_CHG |
 
 Capture of the input stage waits for GHO-10. The tables below give the pins that do not depend on that choice.
 
@@ -383,7 +383,7 @@ Capture of the input stage waits for GHO-10. The tables below give the pins that
 | BAT+ x 2 | VBAT_PACK | Two contacts in parallel |
 | BAT- x 2 | GND | Two contacts in parallel |
 | SDA, SCL | PACK_SDA, PACK_SCL | Which bus, which voltage, and hot-plug buffering are open (GHO-8, GHO-9) |
-| PACK_PRESENT/ID | PACK_PRESENT, pulled up on the radio side | Bridge study. Pull-up domain and GPIO open (K-19) |
+| PACK_PRESENT/ID | PACK_PRESENT, pulled up on the radio side | Bridge design (D-053). Pull-up domain and GPIO open (K-19) |
 | Spare or wake | PACK_SPARE | PR #64 candidate: BQ76942 BOTHOFF |
 
 Contact positions on the 4 x 2 grid are a PR #64 proposal. The interconnect between the replaceable pogo daughterboard and the carrier is not selected (GHO-8, GHO-7).
@@ -406,7 +406,7 @@ Contact positions on the 4 x 2 grid are a PR #64 proposal. The interconnect betw
 | 13 | IMON | No connect |
 | 14 | FLT | EFUSE_FAULT, open drain. Pull-up in the CM5 domain (ledger); value open |
 | 15 | PGTH | Divider from OUT: 243 kΩ over 49.9 kΩ |
-| 16 | PGOOD | EFUSE_PGOOD, 100 kΩ to OUT. Drives BUCK_EN (§12) or not (bridge study), K-13. Never connected directly to POWER_GOOD (ledger, §12) |
+| 16 | PGOOD | EFUSE_PGOOD, 100 kΩ to OUT. Drives BUCK_EN (§12) or not (D-044), K-13. Never connected directly to POWER_GOOD (ledger, §12) |
 | 17, 18 | OUT | EFUSE_OUT → shunt |
 | 19 to 24 | N.C. | No connect |
 | PAD | PowerPAD | GND |
@@ -465,14 +465,14 @@ The TPS22975 carries up to 6 A, so the WIFI_3V3 switch meets D-026's 3 A. The so
 
 ### Charge, PD and bridge blocks (functional only)
 
-No pin numbers: the TPS25751A package is not recorded, and the BQ25798 and LTC3350 datasheets were not fetched for this plan.
+No pin numbers: the TPS25751A package is not recorded, and the BQ25798, LM7480x-Q1 and LTC4121 datasheets were not fetched for this plan.
 
 | Block | Nets | Status |
 |---|---|---|
 | B-07 USB4720-03-A service port | VBUS_SVC, SVC_CC1, SVC_CC2, SVC_DP, SVC_DM, shell to the wall | SVC_DP/DM to CM5 pins 103/105 (D-044) |
 | B-08 TPS25751A | SVC_CC1/2, VBUS_SVC, I2C (to the charger and as a target on SYS_I2C, Proposed), interrupt output (no GPIO) | Selected; integration GHO-10 |
 | B-09 BQ25798 | VBUS_SVC in, VBAT_PACK at BAT, VSYS_CHG out, I2C on SYS_I2C (Proposed), interrupt (no GPIO) | Selected; integration GHO-10 |
-| B-24 LTC3350 | Input from VBAT_PROTECTED, output +VBUS_HOLD, PFO to BRIDGE_ACTIVE_N, I2C (Proposed SYS_I2C), PFI divider 562 kΩ over 100 kΩ | Candidate, GHO-38 |
+| B-24 LiPo bridge | LM7480x-Q1 and back-to-back FETs from the LiPo to +VBUS_HOLD, UVLO at 6.4 V; LTC4121 from VSYS_CHG to the LiPo with its NTC; comparator on VBAT_PROTECTED to BRIDGE_ACTIVE_N at about 7.75 V falling; cell monitor on I2C (Proposed SYS_I2C) | Selected, D-053, GHO-38 |
 | GNSS filter | +3V3_RADIO → filter → +3V3_GNSS | Filter not specified |
 
 ### Test pads
@@ -495,7 +495,7 @@ Proposed: TP on VBAT_PACK, IN_SYS, EFUSE_OUT, VBAT_PROTECTED, +VBUS_HOLD, +5V_SY
 | 10 | SENSE1 | SUP_SENSE1: divider from CM5_3V3 to the 0.4 V threshold | Record SVS1. RESET1 also starts the watchdog (K-6) |
 | 9 | SENSE2 | SUP_SENSE2: divider from +5V_SYS | Record SVS2 |
 | 8 | SENSE3 | SUP_SENSE3: divider from +3V3_RADIO, set against the 3.32 V minimum | Record SVS3; [v1-3v3-rail.md](v1-3v3-rail.md) |
-| 7 | SENSE4L | SUP_SENSE4: divider from VBAT_PROTECTED (§13) or +VBUS_HOLD (bridge study) | K-13 |
+| 7 | SENSE4L | SUP_SENSE4: divider from VBAT_PROTECTED (§13) or +VBUS_HOLD (D-044) | K-13 |
 | 6 | SENSE4H | GND (overvoltage monitoring not used) | Datasheet: GND if unused. Proposed |
 | 5, 4, 3, 2 | CT1 to CT4 | Reset delays: open, fixed (resistor to VDD or open) or capacitor | GHO-10 |
 | 13 | VREF | No connect | Proposed |
@@ -595,7 +595,7 @@ Each gap maps to the issue that owns it. A sheet cannot be captured to a releasa
 | 20 | B-07 service data path to the CM5 (console and rpiboot) | 01, 03, 06 | GHO-11 and GHO-9; no issue found for the path itself |
 | 21 | Pack contact positions, pack I2C bus and its hot-plug buffering and level, PACK_SPARE use, daughterboard-to-carrier interconnect | 06 | GHO-8, GHO-7 |
 | 22 | Pigtail wiring: header pair to RJ45 pins and polarity; Molex land pattern SD-504050-001 | 04 | GHO-45 |
-| 23 | Bridge population, power stage and current; whether +VBUS_HOLD exists | 06 | GHO-38, GHO-10 |
+| 23 | Bridge cell part number, fuse and protector, and LTC4121 settings (D-053) | 06 | GHO-38, GHO-10 |
 | 24 | SYS_I2C address map (INA228 straps, charger, PD controller, bridge, GNSS, pack) | 06, 07 | GHO-9, GHO-10 |
 | 25 | Exact MPNs and packages for footprints: TPS25751A package, 24 MHz crystal, inductors, bulk capacitors | 03, 06 | GHO-26 |
 | 26 | PCIe impedance target (85 or 90 Ω) and fabricator stackup | 02, 03, 04 | GHO-14, GHO-15 |
@@ -610,13 +610,13 @@ Proposed text for the records owner. README rule 6 asks for a Linear issue per c
 
 **K-1. Sheet list location.** "GHO-13's description and the brief cite 'Handoff §26' for the seven sheets. In v1-reference.md the sheet list is §17 ('Schematic sheets'); §26 is 'Critical open items'. Update the ticket text, or note that §26 is the handoff's original numbering."
 
-**K-2. §17 sheet contents lag the power path.** "v1-reference.md §17 lists the Wi-Fi TPS22975 on both 02_PCIE_WIFI and 06_POWER, and its 06_POWER list leaves out B-07, B-08, B-09 and B-24 (+VBUS_HOLD), which §11 and v1-hot-swap-bridge.md §4 put in the power path. Decide which sheet owns each radio switch and add the charge and bridge blocks to a sheet."
+**K-2. §17 sheet contents lag the power path.** "v1-reference.md §17 lists the Wi-Fi TPS22975 on both 02_PCIE_WIFI and 06_POWER, and its 06_POWER list leaves out B-07, B-08, B-09 and B-24 (+VBUS_HOLD), which §11 and v1-lipo-bridge.md §1 put in the power path. Decide which sheet owns each radio switch and add the charge and bridge blocks to a sheet."
 
 **K-3. B-07 service data has no CM5 endpoint.** "D-009 and B-07 say the USB-C DATA / CHARGE port carries CM5 console and service data. The CM5's only USB 2.0 port that can act as a device (pins 103/105, USB_OTG_ID on pin 101) is the TUSB4041I upstream link (ledger, §3), and the CM5 datasheet says to tie USB_OTG_ID to GND for a fixed host role. rpiboot recovery through nRPIBOOT also needs that port in device mode. The CM5 debug UART exists only on module test points TP35/TP36 (datasheet Table 13), not on the connector, so §4's 'internal debug UART/test points' cannot be routed on the carrier. Choose a service-data architecture (for example a USB 2.0 switch on the CM5 port, or a USB-to-UART bridge to a spare UART) or narrow D-009." Settled for capture by D-044 (V1 working default).
 
 **K-4. HALOW_USB_FAULT_N has no source.** "D-024 and the ledger keep HALOW_USB_FAULT_N as a HaLow USB fault input. The GW16170 is an M.2 card powered from HALOW_3V3 by a TPS22975, which has no fault output, and hub port 1 has no VBUS switch, so nothing can drive this signal. Name a source or free the GPIO, as D-026 did for BT_USB_FAULT_N."
 
-**K-5. INA228 telemetry is not pack-only in the charger-first path.** "v1-hot-swap-bridge.md §4 places the shunt after BQ25798 SYS and says the INA228 'sees pack current only'. With the charger ahead of the eFuse, the shunt carries the charger's system output, which includes USB-C power while charging, not pack current. §12 and §21 expect battery voltage, current, charge and energy. Decide whether battery telemetry needs a pack-side measurement (for example the BQ25798 or BQ76942 gauges) or a different shunt position."
+**K-5. INA228 telemetry is not pack-only in the charger-first path.** "§11 and v1-lipo-bridge.md §1 place the shunt after BQ25798 SYS. With the charger ahead of the eFuse, the shunt carries the charger's system output, which includes USB-C power while charging, not pack current. §12 and §21 expect battery voltage, current, charge and energy. Decide whether battery telemetry needs a pack-side measurement (for example the BQ25798 or BQ76942 gauges) or a different shunt position."
 
 **K-6. Supervisor topology against CM5 power-up.** "v1-reference.md §13 puts SVS1 on CM5_3V3 and has the TPS386000 able to pull PMIC_Enable low; the watchdog starts when RESET1 releases. The CM5 3.3 V rail only rises after PMIC_Enable rises (CM5 datasheet §3.1), so RESET1 cannot gate PMIC_Enable without holding the CM5 off. TPS386000 VDD is 1.8 to 6.5 V (SBVS105F), so VDD cannot come from VBAT_PROTECTED; the VDD source is not recorded. GHO-10 owns the fix." Settled for capture by D-044 (V1 working default).
 
@@ -632,9 +632,9 @@ Proposed text for the records owner. README rule 6 asks for a Linear issue per c
 
 **K-12. +5V_SYS and +5V_CM5.** "§4 ties all CM5 5 V pins to +5V_CM5; §3, §13 and the selections power tree feed the CM5 from +5V_SYS. No record says whether +5V_CM5 is the same net, a filtered branch or a switched branch."
 
-**K-13. Buck EN and SVS4.** Already raised in PR #61 (C-13): §12/§13 against v1-hot-swap-bridge.md §4.
+**K-13. Buck EN and SVS4.** Already raised in PR #61 (C-13): §12/§13 against D-044 and v1-lipo-bridge.md §1.
 
-**K-14. eFuse PGOOD to POWER_GOOD.** "v1-hot-swap-bridge.md §4 says 'eFuse PGOOD goes to GPIO 12 POWER_GOOD only'. The ledger and §12 say this battery-domain open-drain node must not connect directly to the CM5 and needs a separate logic-level interface. Align the bridge study with the ledger."
+**K-14. eFuse PGOOD to POWER_GOOD.** "The ledger and §12 say this battery-domain open-drain node must not connect directly to the CM5 and needs a separate logic-level interface. No current power-path record routes it to GPIO 12; keep it off POWER_GOOD at schematic capture."
 
 **K-15. HaLow control-pin wording.** "v1-reference.md §7 says 'the CM5 GPIOs wired to pins 54 and 56 (GPIO 18 and 19 in section 16)'. Read in order, that pairs pin 54 with the first GPIO named; the ledger puts HALOW_RESET_N on pin 56 (W_DISABLE1#) and HALOW_WAKE_N on pin 54. Reword §7 to name the ledger signals instead of GPIO numbers."
 
@@ -644,7 +644,7 @@ Proposed text for the records owner. README rule 6 asks for a Linear issue per c
 
 **K-18. PCIe impedance.** Already raised in v1-stackup-routing.md: 90 Ω (CM5 datasheet) against the 85 Ω ticket target.
 
-**K-19. Bridge and pack signals with no GPIO.** "v1-hot-swap-bridge.md names BRIDGE_ACTIVE_N (LTC3350 PFO) and PACK_PRESENT as CM5 inputs, and M-11 gives the pack SDA and SCL contacts. The ledger allocates none of them and does not say which I2C bus the pack joins. The free rows are the ones the ledger marks Reserved."
+**K-19. Bridge and pack signals with no GPIO.** "v1-lipo-bridge.md names BRIDGE_ACTIVE_N (a comparator on VBAT_PROTECTED) and PACK_PRESENT as CM5 inputs, and M-11 gives the pack SDA and SCL contacts. The ledger allocates none of them and does not say which I2C bus the pack joins. The free rows are the ones the ledger marks Reserved."
 
 ## What this does not verify
 
@@ -654,5 +654,5 @@ Proposed text for the records owner. README rule 6 asks for a Linear issue per c
 - RP1 reset pull states, CM5 behavior with CC1/CC2 open, and whether PERST# or CLKREQ# back-feed an unpowered Wi-Fi card are **Unverified**.
 - TUSB4041I: the HUB_VBUS_DET source for an embedded host, the external pull-down needed on GRSTz against its internal pull-up, and the TEST pin treatment are **Unverified**.
 - The header-to-RJ45 pair map and polarity are Proposed from MagJack convention; IEEE 802.3 was not fetched.
-- TPS25751A, BQ25798, LTC3350, GCT USB4720-03-A, TE 2199119-6 and Molex 504050-0891 pin numbers were not checked.
+- TPS25751A, BQ25798, LM7480x-Q1, LTC4121, GCT USB4720-03-A, TE 2199119-6 and Molex 504050-0891 pin numbers were not checked.
 - Every Proposed default and net name is a starting point for capture, not a reviewed design.
