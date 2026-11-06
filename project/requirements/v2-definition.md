@@ -20,6 +20,8 @@ V2 is a body-worn mesh radio for small civilian teams on foot. Its job is to kee
 | Battery | Hot-swappable pack with an internal bridge cell | D-053 |
 | Control link | LoRa control radio stays as a path that survives a radio or FPGA crash | D-057 |
 | Talking to V1 | Nice to have, not required | Justin, 2026-11-06 |
+| Clean sheet | No V1 hardware or software is required in V2: the CM5, the V1 carrier and the current software stack are all open to change | Justin, 2026-11-06 (D-059) |
+| Features | V2 keeps every V1 feature: voice, transcripts, mesh and topology, channel migration, phone access point, GPS, cameras, mesh-join QR, BLOS, settings and firmware updates, battery readout, hot swap, and the scanner | Justin, 2026-11-06 (D-059) |
 
 ## What "gets through" means
 
@@ -42,6 +44,8 @@ Justin accepted these targets on 2026-11-06. They are the pass marks for V2 benc
 
 ## Open questions
 
+- Host computer: the CM5 is no longer assumed. The working comparison recommends a Zynq UltraScale+ module ([V2 host computer options](https://claude.ai/artifact/Xxa1F6D7EByfGLjwhU1eFu)).
+- Scanner power: the four scanner receivers add about 6 W (estimate), which the 12 W budget does not include. Lean: switch them on when wanted.
 - Price per node.
 - Weight limit.
 - Ruggedness: same sealing and temperature range as V1?
