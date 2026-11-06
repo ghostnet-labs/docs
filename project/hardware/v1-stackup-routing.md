@@ -16,7 +16,7 @@ This file proposes a manufacturing stackup for the 138 x 67 mm carrier and the t
 | PCIe at 85 ohm (ticket target) | L3: 0.175 / 0.125 mm. L1: 0.200 / 0.125 mm |
 | Ethernet MDI, 100 ohm | L3: 0.130 / 0.150 mm. L1: 0.155 / 0.150 mm |
 | 50 ohm single-ended | L1: 0.190 mm. L3: 0.175 mm |
-| Power copper (10 C rise) | VBAT and +VBUS_HOLD 6 A: 3.6 mm of 1 oz. +3V3_RADIO 5 A: 2.8 mm of 1 oz, but its 10 mOhm drop budget needs about 2.9 mm of 1 oz over 50 mm. Supercapacitor path 10 A: 7.2 mm of 1 oz |
+| Power copper (10 C rise) | VBAT and +VBUS_HOLD 6 A: 3.6 mm of 1 oz. +3V3_RADIO 5 A: 2.8 mm of 1 oz, but its 10 mOhm drop budget needs about 2.9 mm of 1 oz over 50 mm. LiPo bridge leg 6 A: 3.6 mm of 1 oz |
 
 ## 1. Fabricator data used
 
@@ -34,7 +34,7 @@ Fetched 2026-10-07:
 Eight layers, as v1-reference.md section 20 assumed. The reasons, now that the interfaces are known:
 
 - PCIe Gen2 (5 GT/s, 2.5 GHz Nyquist), USB 2.0 and the four MDI pairs want a stripline layer with ground on both sides, so the CM5 breakout field and the radio cards on L1 do not couple into them.
-- The board carries 5 to 10 A power paths and a supercapacitor bridge; a dedicated power layer keeps that copper off the ground planes.
+- The board carries 5 to 6 A power paths and the LiPo bridge leg; a dedicated power layer keeps that copper off the ground planes.
 - Three solid ground planes (L2, L4, L7) give every signal layer an adjacent ground and short via returns.
 - Six layers (for example JLC06161H-3313) can give either a stripline layer with two grounds or a power plane, not both: its L3 sits 0.11 mm from L4 and 0.55 mm from L2, and L6 would reference a power plane on the side that carries the bucks. It remains the cost fallback if GHO-15 finds 8 layers unavailable, with high-speed pairs on L3 over a solid L4 ground and no power plane.
 
@@ -54,7 +54,7 @@ Eight layers, as v1-reference.md section 20 assumed. The reasons, now that the i
 | | Core | 0.20 | 4.36 | |
 | L7 | Copper 0.5 oz | 0.0152 | | Solid GND |
 | | Prepreg 3313 x1 | 0.0994 | 4.10 | |
-| L8 bottom | Copper 1 oz | 0.035 | | Bucks, eFuse, charger, supervisor; power pours; low-speed. The LTC3350 power stage is on the top side (D-047) |
+| L8 bottom | Copper 1 oz | 0.035 | | Bucks, eFuse, charger, supervisor; power pours; low-speed. |
 
 Copper plus dielectric is 1.546 mm, the same convention as JLCPCB's 1.538 mm "1.6 mm" six-layer build. The build is symmetric about the L4 to L5 core, which keeps warp down. L3 sits midway between L2 and L4 (b = 0.408 mm, thickness-weighted Dk 4.21). L6 is the mirror image, so it sees L5 power and L7 ground equally.
 
@@ -141,8 +141,8 @@ Temperature rise 10 C above the local board, chosen because the sealed enclosure
 | Net | Requirement | Design current | 1 oz outer, 10 C | 0.5 oz inner, 10 C | 1 oz, 20 C | mOhm per 10 mm |
 |---|---|---:|---:|---:|---:|---:|
 | VBAT path: contacts, TVS, FET, eFuse, shunt, VBAT_PROTECTED | eFuse 5.56 A (5.94 A at tolerance); 11.1 A for 25 ms | 6 A | 3.6 mm | 8.2 mm | 2.3 mm | 1.6 |
-| +VBUS_HOLD (LTC3350 output to both bucks) | Same input current; backup at about 7 V, 35 W stress is 5 A | 6 A | 3.6 mm | 8.2 mm | 2.3 mm | 1.6 |
-| LTC3350 stack, inductor and FET path | 7.94 A average ceiling at 6 mΩ RSNSC, 10.94 A peak | 10 A | 7.2 mm | 16.6 mm | 4.7 mm | 0.8 |
+| +VBUS_HOLD (pack path and bridge junction to both bucks) | Same input current; backup at about 7.3 V, 35 W stress is 5 A | 6 A | 3.6 mm | 8.2 mm | 2.3 mm | 1.6 |
+| LiPo bridge leg: cell, fuse, protector, back-to-back FETs (D-053) | 3.5 A at 25 W in backup; 7.5 A cell fuse | 6 A | 3.6 mm | 8.2 mm | 2.3 mm | 1.6 |
 | +3V3_RADIO | 4.5 A allocation, 5 A ceiling | 5 A | 2.8 mm | 6.4 mm | 1.8 mm | 2.1 |
 | WIFI_3V3 (switch to M.2 socket) | 3.03 A peak | 3.5 A | 1.7 mm | 3.9 mm | 1.1 mm | 3.4 |
 | +5V_SYS | 2.5 A allocation (CM5 datasheet maximum) | 3 A | 1.4 mm | 3.2 mm | 0.9 mm | 4.2 |
@@ -151,7 +151,7 @@ The 25 ms 11.1 A eFuse pulse is short enough to be adiabatic and does not set wi
 
 Voltage drop sets the +3V3 copper, not heat. [v1-3v3-rail.md](v1-3v3-rail.md) budgets 10 mOhm of board copper between the buck and the Wi-Fi socket. The buck (bottom, X 30 to 66) to the socket under the Wi-Fi card is about 40 to 60 mm. Over 50 mm at 60 C, 10 mOhm needs about 2.9 mm of 1 oz or 6.6 mm of 0.5 oz. Proposal: a 3 mm or wider L8 pour from the buck through the TPS22975 toward the socket, paralleled by an L5 pour, joined with at least 6 vias at each end; then sum via and pour resistance once routed.
 
-Placement rules: the high-current pours live on L8 (with the power parts) and L5, never on L2, L4 or L7. Keep the supercapacitor path as one short wide L8 pour plus an L5 pour; the 10 A row is why the LTC3350, its inductor and the stack connection should sit together. Kelvin sense from the shunt and the LTC3350 sense resistors run as a pair on L6 or L1 away from these pours. If GHO-15 shows 1 oz inner copper is cheap, it halves every inner width above but moves the stripline widths (recalculate).
+Placement rules: the high-current pours live on L8 (with the power parts) and L5, never on L2, L4 or L7. Keep the LiPo leg short from the cell connector through the fuse and FETs to +VBUS_HOLD, as one L8 pour plus an L5 pour. Kelvin sense from the shunt and the LiPo-leg monitor run as a pair on L6 or L1 away from these pours. If GHO-15 shows 1 oz inner copper is cheap, it halves every inner width above but moves the stripline widths (recalculate).
 
 ## 6. Confirm with the fabricator before routing (GHO-15)
 
@@ -162,7 +162,7 @@ Placement rules: the high-current pours live on L8 (with the power parts) and L5
 5. Finished outer copper thickness after plating, inner copper weight options (1 oz inner and its impedance effect), and via barrel plating thickness (18 um assumed above).
 6. Via sizes for the CM5 connector breakout, via-in-pad availability and cost, and minimum antipad and plane-web rules.
 7. Total thickness and tolerance (1.6 mm nominal) against the M.2 sockets, the CM5 connector and the enclosure (GHO-7).
-8. Material Tg and its fit with the 60 C internal enclosure and reflow of the 5 x 7 mm LTC3350 QFN and bottom-side power parts.
+8. Material Tg and its fit with the 60 C internal enclosure and reflow of the bottom-side power parts.
 9. Whether the 85 or 90 ohm PCIe target stands (CM5 datasheet says 90 ohm).
 
 ## What this does not verify

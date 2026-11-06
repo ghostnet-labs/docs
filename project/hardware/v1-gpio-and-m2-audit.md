@@ -94,7 +94,7 @@ The candidates:
 
 - **W_DISABLE2#.** Not possible. Card pin 54 is not connected (§2.1).
 - **HALOW_FAULT_N / WIFI_FAULT_N.** Both already own GPIO6 and GPIO7 in the ledger. §4 gives them a real source on those pins. Moving them would only renumber v1-hw-telemetry-recovery.md and the `gpio-line-names` proposal for no gain.
-- **GHO-13's unallocated inputs.** BRIDGE_ACTIVE_N (B-24 PFO) and PACK_PRESENT are simple digital inputs. GPIO16 and GPIO22 suit them. The pack I2C bus cannot use them (GPIO22 has no free SCL partner). If a separate pack bus is needed, GPIO0/1 (I2C0) are the only free pair.
+- **GHO-13's unallocated inputs.** BRIDGE_ACTIVE_N (B-24 bridge comparator, D-053) and PACK_PRESENT are simple digital inputs. GPIO16 and GPIO22 suit them. The pack I2C bus cannot use them (GPIO22 has no free SCL partner). If a separate pack bus is needed, GPIO0/1 (I2C0) are the only free pair.
 - **WIFI_PEWAKE_N as a GPIO interrupt.** It would work electrically, but V1 has no wake-on-WLAN use. Not proposed.
 - **Leave reserved.**
 

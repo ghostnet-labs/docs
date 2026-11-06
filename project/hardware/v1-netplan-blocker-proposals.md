@@ -156,7 +156,7 @@ The rails stay as §13 assigns them. What changes is the VDD source and where ea
 | SENSE3 (8) | +3V3_RADIO through 65.0 kΩ / 10.0 kΩ (0.1 %): 3.00 V falling, a rail-absent level (Calculated) | Rail Record, value Proposed. A threshold near the 3.32 V setpoint minimum would trip on Wi-Fi load steps (the comparator responds to pulses of about 4 µs, §6.6) |
 | RESET3 (17) | TP_SUP_RADIO only. DNP option: 10 kΩ series to each TPS22975 ON node as a hardware radio interlock | Proposed. Gating ON live would let a rail dip switch a radio off |
 | CT3 (3) | Open | Proposed |
-| SENSE4L (7) | +VBUS_HOLD (VBAT_PROTECTED if B-24 is not fitted) through 140 kΩ / 10.0 kΩ (0.1 %): 6.00 V falling (Calculated, about 5.93 to 6.07 V). WDO also connects to this node | Rail per the bridge study §4. Threshold Proposed: below the 7.0 V bridge backup point (bridge study, est.) and above the 5 V buck's dropout, about 5.33 V plus I x R. That figure is Calculated from LM76005 DMAX = 1 - tOFF-MIN x fSW = 0.948 and is **Unverified** |
+| SENSE4L (7) | +VBUS_HOLD (VBAT_PROTECTED if B-24 is not fitted) through 140 kΩ / 10.0 kΩ (0.1 %): 6.00 V falling (Calculated, about 5.93 to 6.07 V). WDO also connects to this node | Rail per [v1-lipo-bridge.md](v1-lipo-bridge.md) §1. Threshold Proposed: below the 6.4 V bridge cell cut-off (D-053; the bus rides at about 7.3 V in backup) and above the 5 V buck's dropout, about 5.33 V plus I x R. That figure is Calculated from LM76005 DMAX = 1 - tOFF-MIN x fSW = 0.948 and is **Unverified** |
 | SENSE4H (6) | GND (OV unused) | Datasheet |
 | RESET4 (18) | SYS_PMIC_EN (wired-OR) | Proposed |
 | CT4 (2) | 100 kΩ to VDD: 300 ms fixed (225 to 375 ms) | Datasheet Table 6 |
@@ -181,7 +181,7 @@ One unchecked window: until supervisor VDD reaches 0.9 V, the RESET outputs are 
 
 **Trip.** No WDI edge for 450 to 750 ms, so WDO latches low. The SENSE4L tap goes low, and RESET4 drives SYS_PMIC_EN low. The CM5 PMIC turns off. CM5_3V3 falls below 3.0 V and SUPERVISOR_ARM falls to its pull-down, so RESET1 asserts and the WDO latch clears (§8.3.3). The tap recovers, RESET4 releases 225 to 375 ms later, and the CM5 reboots disarmed. The latch clears through SENSE1 or MR, never through VDD, which matches §13's warning that a PMIC_Enable cycle does not remove supervisor VDD.
 
-**Pack swap.** With B-24, +VBUS_HOLD stays above about 7.0 V (bridge study, est.), above the 6.0 V SVS4 threshold, so no reset. If the bridge is exhausted, the bus falls through 6.0 V. RESET4 then powers the CM5 down in an orderly way before the 5 V buck drops out, and holds it off until the bus is back for 300 ms.
+**Pack swap.** With B-24, +VBUS_HOLD rides at about 7.3 V on the LiPo and never below its 6.4 V cut-off (D-053), above the 6.0 V SVS4 threshold, so no reset. If the bridge is exhausted, the bus falls through 6.0 V. RESET4 then powers the CM5 down in an orderly way before the 5 V buck drops out, and holds it off until the bus is back for 300 ms.
 
 ### Failure modes
 
@@ -316,7 +316,7 @@ Still open: whether the Hall footprint is ever fitted, which waits on Justin's c
 - TPS25751A UFP data-role configuration. BQ25798 D+/D- behaviour (its datasheet was not fetched).
 - Whether the GCT USB4720-03-A has SBU contacts.
 - RP1 pad behaviour when unpowered (assumed clamped near ground) and the RP1 reset-default pulls on the arm, PPS and hub-reset GPIOs.
-- The LM76005 5 V dropout at 2.5 A (about 5.33 V plus I x R, Calculated), and so the 6.0 V SVS4 threshold margin. The 7.0 V bridge backup point is itself an estimate (bridge study).
+- The LM76005 5 V dropout at 2.5 A (about 5.33 V plus I x R, Calculated), and so the 6.0 V SVS4 threshold margin. The 7.3 V bridge backup level is itself an estimate ([v1-lipo-bridge.md](v1-lipo-bridge.md) §2).
 - The +5V_SYS SVS2 threshold (4.74 to 4.86 V) against CM5 load-step undershoot.
 - The supervisor's behaviour below VDD = 0.9 V during the first part of the rail ramp.
 - OpenWrt boot time on the CM5 (relevant only if the always-armed policy is chosen).
