@@ -88,7 +88,7 @@ Source: AsiaRF's [AW7916-AED pin-out drawing](https://asiarf.com/wp-content/uplo
 |---:|---|---|
 | 2, 4, 72, 74 | 3.3 V | WIFI_3V3 (see [v1-3v3-rail.md](v1-3v3-rail.md) for the 0.5 A per contact risk) |
 | 1, 7, 18, 33, 39, 45, 51, 57, 63, 69, 75 and others marked GND | GND | GND. Pin 69 is labelled 'GNDX' in the drawing; it is wired to GND (D-046) |
-| 3, 5 | not connected (no USB) | leave open; hub port 2 is spare |
+| 3, 5 | not connected (no USB) | leave open; hub port 2 serves the B-28 control radio (D-057) |
 | 35 / 37 | PCIe lane 0 receive pair (labelled PERp0 / PERn0 from the card's side) | CM5 PCIe TX P/N, pins 122 / 124 (CM5 already AC-couples this direction) |
 | 41 / 43 | PCIe lane 0 transmit pair (labelled PETp0 / PETn0) | CM5 PCIe RX P/N, pins 116 / 118, through 0 Ω links in capacitor footprints (220 nF fitted only if the bench shows the card has no TX AC coupling; D-046) |
 | 47 / 49 | REFCLKp0 / REFCLKn0 | CM5 REFCLK P/N, pins 110 / 112 |

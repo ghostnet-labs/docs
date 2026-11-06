@@ -207,7 +207,7 @@ TP_WIFI_PEWAKE, TP_WIFI_LED1, TP_WIFI_LED2 (Record). Proposed: TP on WIFI_3V3 at
 
 ## 03_USB_HALOW_AUDIO
 
-**Scope (§17, D-023, D-026, GHO-13):** TUSB4041I with a 24 MHz crystal, CM5 USB2 upstream, GW16170 on port 1, port 2 spare, the external OpenVLM USB-C host (DFP) on port 3, port 4 reserved, switched and current-limited VBUS, CC termination, USB ESD, hub reset and per-port overcurrent. "AUDIO" means the host port only: no CM108B, no analog microphone or speaker circuit and no PTT switch on the carrier (D-023).
+**Scope (§17, D-023, D-026, GHO-13):** TUSB4041I with a 24 MHz crystal, CM5 USB2 upstream, GW16170 on port 1, the B-28 control radio on port 2 (D-057), the external OpenVLM USB-C host (DFP) on port 3, port 4 reserved, switched and current-limited VBUS, CC termination, USB ESD, hub reset and per-port overcurrent. "AUDIO" means the host port only: no CM108B, no analog microphone or speaker circuit and no PTT switch on the carrier (D-023).
 
 **Parts:** B-04 (TI TUSB4041IPAPRG4, 64-HTQFP), B-02 (Gateworks GW16170) in a B-25 socket (TE 2199119-6; key type not recorded), B-23 (GCT USB4720-03-A) for the OpenVLM host port. HUB_1V1 regulator: B-26 (K-9). Open parts: 24 MHz crystal, port-3 CC controller and VBUS switch (O-1, O-2 in PR #61), USB ESD (O-3). B-22 is the external accessory and has no carrier footprint.
 
@@ -221,7 +221,7 @@ TP_WIFI_PEWAKE, TP_WIFI_LED1, TP_WIFI_LED2 (Record). Proposed: TP on WIFI_3V3 at
 | 30 / 29 | XI / XO | HUB_XI / HUB_XO: 24 MHz fundamental crystal, 1 MΩ across XI-XO, load capacitors per the crystal (TI example 18 pF) | Datasheet §6.3.5: 12 to 24 pF load, ±100 ppm or better, ESR ≤ 50 Ω. Part open |
 | 18 | GRSTz | USB_HUB_RESET_N | Proposed: external pull-down so the hub stays in reset until firmware releases it. It must overcome the internal pull-up; value **Unverified**. Release at least 3 ms after VDD and VDD33 are stable (§5.6) |
 | 33 / 34 | USB_DP_DN1 / USB_DM_DN1 | USB_HALOW_DP / USB_HALOW_DM | Port 1 |
-| 41 / 42 | USB_DP_DN2 / USB_DM_DN2 | No connect | Port 2 spare (D-026) |
+| 41 / 42 | USB_DP_DN2 / USB_DM_DN2 | B-28 control radio USB-UART bridge | Port 2 (D-057); bridge part open (GHO-90) |
 | 49 / 50 | USB_DP_DN3 / USB_DM_DN3 | USB_VLM_DP / USB_VLM_DM | Port 3 |
 | 56 / 57 | USB_DP_DN4 / USB_DM_DN4 | No connect | Port 4 reserved (D-023) |
 | 4 | PWRCTL1/BATEN1 | No connect (internal pull-down: no battery charging) | Port 1 has no VBUS switch: the HaLow card takes HALOW_3V3 |
@@ -278,7 +278,7 @@ B-23 receptacle pin numbers are not given: the GCT drawing was not checked. Rout
 
 ### Test pads
 
-Proposed: TP on HUB_1V1, HUB_3V3, USB_HUB_RESET_N, VLM_VBUS, VLM_CC1, VLM_CC2, VLM_USB_FAULT_N and HALOW_3V3. TP on the spare port 2 and 4 pairs is not proposed (stubs on 480 Mb/s lines).
+Proposed: TP on HUB_1V1, HUB_3V3, USB_HUB_RESET_N, VLM_VBUS, VLM_CC1, VLM_CC2, VLM_USB_FAULT_N and HALOW_3V3. TP on the port 2 (B-28) and spare port 4 pairs is not proposed (stubs on 480 Mb/s lines).
 
 ---
 

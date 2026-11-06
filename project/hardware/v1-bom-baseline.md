@@ -24,7 +24,7 @@ If this file disagrees with one of those records, the record wins. The disagreem
 | Decision | BOM effect | Rows |
 |---|---|---|
 | D-023 | TUSB4020BI replaced by the four-port TUSB4041IPAPRG4. The external VLMKW0100 is added, with a second USB4720-03-A as its USB-C host connector. Port-3 VBUS, CC, ESD and fault parts are still open. | B-04, B-22, B-23, open items O-1, O-2, O-3 |
-| D-026 | AIW-170BQ replaced by the AsiaRF AW7916-AED (Wi-Fi 6E M.2 3052). The 3.3 V rail is raised to 4.5 A on the same LM76005. No Bluetooth, so hub port 2 is spare. | B-03, B-18b, M.2 socket rows |
+| D-026 | AIW-170BQ replaced by the AsiaRF AW7916-AED (Wi-Fi 6E M.2 3052). The 3.3 V rail is raised to 4.5 A on the same LM76005. No Bluetooth, so hub port 2 was freed; D-057 gives it to the B-28 control radio. | B-03, B-18b, M.2 socket rows |
 | D-027, D-053 | A full-node ride-through of at least 10 s across a pack swap (D-027). The B-24 bridge is an internal 2S LiPo cell on +VBUS_HOLD behind an ideal-diode switch, selected and not frozen (D-053). | B-24a to B-24f |
 | D-035 | Finned enclosure lid, with thermal pads from the CM5 and the Wi-Fi card. The approach is selected; the part is not designed. | ENC-1, ENC-2, open item O-6 |
 
@@ -70,7 +70,7 @@ If this file disagrees with one of those records, the record wins. The disagreem
 | B-20 | Supervisor and watchdog | TI TPS386000RGPR | 20-QFN (4 x 4 mm) | 1 | Selected (recovery to bench-test) | [TI TPS386000](https://www.ti.com/lit/ds/symlink/tps386000.pdf) | [296-39392-1-ND](https://www.digikey.com/en/products/detail/texas-instruments/TPS386000RGPR/2232784), $2.74, stock 0 shown, lead time 18 weeks | Active | None recorded | B-20, v1-reference.md §13 |
 | B-21 | HaLow antenna connector | MMCX, on the GW16170 card (not a carrier part) | On-module | 0 on carrier | Selected with B-02 | See B-02 | n/a | n/a | n/a | B-21, v1-reference.md §19 |
 | B-21 | Wi-Fi antenna connectors | 3 x IPEX, on the AW7916-AED card (type to confirm on arrival) | On-module | 0 on carrier | Selected with B-03 | See B-03 | n/a | n/a | n/a | B-21, v1-reference.md §5 |
-| B-21 | Antenna pigtails and wall bulkheads (HaLow and Wi-Fi) | TBD | TBD | 4 (1 HaLow, 3 Wi-Fi) | TBD (not in any record) | n/a | n/a | n/a | n/a | v1-reference.md §19 (external antennas), §18 blockers |
+| B-21 | Antenna pigtails and wall bulkheads (HaLow and Wi-Fi) | TBD | TBD | 5 (1 HaLow, 3 Wi-Fi, 1 B-28 control radio) | TBD (not in any record) | n/a | n/a | n/a | n/a | v1-reference.md §19 (external antennas), §18 blockers |
 | B-21 | GNSS active-antenna connector | TBD | TBD | 1 | TBD ([GHO-11](https://linear.app/ghostnet-labs/issue/GHO-11)) | n/a | n/a | n/a | n/a | B-05, B-21, open item O-10 |
 | B-22 | Voice/PTT module (external accessory) | OpenMANET VLMKW0100 (CM108B, 93C46 EEPROM, GPIO1 identity strap) | External USB device | 1 per node | Selected (ordering code, availability and cable SKU to verify) | None published | Not at DigiKey. Supplier ordering code not recorded. | Not published | None recorded | B-22, D-023 |
 | B-22 | Kenwood accessory cable for the VLM | TBD | n/a | 1 | TBD | n/a | n/a | n/a | n/a | B-22, open item O-11 |
@@ -83,6 +83,7 @@ If this file disagrees with one of those records, the record wins. The disagreem
 | B-24f | Bridge cell fuse | TBD, 7.5 A at the cell | TBD | 1 | Fuse fitted (D-053); MPN open | n/a | n/a | n/a | n/a | B-24, D-053, [v1-lipo-bridge.md](v1-lipo-bridge.md) |
 | B-26 | Hub core regulator (HUB_1V1) | TI TLV62568DBVR buck; inductor MPN open | SOT-23-5 (DBV) | 1 | Candidate, V1 working default (D-044) | Not fetched | Not fetched | Not checked | Recorded: TI TPS62A01A if C7 shows GNSS-band harmonics (B-26) | B-26, D-044, [v1-netplan-blocker-proposals.md](v1-netplan-blocker-proposals.md) K-9 |
 | B-27 | GNSS PPS isolation buffer | TI SN74LVC1G34DCKR | SC70-5 (DCK) | 1 | Proposed (D-044) | Not fetched | Not fetched | Not checked | None recorded | B-27, D-044, v1-netplan-blocker-proposals.md K-8 |
+| B-28 | Control radio (LoRa) | RAKwireless RAK3172 (US915 variant), plus a USB-UART bridge (MPN open) and a 915 MHz antenna (MPN open) | Module | 1 | Candidate (D-057) | [RAK3172 datasheet](https://docs.rakwireless.com/product-categories/wisduo/rak3172-module/datasheet/) | Not checked | Not checked | None recorded | B-28, D-057, [v1-control-radio-option.md](v1-control-radio-option.md), [GHO-90](https://linear.app/ghostnet-labs/issue/GHO-90) |
 | ENC-1 | Radio enclosure body | TBD (anodized or painted aluminum; finish recommended in the thermal plan) | Upright body about 76 x 34 mm in section; node about 76 x 34 x 360 mm with the pack (D-054) | 1 | TBD ([GHO-7](https://linear.app/ghostnet-labs/issue/GHO-7)) | n/a | n/a | n/a | n/a | v1-reference.md §18, v1-thermal-rf-plan.md §2 |
 | ENC-2 | Finned enclosure lid (D-035) | TBD (fin geometry, added height and pad stack open) | Integral with ENC-1 or separate lid | 1 | Approach selected (D-035), part TBD ([GHO-12](https://linear.app/ghostnet-labs/issue/GHO-12), GHO-7) | n/a | n/a | n/a | Rejected: software power capping as the strategy (R-21) | D-035, v1-thermal-rf-plan.md |
 | ENC-3 | Thermal interface pads (CM5 to lid, AW7916-AED to lid) | TBD (thickness and conductivity set by GHO-7 gap, T6 test) | Die-cut pad | 2 or more | TBD | n/a | n/a | n/a | n/a | D-035, v1-thermal-rf-plan.md §2 and T6 |
@@ -151,7 +152,7 @@ These are inconsistencies between the records, or between a record and the catal
 
 ## Verification of this file
 
-- Every B-ID from B-01 to B-27 appears in the line-item table.
+- Every B-ID from B-01 to B-28 appears in the line-item table.
 - The D-023, D-026, D-027 and D-035 deltas are mapped above.
 - No register row, decision or GPIO allocation is restated as a new value.
 
