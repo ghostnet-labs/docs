@@ -21,6 +21,7 @@ V2 is a body-worn mesh radio for small civilian teams on foot. Its job is to kee
 | Control link | LoRa control radio stays as a path that survives a radio or FPGA crash | D-057 |
 | Talking to V1 | Nice to have, not required | Justin, 2026-11-06 |
 | Clean sheet | No V1 hardware or software is required in V2: the CM5, the V1 carrier and the current software stack are all open to change | Justin, 2026-11-06 (D-059) |
+| Host and board | One design from day one: a Zynq UltraScale+ chip on our own board, radio parts on both sides of the radio board, about 76 × 47 × 215 mm | Justin, 2026-11-06 (D-060) |
 | Features | V2 keeps every V1 feature: voice, transcripts, mesh and topology, channel migration, phone access point, GPS, cameras, mesh-join QR, BLOS, settings and firmware updates, battery readout, hot swap, and the scanner | Justin, 2026-11-06 (D-059) |
 
 ## What "gets through" means
@@ -44,7 +45,8 @@ Justin accepted these targets on 2026-11-06. They are the pass marks for V2 benc
 
 ## Open questions
 
-- Host computer: the CM5 is no longer assumed. The working comparison recommends a Zynq UltraScale+ module ([V2 host computer options](https://claude.ai/artifact/Xxa1F6D7EByfGLjwhU1eFu)).
+- Exact Zynq UltraScale+ part and memory size (D-060 fixes the family and the chip-on-board approach). Sources: [V2 host computer options](https://claude.ai/artifact/Xxa1F6D7EByfGLjwhU1eFu), [V2 size check](https://claude.ai/artifact/2BeZ9KSiV7MtPV58nrRwUF).
+- Pack shape for a true MPU5 outline (67 × 38 mm): 18650 cells laid crosswise set the 76 mm width.
 - Scanner power: the four scanner receivers add about 6 W (estimate), which the 12 W budget does not include. Lean: switch them on when wanted.
 - Price per node.
 - Weight limit.
