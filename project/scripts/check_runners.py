@@ -69,8 +69,11 @@ PR_EVENTS = ("pull_request", "pull_request_target")
 SHA_RE = re.compile(r"@[0-9a-f]{40}$")
 # ARC scale sets route by their exact name rather than the self-hosted label.
 # ghostnet-linux-arm64 is the standard pool (2 GiB pods); ghostnet-linux-arm64-large
-# holds one 4 GiB pod at a time for openmanetd's Go CodeQL analysis.
-ARC_RUNNER_LABELS = frozenset({"ghostnet-linux-arm64", "ghostnet-linux-arm64-large"})
+# holds one 4 GiB pod at a time for openmanetd's Go CodeQL analysis;
+# ghostnet-gate runs firmware's PR gate and Manet merge gate in small
+# (256 MiB) pods so a long wait does not hold a standard pod.
+ARC_RUNNER_LABELS = frozenset({"ghostnet-linux-arm64", "ghostnet-linux-arm64-large",
+                               "ghostnet-gate"})
 
 
 def arc_fork_fallback(label: str) -> str:

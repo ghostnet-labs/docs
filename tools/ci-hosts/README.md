@@ -5,7 +5,7 @@ so any VM can be rebuilt the same way and drift is detected.
 
 | VM | Host | Role | Runners |
 |---|---|---|---|
-| `ci-k3s` | Mac Studio | k3s + ARC: Linux ARM64 CI as ephemeral pods | scale sets `ghostnet-linux-arm64` (2 GiB pods, max 2) and `ghostnet-linux-arm64-large` (4 GiB pod, max 1) |
+| `ci-k3s` | Mac Studio | k3s + ARC: Linux ARM64 CI as ephemeral pods | scale sets `ghostnet-linux-arm64` (2 GiB pods, max 2), `ghostnet-linux-arm64-large` (4 GiB pod, max 1) and `ghostnet-gate` (256 MiB pods for firmware's PR and merge gates) |
 | `gh-ubuntu` | Mac Studio | retired 2026-11-03: stopped, kept for rollback until about 2026-11-10, then deleted | none (the `studio-ubuntu-1..5` one-job slots are unloaded) |
 | `gh-build` | Mac Studio | `build`: OpenWrt builds, Docker allowed | `studio-build-1` (one-job) |
 | `gh-build-2` | Mac Studio | `build` | `studio-build-2` (one-job) |
