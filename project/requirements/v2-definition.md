@@ -1,5 +1,7 @@
 # V2 node definition
 
+**Parked 2026-11-06 (D-061):** no V2 work until Justin restarts it, and a V2 node must cost under about $1,000, like V1.
+
 Agreed by Justin on 2026-11-06 (D-058). This file owns what the V2 node is for. Every V2 design choice is checked against it. The working copy, with comments, is the [V2 node definition doc](https://claude.ai/artifact/Xma7QKaBnV3uzhKsL3aD1m). The radio approach is in the [V2 software-defined radio plan](https://claude.ai/artifact/QwgQ3oXPN7X62NtSBd3Ry4) and [GHO-92](https://linear.app/ghostnet-labs/issue/GHO-92).
 
 V2 is a body-worn mesh radio for small civilian teams on foot. Its job is to keep push-to-talk voice and position sharing getting through when someone jams it, in a node close to MPU5 size, on unlicensed bands only.
@@ -21,7 +23,8 @@ V2 is a body-worn mesh radio for small civilian teams on foot. Its job is to kee
 | Control link | LoRa control radio stays as a path that survives a radio or FPGA crash | D-057 |
 | Talking to V1 | Nice to have, not required | Justin, 2026-11-06 |
 | Clean sheet | No V1 hardware or software is required in V2: the CM5, the V1 carrier and the current software stack are all open to change | Justin, 2026-11-06 (D-059) |
-| Host and board | One design from day one: a Zynq UltraScale+ chip on our own board, radio parts on both sides of the radio board, about 76 × 47 × 215 mm | Justin, 2026-11-06 (D-060) |
+| Cost | A node costs about the same as V1, under $1,000 all in | Justin, 2026-11-06 (D-061) |
+| Host and board | On hold (D-061). Was: one design from day one: a Zynq UltraScale+ chip on our own board, radio parts on both sides of the radio board, about 76 × 47 × 215 mm | Justin, 2026-11-06 (D-060) |
 | Features | V2 keeps every V1 feature: voice, transcripts, mesh and topology, channel migration, phone access point, GPS, cameras, mesh-join QR, BLOS, settings and firmware updates, battery readout, hot swap, and the scanner | Justin, 2026-11-06 (D-059) |
 
 ## What "gets through" means
