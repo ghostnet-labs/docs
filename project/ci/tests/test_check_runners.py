@@ -274,6 +274,21 @@ jobs:
                 self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)),
                                  [("test", "fork-pr-self-hosted")])
 
+    def test_gate_pool_same_repo_route_is_recognized(self):
+        # The reviewed route for firmware's pr-gate.yml and manet-merge-gate.yml.
+        route = cr.arc_pr_only_fallback("ghostnet-gate")
+        doc = {"on": {"pull_request": {"types": ["opened", "synchronize"]}},
+               "concurrency": {"group": "g", "cancel-in-progress": True},
+               "jobs": {"gate": {"runs-on": route, "timeout-minutes": 720}}}
+        self.assertEqual(cr.check_workflow("firmware", "pr-gate.yml", doc), [])
+        for value in (route.replace("'ghostnet-gate'", "'ghostnet-gateX'"),
+                      route.replace("full_name ==", "full_name !="),
+                      route.replace("github.event_name == 'pull_request' && ", "")):
+            with self.subTest(route=value):
+                self.assertNotEqual(cr.check_workflow("firmware", "pr-gate.yml",
+                                                      {**doc, "jobs": {"gate": {"runs-on": value,
+                                                                                "timeout-minutes": 720}}}), [])
+
     def test_unknown_or_modified_large_pool_routes_are_rejected(self):
         route = cr.arc_fork_fallback("ghostnet-linux-arm64-large")
         for value in ("ghostnet-linux-arm64-largeX", "ghostnet-linux-arm64-xl",

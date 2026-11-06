@@ -112,17 +112,6 @@
     },
     {
       "repo": "firmware",
-      "workflow": "labeler.yml",
-      "job": "labeler",
-      "rules": [
-        "hosted-runner",
-        "job-timeout",
-        "pr-concurrency"
-      ],
-      "reason": "pull_request_target with a write token; removal is waiting on Justin."
-    },
-    {
-      "repo": "firmware",
       "workflow": "manet-auto-merge.yml",
       "job": "merge",
       "rules": [
