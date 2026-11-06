@@ -11,7 +11,7 @@ V2 is a body-worn mesh radio for small civilian teams on foot. Its job is to kee
 | Users | Small civilian teams on foot: search and rescue, security, hobby groups | Justin, 2026-11-06 |
 | Who it is for | A product sold in small numbers, not only our own team | Justin, 2026-11-06. FCC certification is required before any sale |
 | Main job | Push-to-talk voice and position sharing must get through. Video and data are a bonus when the link is good | Justin, 2026-11-06 |
-| Spectrum | Unlicensed only: 902–928 MHz, 2.4 GHz and 5 GHz. 6 GHz very-low-power only if cheap to add | V2 spectrum choice, 2026-11-06. The AD9361 and ADRV9002 stop at 6,000 MHz, so 6 GHz needs an extra converter |
+| Spectrum | Unlicensed only: 902–928 MHz, 2.4 GHz, 5 GHz and 6 GHz very-low-power (5,925–6,425 and 6,525–6,875 MHz) | V2 spectrum choice and Justin, 2026-11-06 (keep 6 GHz). The AD9361 and ADRV9002 stop at 6,000 MHz, so the 6 GHz path needs a frequency converter on each antenna chain, and its power counts against the 12 W budget |
 | Range | 1 to 3 km between two people on the ground, body-worn. Farther by relaying | Justin, 2026-11-06 |
 | Jamming | Voice and position keep working against cheap wideband jammers and a jammer parked on our channel. Speed may drop | Justin, 2026-11-06; D-056 |
 | Size | Close to an MPU5, omni whip or gooseneck antennas, no patch as the main antenna | Earlier size and antenna decisions |
@@ -21,11 +21,11 @@ V2 is a body-worn mesh radio for small civilian teams on foot. Its job is to kee
 | Control link | LoRa control radio stays as a path that survives a radio or FPGA crash | D-057 |
 | Talking to V1 | Nice to have, not required | Justin, 2026-11-06 |
 
-## What "gets through" means (proposed)
+## What "gets through" means
 
-These targets are proposed and still need Justin's yes.
+Justin accepted these targets on 2026-11-06. They are the pass marks for V2 bench tests.
 
-| Measure | Proposed target | Note |
+| Measure | Target | Note |
 |---|---|---|
 | Link rate under jamming | 50 kbps or more per hop | One voice stream at about 16 kbps plus position reports, with room for overhead |
 | Link rate with no jamming | 10 Mbps or more at 500 m | One video stream to a phone or tablet |
@@ -38,11 +38,10 @@ These targets are proposed and still need Justin's yes.
 
 - Government, military or licensed bands.
 - Guaranteed talk with V1 HaLow nodes.
-- Pole or building mounts on 6 GHz.
+- Pole or building mounts on 6 GHz, which the very-low-power rules forbid.
 
 ## Open questions
 
-- 6 GHz: keep (needs a converter per antenna) or drop. Lean: drop.
 - Price per node.
 - Weight limit.
 - Ruggedness: same sealing and temperature range as V1?
