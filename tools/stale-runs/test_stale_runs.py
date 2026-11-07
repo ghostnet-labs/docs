@@ -118,6 +118,113 @@ class TestClassify(unittest.TestCase):
         self.assertEqual(got[1], ("zombie", False))
 
 
+class TestOrphanAndMinAge(unittest.TestCase):
+    def classify(self, runs, prs=(), tips=None, **kw):
+        items = sr.classify("packages", runs, {p["number"]: p for p in prs}, NOW, 3.0,
+                            None, tips, **kw)
+        return {i["id"]: (i["class"], i["cancel"]) for i in items}
+
+    def test_unstarted_push_run_on_deleted_branch_is_orphan(self):
+        got = self.classify([run(1, event="push", branch="gone", sha="a", status="queued", hours=30)],
+                            tips={"gone": None})
+        self.assertEqual(got[1], ("orphan", True))
+
+    def test_unstarted_push_run_on_moved_branch_is_orphan(self):
+        got = self.classify([run(1, event="push", branch="dev", sha="a", status="waiting", hours=25)],
+                            tips={"dev": "b" * 40})
+        self.assertEqual(got[1], ("orphan", True))
+
+    def test_push_run_on_current_tip_is_not_orphan(self):
+        got = self.classify([run(1, event="push", branch="dev", sha="a", status="queued", hours=30)],
+                            tips={"dev": "a"})
+        self.assertEqual(got[1], ("zombie", False))
+
+    def test_push_run_younger_than_orphan_hours_is_left_to_a_person(self):
+        got = self.classify([run(1, event="push", branch="dev", sha="a", status="queued", hours=10)],
+                            tips={"dev": "b"})
+        self.assertEqual(got[1], ("zombie", False))
+
+    def test_started_push_run_is_never_orphan(self):
+        got = self.classify([run(1, event="push", branch="dev", sha="a", status="in_progress", hours=30)],
+                            tips={"dev": "b"})
+        self.assertEqual(got[1], ("zombie", False))
+
+    def test_unknown_branch_tip_is_never_orphan(self):
+        got = self.classify([run(1, event="push", branch="dev", sha="a", status="queued", hours=30)],
+                            tips={})
+        self.assertEqual(got[1], ("zombie", False))
+
+    def test_orphan_hours_is_configurable(self):
+        got = self.classify([run(1, event="push", branch="dev", sha="a", status="queued", hours=10)],
+                            tips={"dev": "b"}, orphan_hours=6)
+        self.assertEqual(got[1], ("orphan", True))
+
+    def test_min_age_holds_back_closed_and_superseded(self):
+        runs = [run(1, prs=[5], hours=2), run(2, sha="old", prs=[6], hours=2),
+                run(3, sha="new", prs=[6], hours=1), run(4, prs=[7], hours=30)]
+        got = self.classify(runs, prs=[pr(6, "feat", "new")], min_age_hours=24)
+        self.assertEqual(got[1], ("closed", False))
+        self.assertEqual(got[2], ("superseded", False))
+        self.assertEqual(got[4], ("closed", True))
+
+    def test_min_age_reason_says_why(self):
+        items = sr.classify("packages", [run(1, prs=[5], hours=2)], {}, NOW, 3.0, min_age_hours=24)
+        self.assertIn("younger than 24 h", items[0]["reason"])
+
+    def test_orphan_kernel_run_still_needs_an_expanded_matrix(self):
+        items = sr.classify("firmware", [run(1, name="Build Kernel", event="push", branch="dev",
+                                             sha="a", status="queued", hours=30)],
+                            {}, NOW, 3.0, None, {"dev": "b"})
+        gh = FakeGitHub({"/repos/ghostnet-labs/firmware/actions/runs/1/jobs": {"total_count": 1, "jobs": []}})
+        sr.apply_guards(items, gh, re.compile(sr.DEFAULT_PROTECT), set(), set())
+        self.assertEqual(items[0]["class"], "orphan")
+        self.assertFalse(items[0]["cancel"])
+
+
+class TestBranchTip(unittest.TestCase):
+    def test_tip_of_a_live_branch(self):
+        gh = FakeGitHub({"/repos/ghostnet-labs/packages/git/ref/heads/claude/x": {"object": {"sha": "abc"}}})
+        self.assertEqual(sr.branch_tip(gh, "packages", "claude/x"), (True, "abc"))
+
+    def test_deleted_branch_is_known_with_no_tip(self):
+        gh = FakeGitHub({})
+        gh.get = lambda path: (_ for _ in ()).throw(RuntimeError(f"GET {path}: HTTP 404: Not Found"))
+        self.assertEqual(sr.branch_tip(gh, "packages", "gone"), (True, None))
+
+    def test_other_errors_leave_the_branch_unknown(self):
+        gh = FakeGitHub({})
+        gh.get = lambda path: (_ for _ in ()).throw(RuntimeError(f"GET {path}: HTTP 502: Bad Gateway"))
+        self.assertEqual(sr.branch_tip(gh, "packages", "dev"), (False, None))
+
+
+class TestScanOrphans(unittest.TestCase):
+    def test_scan_looks_up_only_branches_with_old_unstarted_push_runs(self):
+        base = "/repos/ghostnet-labs/packages"
+        gh = FakeGitHub({
+            f"{base}/pulls": [],
+            f"{base}/actions/runs?status=queued": {"workflow_runs": [
+                run(1, event="push", branch="gone", sha="a", status="queued", hours=30),
+                run(2, event="push", branch="fresh", sha="b", status="queued", hours=1),
+                run(3, event="push", branch="live", sha="c", status="queued", hours=40)]},
+            f"{base}/actions/runs?status=in_progress": {"workflow_runs": []},
+            f"{base}/actions/runs?status=waiting": {"workflow_runs": []},
+            f"{base}/git/ref/heads/live": {"object": {"sha": "c"}},
+        })
+        real_get = gh.get
+
+        def get(path):
+            if path.endswith("/heads/gone"):
+                raise RuntimeError(f"GET {path}: HTTP 404: Not Found")
+            return real_get(path)
+        gh.get = get
+        items = sr.scan(gh, ["packages"], NOW, 3.0)
+        got = {i["id"]: (i["class"], i["cancel"]) for i in items}
+        self.assertEqual(got[1], ("orphan", True))
+        self.assertEqual(got[3], ("zombie", False))
+        self.assertEqual(got[2], ("live", False))
+        self.assertFalse(any("heads/fresh" in p for p in gh.gets))
+
+
 class TestGuards(unittest.TestCase):
     PROTECT = re.compile(sr.DEFAULT_PROTECT)
 

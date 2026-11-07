@@ -8,8 +8,9 @@ are provably wasted:
 |---|---|---|
 | `closed` | `pull_request` run whose PR is merged or closed | yes |
 | `superseded` | run on an old head of an open PR, when the PR's current head already has a run of the same workflow | yes |
+| `orphan` | push run still `queued` or `waiting` after `--orphan-hours` (default 24) whose commit is no longer the tip of its branch (the branch moved on or was deleted) | yes |
 | `zombie` | queued or running longer than `--stale-hours` (default 3); shows its job count and the runner labels its queued jobs wait for | no, report only |
-| `stuck-push` | push run with a newer push run of the same workflow on the same branch | no, report only |
+| `stuck-push` | push run with a newer push run of the same workflow on the same branch, younger than `--orphan-hours` | no, report only |
 | `off-limits` | matched `--skip-pr` / `--skip-run` | never |
 | `live` | anything else, including every current-head run of an open PR | never |
 
@@ -21,6 +22,11 @@ Rules built into the code:
   is cancelled only after its matrix expanded (more than one job). Cancelling
   the firmware Build Kernel placeholder leaves a "skipped" check that the
   Manet merge gate treats as final on that commit;
+- `--min-age-hours N` holds every cancel (closed, superseded, orphan) back for
+  runs younger than N hours; the default 0 cancels as soon as a run is dead;
+- an `orphan` needs the branch tip looked up (one `git/ref` call per branch,
+  only for branches with an old unstarted push run); a lookup that fails for any
+  reason other than 404 leaves the run alone;
 - at most `--max-cancel` cancels per invocation (default 10).
 
 It is Python 3 standard library only and needs no install.
@@ -61,6 +67,28 @@ launchctl load ~/Library/LaunchAgents/com.ghostnet.stale-runs.plist
 Output goes to `~/Library/Logs/stale-runs.log`. Leave out `--cancel` to only
 log. Arguments after `launchd` are passed to every scheduled run, so add
 `--skip-pr` / `--skip-run` there for work that must not be touched.
+
+## Run it inside each repo's merge sweep
+
+The "Handle passing PRs" workflow already holds `actions: write`, so it can
+clear a repo's own dead runs with no Mac and no extra token. After the merge
+step, add:
+
+```yaml
+      - name: Cancel dead runs older than a day
+        if: always()
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 tools/stale-runs/stale_runs.py --cancel --min-age-hours 24 --repos "${GITHUB_REPOSITORY#*/}"
+```
+
+`GITHUB_TOKEN` is the last token fallback, `continue-on-error` keeps a cancel
+problem from ever holding up a merge, and `--min-age-hours 24` means the
+sweep only removes runs that have been dead for a day. The checkout is of the
+docs pin, so a repo gets the step by bumping the pin to a commit that has this
+script. The Mac LaunchAgent can keep the default `--min-age-hours 0` for
+immediate cleanup.
 
 ## Actions guard: catch Actions switched off
 
