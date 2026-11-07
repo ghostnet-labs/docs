@@ -14,6 +14,10 @@ import urllib.request
 GATE = "Manet merge gate"
 AUTOMATION = "Handle passing PRs"
 MAX_GATE_ATTEMPTS = 3
+# A cancelled current-head run is re-run at most this many attempts in total, so a
+# workflow that keeps getting cancelled (or a person who keeps cancelling it) cannot loop.
+MAX_RERUN_ATTEMPTS = 3
+HOLD_LABELS = {"hold", "do-not-merge", "blocked"}
 # Adds labels only and runs from the base branch, so it is not a test to wait on.
 LABELER = "Pull Request Labeler"
 # Cross-repo audit of default branches. A workflow_dispatch on a PR branch
@@ -198,6 +202,47 @@ def snapshot(api, repo, number, profile):
     return pr, blockers
 
 
+def cancelled_head_runs(runs, sha, number):
+    """Newest current-head pull_request run of each workflow, where that run was cancelled.
+
+    A cancelled check never turns green by itself: GitHub starts nothing new, the gate
+    fails on it, and the PR sits until someone re-runs it (firmware #92, 2026-11-07:
+    all three board builds and both gates cancelled while queued). The merge gate is
+    left out because stale_gate_run() re-runs it once the rest has passed.
+    """
+    latest = {}
+    for run in runs:
+        if run["head_sha"] != sha or run["event"] != "pull_request":
+            continue
+        if number not in [p["number"] for p in run.get("pull_requests", [])]:
+            continue
+        path = run["path"].split("@")[0]
+        if path.endswith("manet-merge-gate.yml"):
+            continue
+        previous = latest.get(path)
+        if previous is None or (run["id"], run.get("run_attempt", 1)) > (previous["id"], previous.get("run_attempt", 1)):
+            latest[path] = run
+    return [run for _, run in sorted(latest.items())
+            if run["status"] == "completed" and run["conclusion"] == "cancelled"]
+
+
+def rerun_cancelled(api, repo, number, sha):
+    """Re-run cancelled current-head runs, up to MAX_RERUN_ATTEMPTS attempts each."""
+    runs = api.pages(f"repos/{repo}/actions/runs?head_sha={sha}&event=pull_request", "workflow_runs")
+    for run in cancelled_head_runs(runs, sha, number):
+        name = run.get("name") or run["path"]
+        if run.get("run_attempt", 1) >= MAX_RERUN_ATTEMPTS:
+            print(f"PR {number}: {name} run {run['id']} was cancelled again after "
+                  f"{run.get('run_attempt', 1)} attempts; left for a person")
+            continue
+        try:
+            api.call(f"repos/{repo}/actions/runs/{run['id']}/rerun", {}, method="POST")
+            print(f"PR {number}: {name} run {run['id']} was cancelled on the current head; re-running it")
+        except urllib.error.HTTPError as error:
+            # 403: already running again or the token lacks actions: write.
+            print(f"PR {number}: could not re-run cancelled run {run['id']}: HTTP {error.code}")
+
+
 def reviews_clear(reviews):
     latest = {}
     for review in sorted(reviews, key=lambda r: r["id"]):
@@ -295,8 +340,13 @@ def handle(api, repo, number, profile, updater=None):
     if pr["head"]["repo"]["full_name"] != repo:
         print(f"PR {number}: external fork needs explicit review; no automatic merge")
         return
-    if any(l["name"].lower() in {"hold", "do-not-merge", "blocked"} for l in pr["labels"]):
+    held = any(l["name"].lower() in HOLD_LABELS for l in pr["labels"])
+    if held:
         blockers.append("Explicit merge hold")
+    elif any(b.endswith(": completed/cancelled") for b in gate_blockers):
+        # A held PR's builds are cancelled on purpose (hold-builds.yml re-runs them
+        # when the label comes off), so only unheld PRs get their runs back.
+        rerun_cancelled(api, repo, number, pr["head"]["sha"])
     for dependency in re.findall(r"(?im)^Depends-on:\s*(https://github\.com/[\w.-]+/[\w.-]+/pull/\d+)\s*$", pr.get("body") or ""):
         owner, name, _, n = dependency.removeprefix("https://github.com/").split("/")
         if not api.call(f"repos/{owner}/{name}/pulls/{n}")["merged"]:
