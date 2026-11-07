@@ -30,6 +30,8 @@ Checks, per repo:
                    workflow list still says "active" and the PR still has
                    check suites, so none of the checks above see it, and it
                    needs no admin token.
+                   PR runs on a commit that is no longer an open PR's head
+                   are ignored: nothing waits on them.
 
 Examples:
 
@@ -106,10 +108,17 @@ def check_repo(gh, repo: str, now: datetime, grace: timedelta, stale: timedelta,
             pr=pull["number"], sha=sha)
 
     queued = gh.get(f"{full}/actions/runs?status=queued&per_page=50").get("workflow_runs", [])
+    # A PR run on a commit that is no longer any open PR's head is left over from an
+    # old head or a closed PR; nothing waits on it. Firmware #92's 00:32Z re-runs of an
+    # old head stayed held (GitHub refuses to cancel a re-run that never queued) after
+    # the PR moved on and built fine, and kept this alert red for hours.
+    heads = {pull["head"]["sha"] for pull in prs}
     stuck = []
     for run in queued:
         created = sr.parse_ts(run.get("created_at"))
         if created is None or now - created < held:
+            continue
+        if run.get("event") in sr.PR_EVENTS and run.get("head_sha") not in heads:
             continue
         if gh.get(f"{full}/actions/runs/{run['id']}/jobs?per_page=1").get("total_count", 0) == 0:
             stuck.append((created, run))
