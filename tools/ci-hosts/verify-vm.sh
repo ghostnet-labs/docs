@@ -45,7 +45,7 @@ case "$role" in
     ;;
   ubuntu)
     for pkg in libpam0g-dev libnss3 libgbm1 git; do
-      dpkg -s "$pkg" >/dev/null 2>&1 || fail "missing package: $pkg (run provision/gh-ubuntu-extras.sh)"
+      dpkg -s "$pkg" >/dev/null 2>&1 || fail "missing package: $pkg"
     done
     check_tool_versions
     if [ "${CI_HOSTS_REQUIRE_DOCKER:-0}" = 1 ]; then
