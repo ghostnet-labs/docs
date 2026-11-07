@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from merge_policy import (evaluate, matches, reviews_clear, protection_ready,
                           check_blockers, external_build_blockers, GATE,
-                          terminal_blocker, handle, stale_gate_run)
+                          terminal_blocker, handle, stale_gate_run, cancelled_head_runs)
 
 class GateTests(unittest.TestCase):
     def setUp(self):
@@ -274,7 +274,10 @@ class FakeMergeAPI:
     """Just enough of the GitHub API for handle() on PR 7 with head "head"."""
 
     def __init__(self, gate="success", gate_status="completed", tests="success", merge_error=None,
-                 rerun_error=None, gate_attempt=1, mergeable_state="clean", body=""):
+                 rerun_error=None, gate_attempt=1, mergeable_state="clean", body="", labels=(),
+                 tests_attempt=1):
+        self.labels = [{"name": n} for n in labels]
+        self.tests_attempt = tests_attempt
         self.mergeable_state = mergeable_state
         self.body = body
         self.gate_attempt = gate_attempt
@@ -294,7 +297,7 @@ class FakeMergeAPI:
             return {"merged": True, "sha": "merged"} if path.endswith("/merge") else {}
         if path == "repos/o/r/pulls/7":
             return {"state": "open", "draft": False, "base": {"ref": "main"}, "body": self.body,
-                    "head": {"sha": "head", "repo": {"full_name": "o/r"}}, "labels": [],
+                    "head": {"sha": "head", "repo": {"full_name": "o/r"}}, "labels": self.labels,
                     "changed_files": 1, "mergeable_state": self.mergeable_state}
         if path.endswith("/commits/head/status"):
             return {"statuses": [], "state": "pending"}
@@ -309,6 +312,7 @@ class FakeMergeAPI:
             return [{"filename": "src/main.go"}]
         if path.startswith("repos/o/r/actions/runs"):
             return [{"id": 1, "head_sha": "head", "event": "pull_request", "path": "tests.yml",
+                     "name": "Tests", "run_attempt": self.tests_attempt,
                      "pull_requests": [{"number": 7}], "status": "completed", "conclusion": self.tests}]
         if path.endswith("/commits/head/check-runs"):
             return [{"id": 5, "name": GATE, "app": {"id": 15368}, "status": self.gate_status,
@@ -430,6 +434,51 @@ class AutoMergeTests(unittest.TestCase):
     def test_rerun_refusal_is_logged(self):
         api = FakeMergeAPI(gate="failure", rerun_error=403)
         self.assertIn("could not re-run gate run 99: HTTP 403", self.handle(api))
+
+    def test_cancelled_head_run_is_rerun(self):
+        api = FakeMergeAPI(gate="cancelled", tests="cancelled")
+        out = self.handle(api)
+        self.assertIn("Tests run 1 was cancelled on the current head; re-running it", out)
+        # Only the cancelled workflow: the gate waits for stale_gate_run once tests pass.
+        self.assertEqual(api.writes, [("POST", "repos/o/r/actions/runs/1/rerun")])
+
+    def test_cancelled_run_on_held_pr_is_left_alone(self):
+        for label in ("hold", "Do-Not-Merge", "blocked"):
+            api = FakeMergeAPI(gate="cancelled", tests="cancelled", labels=[label])
+            self.assertIn("Explicit merge hold", self.handle(api))
+            self.assertEqual(api.writes, [])
+
+    def test_cancelled_run_reruns_are_capped(self):
+        api = FakeMergeAPI(gate="cancelled", tests="cancelled", tests_attempt=3)
+        self.assertIn("cancelled again after 3 attempts; left for a person", self.handle(api))
+        self.assertEqual(api.writes, [])
+
+    def test_failed_run_is_not_rerun(self):
+        for tests in ("failure", "timed_out", "in_progress"):
+            api = FakeMergeAPI(gate="failure", tests=tests)
+            self.handle(api)
+            self.assertEqual(api.writes, [])
+
+    def test_cancelled_rerun_refusal_is_logged(self):
+        api = FakeMergeAPI(gate="cancelled", tests="cancelled", rerun_error=403)
+        self.assertIn("could not re-run cancelled run 1: HTTP 403", self.handle(api))
+
+    def test_cancelled_head_runs_picks_newest_current_head_run_per_workflow(self):
+        def run(i, path, conclusion, sha="head", event="pull_request", prs=(7,), attempt=1):
+            return {"id": i, "path": path, "head_sha": sha, "event": event, "status": "completed",
+                    "conclusion": conclusion, "run_attempt": attempt,
+                    "pull_requests": [{"number": n} for n in prs]}
+        runs = [
+            run(1, "a.yml", "cancelled"), run(2, "a.yml", "success"),  # replaced by a newer run
+            run(3, "b.yml", "cancelled"),                                 # wanted
+            run(4, "c.yml", "cancelled", sha="old"),                      # old head
+            run(5, "d.yml", "cancelled", prs=(8,)),                       # another PR
+            run(6, "e.yml", "cancelled", event="push"),                   # not a PR run
+            run(7, ".github/workflows/manet-merge-gate.yml", "cancelled"),  # stale_gate_run's job
+            run(8, "f.yml@refs/pull/7/merge", "success", attempt=1),
+            run(8, "f.yml@refs/pull/7/merge", "cancelled", attempt=2),     # newest attempt counts
+        ]
+        self.assertEqual([r["id"] for r in cancelled_head_runs(runs, "head", 7)], [3, 8])
 
     def test_stale_gate_run_ignores_other_blockers_and_bad_urls(self):
         gate = {"id": 1, "status": "completed", "conclusion": "failure", "details_url": "https://example.com/x"}
