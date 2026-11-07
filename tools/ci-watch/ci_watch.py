@@ -312,11 +312,16 @@ def pr_events(gh, previous: dict[str, dict], prs: list[dict], scanned: set[str],
 def guard_findings(gh, repo: str, now: datetime) -> dict[str, dict]:
     found = {}
     for f in ag.check_repo(gh, repo, now, timedelta(minutes=20), timedelta(hours=3)):
-        detail = DIGITS.sub("#", f["detail"]) if f["kind"] == "runs-stale" else f["detail"]
+        detail = DIGITS.sub("#", f["detail"]) if f["kind"] in ("runs-stale", "runs-held") else f["detail"]
         url = f"https://github.com/{ORG}/{repo}/actions"
         text = f"{ORG}/{repo} {f['kind']}: {f['detail']}"
         if f.get("pr"):
             url = f"https://github.com/{ORG}/{repo}/pull/{f['pr']}"
+        elif f["kind"] == "runs-held":
+            url = f"https://github.com/{ORG}/{repo}/actions"
+            text += ("; GitHub is holding the runs, not a runner shortage. Open the Actions tab and click "
+                     "the enable button on the fork banner (ci-watch has no admin token to do it). Runs: "
+                     + " ".join(f.get("runs") or []))
         elif f["kind"] == "workflow-off":
             url, how = enable_link(repo, f.get("state", ""), f.get("path", ""))
             text += f"; {how}"

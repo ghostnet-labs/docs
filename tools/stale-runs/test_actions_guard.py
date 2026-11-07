@@ -33,7 +33,7 @@ class FakeGitHub:
 
 
 def routes(*, enabled=True, wf_state="active", draft=False, pr_age=120, checks=0, statuses=0,
-           run_age=30, perms=None) -> dict:
+           run_age=30, perms=None, queued=()) -> dict:
     pull = {"number": 9, "draft": draft, "created_at": ts(pr_age), "updated_at": ts(pr_age),
             "head": {"sha": SHA}}
     return {
@@ -43,6 +43,10 @@ def routes(*, enabled=True, wf_state="active", draft=False, pr_age=120, checks=0
         f"{BASE}/commits/{SHA}/check-runs?per_page=1": {"total_count": checks},
         f"{BASE}/commits/{SHA}/status": {"total_count": statuses},
         f"{BASE}/actions/runs?per_page=1": {"workflow_runs": [{"created_at": ts(run_age)}]},
+        f"{BASE}/actions/runs?status=queued&per_page=50": {"workflow_runs": [
+            {"id": i, "name": "PR Gate", "created_at": ts(age), "html_url": f"https://github.com/x/runs/{i}"}
+            for i, (age, _) in enumerate(queued)]},
+        **{f"{BASE}/actions/runs/{i}/jobs?per_page=1": {"total_count": jobs} for i, (_, jobs) in enumerate(queued)},
     }
 
 
@@ -74,6 +78,19 @@ class CheckRepoTest(unittest.TestCase):
 
     def test_ready_pr_without_checks(self):
         self.assertEqual(kinds(routes(checks=0)), ["pr-no-checks"])
+
+    def test_queued_run_without_jobs_is_held(self):
+        r = routes(checks=2, queued=[(120, 0), (30, 0), (5, 0)])
+        (f,) = ag.check_repo(FakeGitHub(r), "luci", NOW, GRACE, STALE)
+        self.assertEqual(f["kind"], "runs-held")
+        self.assertIn("2 queued run(s) have no jobs, oldest 120 min (PR Gate)", f["detail"])
+        self.assertEqual(f["runs"], ["https://github.com/x/runs/0", "https://github.com/x/runs/1"])
+
+    def test_queued_run_waiting_for_a_runner_is_not_held(self):
+        self.assertEqual(kinds(routes(checks=2, queued=[(120, 3)])), [])
+
+    def test_young_queued_run_without_jobs_is_not_held(self):
+        self.assertEqual(kinds(routes(checks=2, queued=[(10, 0)])), [])
 
     def test_pr_with_only_statuses_is_fine(self):
         self.assertEqual(kinds(routes(checks=0, statuses=1)), [])
