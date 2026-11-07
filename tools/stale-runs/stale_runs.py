@@ -8,13 +8,18 @@ provably wasted work:
   superseded  a pull_request run on an old head of a still-open PR, when a run
               of the same workflow already exists for the PR's current head
 
+  orphan      a push run still queued or waiting after --orphan-hours (24)
+              whose commit is no longer the tip of its branch (the branch
+              advanced or was deleted), so nothing wants its result
+
 Everything else is only reported, never cancelled:
 
   zombie      queued or running longer than --stale-hours (shows its job count;
               0 jobs means GitHub never created any)
   stuck-push  a push run on a branch that has a newer push run of the same
-              workflow (the old head no longer matters to the gate, but push
-              runs can publish artifacts, so a person decides)
+              workflow, younger than --orphan-hours (the old head no longer
+              matters to the gate, but push runs can publish artifacts, so a
+              person decides)
 
 Safety rules, enforced in code:
 
@@ -24,6 +29,8 @@ Safety rules, enforced in code:
     cancelled only after its matrix has expanded (more than one job), because
     cancelling the placeholder job leaves a "skipped" check the merge gate
     treats as final on that commit;
+  * --min-age-hours N holds back every cancel (closed, superseded, orphan) for
+    runs younger than N hours; the default 0 cancels as soon as a run is dead;
   * --skip-pr REPO#N and --skip-run ID always win;
   * at most --max-cancel cancels per invocation (default 10).
 
@@ -49,6 +56,7 @@ import os
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
@@ -171,12 +179,29 @@ def find_pr(run: dict, open_prs: dict[int, dict], by_branch: dict[str, dict]) ->
     return None
 
 
+def old_push_branches(runs: list[dict], now: datetime, orphan_hours: float) -> set[str]:
+    """Branches whose tip must be looked up: push runs that sat unstarted past orphan_hours."""
+    branches = set()
+    for r in runs:
+        created = parse_ts(r.get("created_at"))
+        if (r.get("event") == "push" and r.get("status") in ("queued", "waiting")
+                and r.get("head_branch") and created
+                and (now - created).total_seconds() / 3600 >= orphan_hours):
+            branches.add(r["head_branch"])
+    return branches
+
+
 def classify(repo: str, runs: list[dict], open_prs: dict[int, dict], now: datetime,
-             stale_hours: float, head_runs: set[tuple] | None = None) -> list[dict]:
+             stale_hours: float, head_runs: set[tuple] | None = None,
+             branch_tips: dict[str, str | None] | None = None,
+             orphan_hours: float = 24.0, min_age_hours: float = 0.0) -> list[dict]:
     """Label every active run. Pure function: no API calls.
 
     head_runs holds (workflow_id, sha) pairs known to have a run, in any state;
-    the active runs are added to it here."""
+    the active runs are added to it here. branch_tips maps a branch to its tip
+    sha, or None when the branch is gone; a branch missing from it is unknown
+    and its runs are never called orphans."""
+    branch_tips = branch_tips or {}
     by_branch = {pr["head"]["ref"]: pr for pr in open_prs.values()}
     head_runs = set(head_runs or ()) | {(r.get("workflow_id"), r.get("head_sha")) for r in runs}
     newest_push: dict[tuple, dict] = {}
@@ -214,9 +239,20 @@ def classify(repo: str, runs: list[dict], open_prs: dict[int, dict], now: dateti
                 item["prs"] = item["prs"] or [pr["number"]]
         elif event == "push":
             newest = newest_push.get((r.get("workflow_id"), r.get("head_branch")))
-            if newest is not None and newest["id"] != r["id"]:
+            branch = r.get("head_branch")
+            if (r.get("status") in ("queued", "waiting") and age_h >= orphan_hours
+                    and branch in branch_tips and branch_tips[branch] != r.get("head_sha")):
+                item["class"] = "orphan"
+                item["cancel"] = True
+                item["reason"] = (f"branch {branch} was deleted" if branch_tips[branch] is None
+                                  else f"branch {branch} moved on to {branch_tips[branch][:7]}")
+                item["reason"] += f"; unstarted for {age_h:.1f} h"
+            elif newest is not None and newest["id"] != r["id"]:
                 item["class"] = "stuck-push"
-                item["reason"] = f"newer push run {newest['id']} exists on {r.get('head_branch')}"
+                item["reason"] = f"newer push run {newest['id']} exists on {branch}"
+        if item["cancel"] and age_h < min_age_hours:
+            item["cancel"] = False
+            item["reason"] += f"; younger than {min_age_hours:g} h, left for now"
         if item["class"] == "live" and age_h >= stale_hours:
             item["class"] = "zombie"
             item["reason"] = f"{r.get('status')} for {age_h:.1f} h"
@@ -255,7 +291,17 @@ def apply_guards(items: list[dict], gh: GitHub | None, protect: re.Pattern,
                 it["reason"] += "; kernel matrix not expanded yet, left alone"
 
 
-def scan(gh: GitHub, repos: list[str], now: datetime, stale_hours: float) -> list[dict]:
+def branch_tip(gh: GitHub, repo: str, branch: str) -> tuple[bool, str | None]:
+    """(known, tip sha); a deleted branch is known with no tip, other errors are unknown."""
+    path = f"/repos/{ORG}/{repo}/git/ref/heads/{urllib.parse.quote(branch, safe='/')}"
+    try:
+        return True, gh.get(path)["object"]["sha"]
+    except RuntimeError as err:
+        return (True, None) if "HTTP 404" in str(err) else (False, None)
+
+
+def scan(gh: GitHub, repos: list[str], now: datetime, stale_hours: float,
+         orphan_hours: float = 24.0, min_age_hours: float = 0.0) -> list[dict]:
     items: list[dict] = []
     for repo in repos:
         pulls = gh.get(f"/repos/{ORG}/{repo}/pulls?state=open&per_page=100")
@@ -281,7 +327,13 @@ def scan(gh: GitHub, repos: list[str], now: datetime, stale_hours: float) -> lis
         for sha in sorted(heads):
             data = gh.get(f"/repos/{ORG}/{repo}/actions/runs?head_sha={sha}&per_page=100")
             known |= {(r.get("workflow_id"), sha) for r in data.get("workflow_runs", [])}
-        items.extend(classify(repo, active, open_prs, now, stale_hours, known))
+        tips: dict[str, str | None] = {}
+        for branch in sorted(old_push_branches(active, now, orphan_hours)):
+            found, tip = branch_tip(gh, repo, branch)
+            if found:
+                tips[branch] = tip
+        items.extend(classify(repo, active, open_prs, now, stale_hours, known, tips,
+                              orphan_hours, min_age_hours))
     return items
 
 
@@ -289,7 +341,8 @@ def render(items: list[dict]) -> str:
     if not items:
         return "No queued or running workflow runs."
     lines = []
-    order = {"closed": 0, "superseded": 1, "zombie": 2, "stuck-push": 3, "off-limits": 4, "live": 5}
+    order = {"closed": 0, "superseded": 1, "orphan": 2, "zombie": 3, "stuck-push": 4,
+             "off-limits": 5, "live": 6}
     for it in sorted(items, key=lambda i: (order.get(i["class"], 9), i["repo"], -i["age_h"])):
         prs = ",".join(f"#{n}" for n in it["prs"]) or "-"
         jobs = f" jobs={it['jobs']}" if "jobs" in it else ""
@@ -323,9 +376,13 @@ def main(argv: list[str] | None = None) -> int:
         print(launchd_plist(rest, 900), end="")
         return 0
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    p.add_argument("--cancel", action="store_true", help="cancel runs classed closed/superseded")
+    p.add_argument("--cancel", action="store_true", help="cancel runs classed closed, superseded or orphan")
     p.add_argument("--repos", default=",".join(REPOS), help="comma-separated repo names")
     p.add_argument("--stale-hours", type=float, default=3.0, help="age that makes a live run a zombie")
+    p.add_argument("--orphan-hours", type=float, default=24.0,
+                   help="age at which an unstarted push run on a moved or deleted branch is an orphan")
+    p.add_argument("--min-age-hours", type=float, default=0.0,
+                   help="hold every cancel back for runs younger than this")
     p.add_argument("--max-cancel", type=int, default=10, help="cap on cancels per invocation")
     p.add_argument("--protect", default=DEFAULT_PROTECT,
                    help="regex of workflow names cancelled only after their matrix expands")
@@ -341,7 +398,7 @@ def main(argv: list[str] | None = None) -> int:
     gh = GitHub(token)
     repos = [r.strip() for r in args.repos.split(",") if r.strip()]
     try:
-        items = scan(gh, repos, utcnow(), args.stale_hours)
+        items = scan(gh, repos, utcnow(), args.stale_hours, args.orphan_hours, args.min_age_hours)
         apply_guards(items, gh, re.compile(args.protect), set(args.skip_pr), set(args.skip_run))
     except RuntimeError as err:
         print(f"error: {err}", file=sys.stderr)
