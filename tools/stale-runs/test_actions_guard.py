@@ -32,6 +32,11 @@ class FakeGitHub:
         return value
 
 
+def _runs(queued):
+    """(age, jobs) or (age, jobs, event, head_sha); a PR run on the open PR's head by default."""
+    return [tuple(q) + ("pull_request", SHA)[len(q) - 2:] for q in queued]
+
+
 def routes(*, enabled=True, wf_state="active", draft=False, pr_age=120, checks=0, statuses=0,
            run_age=30, perms=None, queued=()) -> dict:
     pull = {"number": 9, "draft": draft, "created_at": ts(pr_age), "updated_at": ts(pr_age),
@@ -44,9 +49,10 @@ def routes(*, enabled=True, wf_state="active", draft=False, pr_age=120, checks=0
         f"{BASE}/commits/{SHA}/status": {"total_count": statuses},
         f"{BASE}/actions/runs?per_page=1": {"workflow_runs": [{"created_at": ts(run_age)}]},
         f"{BASE}/actions/runs?status=queued&per_page=50": {"workflow_runs": [
-            {"id": i, "name": "PR Gate", "created_at": ts(age), "html_url": f"https://github.com/x/runs/{i}"}
-            for i, (age, _) in enumerate(queued)]},
-        **{f"{BASE}/actions/runs/{i}/jobs?per_page=1": {"total_count": jobs} for i, (_, jobs) in enumerate(queued)},
+            {"id": i, "name": "PR Gate", "created_at": ts(age), "html_url": f"https://github.com/x/runs/{i}",
+             "event": event, "head_sha": head}
+            for i, (age, _, event, head) in enumerate(_runs(queued))]},
+        **{f"{BASE}/actions/runs/{i}/jobs?per_page=1": {"total_count": jobs} for i, (_, jobs, *_rest) in enumerate(queued)},
     }
 
 
@@ -85,6 +91,13 @@ class CheckRepoTest(unittest.TestCase):
         self.assertEqual(f["kind"], "runs-held")
         self.assertIn("2 queued run(s) have no jobs, oldest 120 min (PR Gate)", f["detail"])
         self.assertEqual(f["runs"], ["https://github.com/x/runs/0", "https://github.com/x/runs/1"])
+
+    def test_held_run_on_an_old_pr_head_is_ignored(self):
+        # Firmware #92: re-runs of an old head stayed held after the PR moved on.
+        self.assertEqual(kinds(routes(checks=2, queued=[(240, 0, "pull_request", "b" * 40)])), [])
+        # Held push or schedule runs, and current-head PR runs, still count.
+        self.assertEqual(kinds(routes(checks=2, queued=[(240, 0, "push", "b" * 40)])), ["runs-held"])
+        self.assertEqual(kinds(routes(checks=2, queued=[(240, 0, "pull_request", SHA)])), ["runs-held"])
 
     def test_queued_run_waiting_for_a_runner_is_not_held(self):
         self.assertEqual(kinds(routes(checks=2, queued=[(120, 3)])), [])
