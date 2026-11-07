@@ -22,6 +22,14 @@ Checks, per repo:
                    runs and no commit statuses, older than --grace-minutes
   runs-stale       open PRs exist but the newest workflow run in the repo is
                    older than --stale-hours (default 3)
+  runs-held        a workflow run queued --held-minutes (15) or longer that
+                   GitHub has not given a single job. A runner shortage still
+                   creates the jobs (they wait as queued); no jobs at all means
+                   GitHub is holding the run, as with the fork's "enable
+                   workflows" banner on 2026-11-06 (firmware #92 sat 2 h). The
+                   workflow list still says "active" and the PR still has
+                   check suites, so none of the checks above see it, and it
+                   needs no admin token.
 
 Examples:
 
@@ -49,7 +57,11 @@ import stale_runs as sr  # noqa: E402
 ORG = sr.ORG
 
 
-def check_repo(gh, repo: str, now: datetime, grace: timedelta, stale: timedelta) -> list[dict]:
+HELD = timedelta(minutes=15)
+
+
+def check_repo(gh, repo: str, now: datetime, grace: timedelta, stale: timedelta,
+               held: timedelta = HELD) -> list[dict]:
     """Return findings for one repo. `gh` needs only a .get(path) method."""
     full = f"/repos/{ORG}/{repo}"
     findings: list[dict] = []
@@ -93,6 +105,21 @@ def check_repo(gh, repo: str, now: datetime, grace: timedelta, stale: timedelta)
         add("pr-no-checks", f"PR #{pull['number']} has no checks or statuses on {sha[:7]}",
             pr=pull["number"], sha=sha)
 
+    queued = gh.get(f"{full}/actions/runs?status=queued&per_page=50").get("workflow_runs", [])
+    stuck = []
+    for run in queued:
+        created = sr.parse_ts(run.get("created_at"))
+        if created is None or now - created < held:
+            continue
+        if gh.get(f"{full}/actions/runs/{run['id']}/jobs?per_page=1").get("total_count", 0) == 0:
+            stuck.append((created, run))
+    if stuck:
+        stuck.sort(key=lambda x: x[0])
+        oldest = int((now - stuck[0][0]).total_seconds() // 60)
+        add("runs-held", f"{len(stuck)} queued run(s) have no jobs, oldest {oldest} min "
+                         f"({stuck[0][1].get('name', '?')})",
+            runs=[r.get("html_url", "") for _, r in stuck[:3]])
+
     if prs:
         runs = gh.get(f"{full}/actions/runs?per_page=1").get("workflow_runs", [])
         newest = sr.parse_ts(runs[0]["created_at"]) if runs else None
@@ -118,6 +145,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="a ready PR younger than this is not expected to have checks yet")
     p.add_argument("--stale-hours", type=float, default=3.0,
                    help="newest-run age that counts as stale while PRs are open")
+    p.add_argument("--held-minutes", type=float, default=15.0,
+                   help="a queued run with no jobs this long is held by GitHub")
     p.add_argument("--json", action="store_true", help="print JSON instead of a table")
     args = p.parse_args(argv)
 
@@ -132,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         for repo in repos:
             findings += check_repo(gh, repo, now, timedelta(minutes=args.grace_minutes),
-                                   timedelta(hours=args.stale_hours))
+                                   timedelta(hours=args.stale_hours), timedelta(minutes=args.held_minutes))
     except RuntimeError as err:
         print(f"error: {err}", file=sys.stderr)
         gh.save()
