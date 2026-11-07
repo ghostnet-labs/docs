@@ -194,6 +194,19 @@ class GateTests(unittest.TestCase):
             self.assertTrue(check_blockers([dict(check, id=1, name=name, conclusion="failure"), skipped]))
         self.assertTrue(check_blockers([dict(check, name="Build all affected Kernels from defined label / Build Kernel", conclusion="skipped")]))
 
+    def test_late_skipped_check_does_not_outvote_one_that_ran(self):
+        # Close/reopen: the closed event's skipped "PR gate" got a higher id than the
+        # reopen's live one (firmware #92, 2026-11-07).
+        live = {"id": 1, "app": {"id": 15368}, "name": "PR gate", "status": "in_progress", "conclusion": None}
+        late_skip = dict(live, id=2, status="completed", conclusion="skipped")
+        self.assertEqual(check_blockers([live, late_skip]), ["Check PR gate: in_progress/None"])
+        self.assertEqual(check_blockers([dict(live, status="completed", conclusion="success"), late_skip]), [])
+        self.assertTrue(check_blockers([dict(live, status="completed", conclusion="failure"), late_skip]))
+        # A newer real run still replaces an older one, and a skip alone still blocks.
+        self.assertTrue(check_blockers([dict(live, status="completed", conclusion="success"),
+                                        dict(live, id=3, status="completed", conclusion="failure")]))
+        self.assertTrue(check_blockers([late_skip]))
+
 
 class FakeExternalAPI:
     def __init__(self, commit, compare="ahead", pinned=None, gate="success", pr_gate="success"):
@@ -430,6 +443,13 @@ class AutoMergeTests(unittest.TestCase):
         api = FakeMergeAPI(gate="failure", gate_attempt=3)
         self.handle(api)
         self.assertEqual(api.writes, [])
+
+    def test_late_skipped_gate_does_not_hide_the_real_gate(self):
+        gate = {"id": 1, "name": GATE, "app": {"id": 15368}, "status": "completed", "conclusion": "failure",
+                "details_url": "https://github.com/o/r/actions/runs/3/job/4"}
+        skip = dict(gate, id=2, conclusion="skipped", details_url="https://github.com/o/r/actions/runs/5/job/6")
+        self.assertEqual(stale_gate_run([gate, skip], []), 3)
+        self.assertIsNone(stale_gate_run([dict(gate, conclusion="success"), skip], []))
 
     def test_rerun_refusal_is_logged(self):
         api = FakeMergeAPI(gate="failure", rerun_error=403)

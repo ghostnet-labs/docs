@@ -174,7 +174,7 @@ def external_build_blockers(api, repo, pr, files, profile):
     checks = api.pages(f"repos/{integration_repo}/commits/{integration_sha}/check-runs", "check_runs")
     blockers = ["External integration: " + b for b in check_blockers(checks)]
     gates = [c for c in checks if c["name"] == GATE and c["app"]["id"] == 15368]
-    if not gates or max(gates, key=lambda c: c["id"])["conclusion"] != "success":
+    if not gates or max(gates, key=rank)["conclusion"] != "success":
         blockers.append("External integration: current-head Manet merge gate has not passed")
     status = api.call(f"repos/{integration_repo}/commits/{integration_sha}/status")
     if status["statuses"] and status["state"] != "success":
@@ -251,6 +251,21 @@ def reviews_clear(reviews):
     return "CHANGES_REQUESTED" not in latest.values()
 
 
+def _skipped(check):
+    return check["status"] == "completed" and check["conclusion"] == "skipped"
+
+
+def rank(check):
+    """Sort key for "the check that decides": the newest one that ran, then the newest.
+
+    A skipped check tested nothing. Closing a PR runs its pull_request workflows with
+    every job skipped, and GitHub can file those checks after the reopen's real ones
+    (firmware #92, 2026-11-07: the closed-event "PR gate" got a higher id than the live
+    one), so newest-id alone would let a skip outvote a real run on the same commit.
+    """
+    return (not _skipped(check), check["id"])
+
+
 def check_blockers(checks):
     latest = {}
     for check in checks:
@@ -259,7 +274,7 @@ def check_blockers(checks):
         if check["name"] in LABEL_BUILDS and check["status"] == "completed" and check["conclusion"] == "skipped":
             continue
         key = (check["name"], check["app"]["id"])
-        if key not in latest or check["id"] > latest[key]["id"]:
+        if key not in latest or rank(check) > rank(latest[key]):
             latest[key] = check
     blockers = []
     for check in latest.values():
@@ -296,7 +311,7 @@ def stale_gate_run(gates, gate_blockers):
     """
     if gate_blockers or not gates:
         return None
-    gate = max(gates, key=lambda c: c["id"])
+    gate = max(gates, key=rank)
     if gate["status"] != "completed" or gate["conclusion"] == "success":
         return None
     found = re.search(r"/actions/runs/(\d+)/", gate.get("details_url") or "")
@@ -354,7 +369,7 @@ def handle(api, repo, number, profile, updater=None):
     checks = api.pages(f"repos/{repo}/commits/{pr['head']['sha']}/check-runs", "check_runs")
     blockers.extend(check_blockers(checks))
     gates = [c for c in checks if c["name"] == GATE and c["app"]["id"] == 15368]
-    if not gates or max(gates, key=lambda c: c["id"])["conclusion"] != "success":
+    if not gates or max(gates, key=rank)["conclusion"] != "success":
         blockers.append("Current-head Manet merge gate has not passed")
         run_id = stale_gate_run(gates, gate_blockers)
         # Cap re-runs so a gate that fails for some other reason cannot loop.
