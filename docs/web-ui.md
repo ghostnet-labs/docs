@@ -55,6 +55,7 @@ The desktop layout is a collapsible left sidebar with the main content area on t
 | Operations | Topology | `/topology` | Full mesh topology graph and per-host inspector |
 | Operations | GPS / GNSS | `/gps` | Live fix, sky plot, satellite detail, MGRS |
 | Operations | BLOS | `/blos` | Beyond-line-of-sight tunnel status and configuration |
+| Operations | Weather | `/weather` | Weather stations on the mesh: wind, temperature, pressure, rain |
 | System | Settings | `/settings/*` | Hostname, comms, wireless, network, firmware, terminal, logs |
 
 A persistent top bar shows the node ID, MESH / GPS / BLOS status chips, and the local-timezone clock so you always know which node you're on and whether its core subsystems are healthy.
@@ -65,7 +66,7 @@ A persistent top bar shows the node ID, MESH / GPS / BLOS status chips, and the 
 
 The Dashboard is a fixed-grid tactical overview built for an operator who wants the answer to *"is this node OK right now?"* in a single glance.
 
-- **KPI row** — Mesh Peers, Link Quality (5 min sparkline).
+- **KPI row** — Mesh Peers, Link Quality (5 min sparkline), and Weather when a station is heard on the mesh (see [Weather stations](./weather)).
 - **Mesh Peers Live** — every neighbor the node currently sees, with quality, last-heard age, and stale/lost flagging.
 - **Alerts** — auto-classified events: lost peers, GPS dropouts, BLOS state changes, low battery.
 - **System Resources** — CPU, memory, uptime.
