@@ -74,6 +74,7 @@ exists because luci's workflows were off for four days (2026-10-30 to
 | `workflow-off` | a workflow is `disabled_fork`, `disabled_inactivity` or `disabled_manually` |
 | `pr-no-checks` | a ready PR head has no check runs or statuses after 20 minutes |
 | `runs-stale` | open PRs exist but the newest run is older than 3 hours |
+| `runs-held` | a run queued 15+ min (`--held-minutes`) that GitHub has given no jobs: GitHub is holding it (fork enable banner), not waiting for a runner |
 
 Exit 1 means a finding, so a LaunchAgent or any watchdog can page on it:
 

@@ -50,7 +50,7 @@ def check(name, status="completed", conclusion="success", run_id=1, started=30):
 
 
 def repo_routes(repo="luci", prs=None, checks=None, statuses=None, merge="clean", auto_merge=True,
-                wf_state="active", run_age=10, details=None) -> dict:
+                wf_state="active", run_age=10, details=None, queued=None) -> dict:
     base = f"/repos/ghostnet-labs/{repo}"
     prs = prs if prs is not None else [{
         "number": 9, "title": "Bump feeds", "draft": False, "created_at": ts(120), "updated_at": ts(60),
@@ -63,6 +63,7 @@ def repo_routes(repo="luci", prs=None, checks=None, statuses=None, merge="clean"
         f"{base}/actions/workflows?per_page=100": {"workflows": [{"name": "Manet merge gate", "state": wf_state}]},
         f"{base}/pulls?state=open&per_page=100": prs,
         f"{base}/actions/runs?per_page=1": {"workflow_runs": [{"created_at": ts(run_age)}]},
+        f"{base}/actions/runs?status=queued&per_page=50": {"workflow_runs": queued or []},
     }
     for pr in prs:
         sha = pr["head"]["sha"]
@@ -370,6 +371,20 @@ class FixOnceTest(unittest.TestCase):
         found = cw.guard_findings(FakeGitHub(r), "luci", NOW)
         item = next(v for k, v in found.items() if "workflow-off" in k)
         self.assertEqual(item["url"], "https://github.com/ghostnet-labs/luci/actions/workflows/gate.yml")
+
+    def test_held_runs_alert_is_crit_with_actions_link_and_stable_key(self):
+        def held(age):
+            r = repo_routes(queued=[{"id": 77, "name": "PR Gate", "created_at": ts(age),
+                                     "html_url": "https://github.com/ghostnet-labs/luci/actions/runs/77"}])
+            r["/repos/ghostnet-labs/luci/actions/runs/77/jobs?per_page=1"] = {"total_count": 0}
+            return cw.guard_findings(FakeGitHub(r), "luci", NOW)
+        a, b = held(40), held(130)
+        (key, item), = [(k, v) for k, v in a.items() if "runs-held" in k]
+        self.assertEqual(item["level"], "crit")
+        self.assertEqual(item["url"], "https://github.com/ghostnet-labs/luci/actions")
+        self.assertIn("enable button", item["text"])
+        self.assertIn("/actions/runs/77", item["text"])
+        self.assertIn(key, b, "the key must not change as the run ages, or it re-alerts every cycle")
 
     def page(self, *runners):
         return {"alerts": [{"level": "crit", "text": "Offline runners: " + ", ".join(r["name"] for r in runners)}],
