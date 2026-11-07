@@ -3,7 +3,7 @@ layout: default
 title: ATAK map feed
 nav_order: 9
 permalink: /atak
-description: How OpenMANET nodes put themselves, their mesh links, coverage, aircraft and jamming on every ATAK map automatically.
+description: How OpenMANET nodes put themselves, their mesh links, coverage, aircraft, jamming and weather on every ATAK map automatically.
 ---
 
 # ATAK map feed
@@ -34,6 +34,7 @@ No ATAK plugin is needed. A plugin would only be worth building for things a map
 | **Coverage** | Filled square, green, yellow or red | How well the mesh was heard at that spot (see [Coverage heatmap](#coverage-heatmap)). |
 | **Aircraft** | Neutral civil aircraft | Callsign, altitude, speed and squawk from a node running the ADS-B scanner. Emergency squawks are flagged. Nearest aircraft are sent first. |
 | **Jamming** | Yellow (possible) or red (jamming) jammer symbol | Frequency, noise against baseline, and how busy the channel is. The marker sits on the node that detected it, with a 1 km ring, because the source is somewhere within radio range of that node. It is removed when the jamming stops. |
+| **Weather station** | Friendly emplaced sensor | Temperature, wind direction, speed and gust in the label; humidity, pressure and its 3 h trend, and rain in the last hour in the details. Sent only by the node that owns the sensor, and removed when the reading goes stale. See [Weather stations](./weather). |
 
 Markers go stale on their own when a node goes quiet. A node's marker fades after 5 minutes, and an aircraft's after 1 minute.
 
@@ -69,6 +70,7 @@ tak:
   interval: 10s      # 2s to 5m; links go out every 3rd interval
   links: true
   jamming: true
+  weather: true      # this node's weather station, if it has one
   aircraft:
     enable: true     # needs scanner.enable and an ADS-B receiver
     max: 32          # aircraft per interval, nearest first
