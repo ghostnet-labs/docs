@@ -106,6 +106,10 @@ This allows:
 
 The node data worker checks position validity before including position data and logs the current position at the debug level.
 
+### Node Marker in ATAK
+
+With a valid position, the node appears on every ATAK map on the mesh as a radio (or mast) marker, with battery and mesh health in its details. It keeps appearing while a phone is attached. The [ATAK map feed](./atak) sends it, together with mesh links, aircraft and jamming markers.
+
 ### Camera Sensor CoT
 
 On Raspberry Pi nodes with a detected camera, a valid position allows `openmanetd` to place the camera on the ATAK map. That position can come from either the internal GPS receiver or the external CoT source. The node sends a linked camera video event and Sensor CoT event to the ATAK SA multicast address at `239.2.3.1:6969`. The advertised video URL uses the node's OpenMANET address and the MediaMTX RTSP path `rtsp://<node-ip>:554/rpicamera`.
@@ -167,6 +171,7 @@ Future releases may include a map view showing node positions on the topology pa
 ### ATAK not showing node position
 - Verify multicast is working across the mesh
 - Ensure ATAK is subscribed to the SA multicast group `239.2.3.1:6969`
+- See [ATAK map feed troubleshooting](./atak#troubleshooting)
 
 ---
 
