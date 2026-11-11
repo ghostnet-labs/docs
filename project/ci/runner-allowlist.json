@@ -62,6 +62,24 @@
     },
     {
       "repo": "firmware",
+      "workflow": "build-pr-x86-64.yml",
+      "job": "qemu-mesh-e2e",
+      "rules": [
+        "hosted-runner"
+      ],
+      "reason": "QEMU three-node mesh test needs /dev/kvm, which the self-hosted runners do not offer (Studio VMs are ARM64). Read-only token; runs after the self-hosted x86-64 build (firmware #94, 2026-11-07)."
+    },
+    {
+      "repo": "firmware",
+      "workflow": "qemu-mesh-nightly.yml",
+      "job": "mesh",
+      "rules": [
+        "hosted-runner"
+      ],
+      "reason": "QEMU three-node mesh test needs /dev/kvm, which the self-hosted runners do not offer (Studio VMs are ARM64). Read-only token; nightly cron, once a day, on the newest 24.10 x86-64 image (firmware #94, 2026-11-07)."
+    },
+    {
+      "repo": "firmware",
       "workflow": "build-release.yml",
       "job": "publish-packages",
       "rules": [
