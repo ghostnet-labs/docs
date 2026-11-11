@@ -26,6 +26,8 @@ jobs:
           echo "$RUNNER_TEMP/records-venv/bin" >> "$GITHUB_PATH"
       - name: GPIO allocation consistency
         run: python project/scripts/check_gpio_allocations.py
+      - name: Decision IDs and next-ID line
+        run: python project/scripts/check_decision_ids.py
       - name: Agent instruction links
         run: python project/scripts/check_agents.py
       - name: Merge policy regression tests
