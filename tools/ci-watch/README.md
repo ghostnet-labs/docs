@@ -15,6 +15,7 @@ or writing.
 |---|---|---|
 | Actions guard (`tools/stale-runs/actions_guard.py`) | Actions off, a disabled workflow, a ready PR with no checks after 20 min, no workflow run for 3 h while PRs are open | crit |
 | PR head checks | a check fails, times out or needs action on the current head | crit |
+| Red reminder (`--red-remind-hours`, 6; 0 = off) | the head is still red that long after its first failure with no new push, then once more each day; names the branch (which thread owns it) and whether auto-merge is on. packages #44 sat red with auto-merge on for four days in November 2026 after its one alert scrolled away | crit |
 | Cancelled check | a check on the head was cancelled and nothing replaced it (often the "Handle passing PRs" sweep) | warn |
 | Merge state | a merge conflict; green with auto-merge on but behind its base | warn |
 | Stuck | checks still running after `--stuck-hours` (3) | warn |

@@ -150,7 +150,7 @@ def summarize_checks(check_runs: list[dict], statuses: list[dict], now: datetime
         if name not in latest or (run.get("id") or 0) > (latest[name].get("id") or 0):
             latest[name] = run
     red, running, cancelled = [], [], []
-    oldest_start = None
+    oldest_start = red_since = None
     for name, run in sorted(latest.items()):
         if run.get("status") != "completed":
             running.append(name)
@@ -161,10 +161,16 @@ def summarize_checks(check_runs: list[dict], statuses: list[dict], now: datetime
             cancelled.append(name)
         elif run.get("conclusion") in BAD_CONCLUSIONS:
             red.append(name if run.get("conclusion") == "failure" else f"{name} ({run['conclusion']})")
+            failed = sr.parse_ts(run.get("completed_at") or run.get("started_at"))
+            if failed and (red_since is None or failed < red_since):
+                red_since = failed
     for status in statuses:
         context = status.get("context") or "?"
         if status.get("state") in ("failure", "error"):
             red.append(context)
+            failed = sr.parse_ts(status.get("updated_at") or status.get("created_at"))
+            if failed and (red_since is None or failed < red_since):
+                red_since = failed
         elif status.get("state") == "pending":
             running.append(context)
     total = len(latest) + len(statuses)
@@ -179,8 +185,10 @@ def summarize_checks(check_runs: list[dict], statuses: list[dict], now: datetime
     else:
         state = "none"
     running_for = (now - oldest_start) if oldest_start else None
+    red_for = (now - red_since) if (red and red_since) else None
     return {"state": state, "red": red, "running": running, "cancelled": cancelled, "total": total,
-            "running_minutes": int(running_for.total_seconds() // 60) if running_for else 0}
+            "running_minutes": int(running_for.total_seconds() // 60) if running_for else 0,
+            "red_minutes": int(red_for.total_seconds() // 60) if red_for else 0}
 
 
 def pr_status(pr: dict) -> tuple[str, str, str]:
@@ -245,8 +253,15 @@ def collect_prs(gh, repo: str, now: datetime) -> list[dict]:
     return rows
 
 
-def pr_findings(prs: list[dict], now: datetime, stuck: timedelta, idle: timedelta) -> dict[str, dict]:
-    """Ongoing problems, keyed so the same problem keeps the same key across runs."""
+def pr_findings(prs: list[dict], now: datetime, stuck: timedelta, idle: timedelta,
+                red_remind: timedelta = timedelta(0)) -> dict[str, dict]:
+    """Ongoing problems, keyed so the same problem keeps the same key across runs.
+
+    A red head alerts once. If it is still red after red_remind with no new push,
+    it alerts again, and once more for every further day: on 2026-11-07 packages
+    #44 went red with auto-merge on, its owning session stopped, and the single
+    alert scrolled away for four days.
+    """
     found: dict[str, dict] = {}
     for pr in prs:
         ref = f"{ORG}/{pr['repo']} #{pr['number']}"
@@ -255,6 +270,15 @@ def pr_findings(prs: list[dict], now: datetime, stuck: timedelta, idle: timedelt
         if cat == "red":
             found[f"red:{pr['repo']}#{pr['number']}:{pr['sha']}"] = {
                 **base, "level": "crit", "text": f"{ref} is red: {', '.join(pr['checks']['red'][:3])}"}
+            red_min = pr["checks"].get("red_minutes", 0)
+            remind_min = red_remind.total_seconds() / 60
+            if remind_min and red_min >= remind_min:
+                day = int((red_min - remind_min) // (24 * 60))
+                merge = "auto-merge on, so nothing lands until it is fixed" if pr["auto_merge"] else "auto-merge off"
+                found[f"red-stale:{pr['repo']}#{pr['number']}:{pr['sha']}:{day}"] = {
+                    **base, "level": "crit", "quiet_clear": True,
+                    "text": f"{ref} still red after {minutes(timedelta(minutes=red_min))} with no new push "
+                            f"({merge}; branch {pr.get('head_ref') or '?'}): {', '.join(pr['checks']['red'][:3])}"}
         elif cat == "cancelled":
             found[f"cancelled:{pr['repo']}#{pr['number']}:{pr['sha']}"] = {
                 **base, "level": "warn", "text": f"{ref} has a cancelled check ({pr['status']}); {pr['next']}"}
@@ -1341,7 +1365,8 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
             scanned.add(repo)
         except RuntimeError as err:
             errors.append(f"{repo}: {str(err)[:160]}")
-    found.update(pr_findings(prs, now, timedelta(hours=args.stuck_hours), timedelta(hours=args.idle_hours)))
+    found.update(pr_findings(prs, now, timedelta(hours=args.stuck_hours), timedelta(hours=args.idle_hours),
+                             timedelta(hours=args.red_remind_hours)))
     retired_patterns = list(RETIRED_RUNNERS) + (args.retired_runner or [])
     if args.runner_page:
         found.update(runner_findings(args.runner_page, runner_fetch, args.stale_runner_hours, retired_patterns))
@@ -1442,7 +1467,8 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
         found.update(self_found)
 
     new = [dict(v, key=k) for k, v in found.items() if k not in previous_active]
-    cleared = [dict(v, key=k) for k, v in previous_active.items() if k not in found]
+    # A quiet_clear finding repeats another one (the red-head reminder), whose own clear already says so.
+    cleared = [dict(v, key=k) for k, v in previous_active.items() if k not in found and not v.get("quiet_clear")]
     if not state.get("initialized"):
         cleared = []  # first run: everything is "new", nothing has "cleared"
     report = render_report(now, prs, found, branches, branches_at, errors,
@@ -1540,6 +1566,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="an offline runner this long counts as a leftover registration")
     p.add_argument("--stuck-hours", type=float, default=3.0, help="checks running this long alert")
     p.add_argument("--idle-hours", type=float, default=24.0, help="a ready PR untouched this long alerts")
+    p.add_argument("--red-remind-hours", type=float, default=6.0,
+                   help="a head still red this long alerts again, then once a day (0 = off)")
     p.add_argument("--branch-hours", type=float, default=1.0, help="merged-branch scan interval (0 = off)")
     p.add_argument("--upstream-hours", type=float, default=6.0,
                    help="upstream drift scan interval: forks vs OpenMANET, firmware vs OpenWrt 24.10 (0 = off)")
