@@ -38,7 +38,7 @@ def _runs(queued):
 
 
 def routes(*, enabled=True, wf_state="active", draft=False, pr_age=120, checks=0, statuses=0,
-           run_age=30, perms=None, queued=()) -> dict:
+           run_age=30, perms=None, queued=(), same_commit=()) -> dict:
     pull = {"number": 9, "draft": draft, "created_at": ts(pr_age), "updated_at": ts(pr_age),
             "head": {"sha": SHA}}
     return {
@@ -53,6 +53,10 @@ def routes(*, enabled=True, wf_state="active", draft=False, pr_age=120, checks=0
              "event": event, "head_sha": head}
             for i, (age, _, event, head) in enumerate(_runs(queued))]},
         **{f"{BASE}/actions/runs/{i}/jobs?per_page=1": {"total_count": jobs} for i, (_, jobs, *_rest) in enumerate(queued)},
+        # Other runs on the same commit, as (name, age); none by default.
+        **{f"{BASE}/actions/runs?head_sha={h}&per_page=20": {"workflow_runs": [
+            {"id": 100 + j, "name": name, "created_at": ts(age)} for j, (name, age) in enumerate(same_commit)]}
+           for h in (SHA, "b" * 40)},
     }
 
 
@@ -98,6 +102,13 @@ class CheckRepoTest(unittest.TestCase):
         # Held push or schedule runs, and current-head PR runs, still count.
         self.assertEqual(kinds(routes(checks=2, queued=[(240, 0, "push", "b" * 40)])), ["runs-held"])
         self.assertEqual(kinds(routes(checks=2, queued=[(240, 0, "pull_request", SHA)])), ["runs-held"])
+
+    def test_held_run_replaced_by_a_newer_run_of_its_workflow_is_ignored(self):
+        # packages #42: a frozen re-run stayed queued after a fresh dispatch built the same commit.
+        self.assertEqual(kinds(routes(checks=2, queued=[(240, 0)], same_commit=[("PR Gate", 30)])), [])
+        # An older run, or a different workflow, on the same commit doesn't replace it.
+        self.assertEqual(kinds(routes(checks=2, queued=[(240, 0)], same_commit=[("PR Gate", 300)])), ["runs-held"])
+        self.assertEqual(kinds(routes(checks=2, queued=[(240, 0)], same_commit=[("Docs", 30)])), ["runs-held"])
 
     def test_queued_run_waiting_for_a_runner_is_not_held(self):
         self.assertEqual(kinds(routes(checks=2, queued=[(120, 3)])), [])
