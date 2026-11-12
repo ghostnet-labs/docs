@@ -422,6 +422,14 @@ class FixOnceTest(unittest.TestCase):
         self.assertIn("enable button", item["text"])
         self.assertIn("/actions/runs/77", item["text"])
         self.assertIn(key, b, "the key must not change as the run ages, or it re-alerts every cycle")
+        self.assertIn("https://github.com/ghostnet-labs/luci/settings/actions", item["text"])
+
+    def test_no_checks_alert_links_actions_page_and_settings(self):
+        found = cw.guard_findings(FakeGitHub(repo_routes(checks=[])), "luci", NOW)
+        item = next(v for k, v in found.items() if "pr-no-checks" in k)
+        self.assertEqual(item["url"], "https://github.com/ghostnet-labs/luci/pull/9")
+        self.assertIn("https://github.com/ghostnet-labs/luci/actions ", item["text"])
+        self.assertIn("https://github.com/ghostnet-labs/luci/settings/actions", item["text"])
 
     def page(self, *runners):
         return {"alerts": [{"level": "crit", "text": "Offline runners: " + ", ".join(r["name"] for r in runners)}],

@@ -341,10 +341,15 @@ def guard_findings(gh, repo: str, now: datetime) -> dict[str, dict]:
         text = f"{ORG}/{repo} {f['kind']}: {f['detail']}"
         if f.get("pr"):
             url = f"https://github.com/{ORG}/{repo}/pull/{f['pr']}"
+            if f["kind"] == "pr-no-checks":
+                text += (f"; if no PR in this repo gets checks, GitHub stopped creating runs: click the fork "
+                         f"banner at https://github.com/{ORG}/{repo}/actions or set 'Allow all actions' at "
+                         f"https://github.com/{ORG}/{repo}/settings/actions")
         elif f["kind"] == "runs-held":
             url = f"https://github.com/{ORG}/{repo}/actions"
             text += ("; GitHub is holding the runs, not a runner shortage. Open the Actions tab and click "
-                     "the enable button on the fork banner (ci-watch has no admin token to do it). Runs: "
+                     "the enable button on the fork banner (ci-watch has no admin token to do it). No banner? "
+                     f"Set 'Allow all actions' at https://github.com/{ORG}/{repo}/settings/actions. Runs: "
                      + " ".join(f.get("runs") or []))
         elif f["kind"] == "workflow-off":
             url, how = enable_link(repo, f.get("state", ""), f.get("path", ""))
