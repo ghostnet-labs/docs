@@ -945,6 +945,31 @@ def behind_by(gh, repo: str, base: str, head: str) -> int:
     return int(gh.get(f"/repos/{repo}/compare/{quoted}?per_page=1").get("ahead_by", 0))
 
 
+UPSTREAM_WALK = 30  # upstream commits checked one by one when the repo is no longer in the fork network
+
+
+def behind_upstream(gh, repo: str, branch: str, upstream: str, up_branch: str) -> tuple[int | None, bool]:
+    """Commits on upstream's branch that repo lacks. The cross-repo compare only works while repo is
+    still a GitHub fork of upstream; a repo detached from the fork network (to stop GitHub's fork
+    Actions hold) falls back to walking upstream's newest commits until one is found in repo.
+    Returns (behind, forked): behind is None when none of the newest UPSTREAM_WALK commits are in
+    repo; forked says whether the cross-repo compare (and its compare page) still works."""
+    owner, name = upstream.split("/")
+    try:
+        return behind_by(gh, repo, branch, f"{owner}:{name}:{up_branch}"), True
+    except RuntimeError:
+        pass
+    commits = gh.get(f"/repos/{upstream}/commits?sha={urllib.parse.quote(up_branch, safe='')}"
+                     f"&per_page={UPSTREAM_WALK}")
+    for i, c in enumerate(commits[:UPSTREAM_WALK]):
+        try:
+            gh.get(f"/repos/{repo}/commits/{c['sha']}")
+        except RuntimeError:
+            continue
+        return i, False
+    return None, False
+
+
 def repo_file(gh, repo: str, path: str, ref: str) -> str | None:
     """A file's text on ref, or None when it does not exist there."""
     try:
@@ -982,8 +1007,17 @@ def upstream_drift(gh, repos: list[str]) -> tuple[list[dict], dict[str, dict]]:
         upstream, branch = UPSTREAMS[repo]
         owner, name = upstream.split("/")
         head = f"{owner}:{name}:{branch}"
-        add(repo, f"{ORG}/{repo} {branch}", f"{upstream} {branch}", behind_by(gh, f"{ORG}/{repo}", branch, head),
-            f"https://github.com/{ORG}/{repo}/compare/{branch}...{head}")
+        behind, forked = behind_upstream(gh, f"{ORG}/{repo}", branch, upstream, branch)
+        url = (f"https://github.com/{ORG}/{repo}/compare/{branch}...{head}" if forked
+               else f"https://github.com/{upstream}/commits/{branch}")
+        if behind is None:
+            behind_text = f"over {UPSTREAM_WALK} commits behind {upstream} {branch}"
+            rows.append({"what": f"{ORG}/{repo} {branch}", "upstream": f"{upstream} {branch}", "behind": None,
+                         "url": url, "note": behind_text})
+            found["upstream:" + repo] = {"level": "warn", "url": url,
+                                         "text": f"upstream: {ORG}/{repo} {branch} is {behind_text}"}
+            continue
+        add(repo, f"{ORG}/{repo} {branch}", f"{upstream} {branch}", behind, url)
 
     if "firmware" not in repos:
         return rows, found

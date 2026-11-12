@@ -47,7 +47,11 @@ was rewritten and has nothing in common with OpenMANET's. `setup` is not a
 fork. The report's "Upstream drift" table lists every comparison with a link
 to the commits. A drift warning stays open until someone opens the sync PR and
 it merges. The script only reports drift; it never opens a sync PR, because
-merging upstream changes needs a person to resolve conflicts. The scan costs
+merging upstream changes needs a person to resolve conflicts. A repo detached
+from the OpenMANET fork network (to stop GitHub's fork Actions hold) loses the
+cross-repo compare, so the scan falls back to walking upstream's newest 30
+commits until it finds one the repo has; past 30 it warns "over 30 commits
+behind" and links upstream's commit list. The scan costs
 about 15 API calls. If it fails, the report keeps the previous scan's results
 and the failure does not count as a GitHub outage.
 

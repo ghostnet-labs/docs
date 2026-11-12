@@ -866,6 +866,30 @@ class UpstreamTest(unittest.TestCase):
         self.assertEqual(rows[0]["behind"], 0)
         self.assertEqual(found, {})
 
+    def detached(self, present_at):
+        """packages detached from the fork network: the cross-repo compare 404s, and upstream's
+        newest commits are looked up one by one; present_at is the first one ours has."""
+        shas = [f"{i:040x}" for i in range(1, 41)]
+        r = {"/repos/OpenMANET/packages/commits?sha=24.10&per_page=30": [{"sha": x} for x in shas]}
+        if present_at is not None:
+            r[f"/repos/ghostnet-labs/packages/commits/{shas[present_at]}"] = {"sha": shas[present_at]}
+        return cw.upstream_drift(FakeGitHub(r), ["packages"])
+
+    def test_detached_repo_counts_upstream_commits_it_lacks(self):
+        rows, found = self.detached(3)
+        self.assertEqual(rows[0]["behind"], 3)
+        self.assertIn("3 commits behind OpenMANET/packages 24.10", found["upstream:packages"]["text"])
+        self.assertEqual(found["upstream:packages"]["url"], "https://github.com/OpenMANET/packages/commits/24.10")
+
+    def test_detached_repo_in_sync_is_quiet(self):
+        rows, found = self.detached(0)
+        self.assertEqual((rows[0]["behind"], found), (0, {}))
+
+    def test_detached_repo_far_behind_still_warns(self):
+        rows, found = self.detached(None)
+        self.assertIsNone(rows[0]["behind"])
+        self.assertIn("over 30 commits behind", found["upstream:packages"]["text"])
+
     def test_docs_and_setup_are_not_compared(self):
         rows, found = cw.upstream_drift(FakeGitHub({}), ["docs", "setup"])
         self.assertEqual((rows, found), ([], {}))
