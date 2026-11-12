@@ -62,6 +62,26 @@ ORG = sr.ORG
 HELD = timedelta(minutes=15)
 
 
+def _superseded(gh, full: str, run: dict, created: datetime) -> bool:
+    """A newer run of the same workflow on the same commit replaced this one. packages #42's
+    frozen 02:30Z re-run (GitHub refuses to cancel a re-run that never queued) kept this alert
+    crit after a fresh dispatch of the same workflow was already building that commit."""
+    sha = run.get("head_sha")
+    if not sha:
+        return False
+    same = (lambda r: r.get("workflow_id") == run["workflow_id"]) if run.get("workflow_id") else (
+        lambda r: r.get("name") == run.get("name"))
+    try:
+        others = gh.get(f"{full}/actions/runs?head_sha={sha}&per_page=20").get("workflow_runs", [])
+    except RuntimeError:
+        return False  # can't tell, so keep alerting
+    for other in others:
+        when = sr.parse_ts(other.get("created_at"))
+        if other.get("id") != run.get("id") and same(other) and when is not None and when > created:
+            return True
+    return False
+
+
 def check_repo(gh, repo: str, now: datetime, grace: timedelta, stale: timedelta,
                held: timedelta = HELD) -> list[dict]:
     """Return findings for one repo. `gh` needs only a .get(path) method."""
@@ -121,7 +141,8 @@ def check_repo(gh, repo: str, now: datetime, grace: timedelta, stale: timedelta,
         if run.get("event") in sr.PR_EVENTS and run.get("head_sha") not in heads:
             continue
         if gh.get(f"{full}/actions/runs/{run['id']}/jobs?per_page=1").get("total_count", 0) == 0:
-            stuck.append((created, run))
+            if not _superseded(gh, full, run, created):
+                stuck.append((created, run))
     if stuck:
         stuck.sort(key=lambda x: x[0])
         oldest = int((now - stuck[0][0]).total_seconds() // 60)

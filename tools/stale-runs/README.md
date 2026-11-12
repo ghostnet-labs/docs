@@ -102,7 +102,7 @@ exists because luci's workflows were off for four days (2026-10-30 to
 | `workflow-off` | a workflow is `disabled_fork`, `disabled_inactivity` or `disabled_manually` |
 | `pr-no-checks` | a ready PR head has no check runs or statuses after 20 minutes |
 | `runs-stale` | open PRs exist but the newest run is older than 3 hours |
-| `runs-held` | a run queued 15+ min (`--held-minutes`) that GitHub has given no jobs: GitHub is holding it (fork enable banner), not waiting for a runner. PR runs on a commit that is no longer an open PR's head are ignored (old heads and closed PRs have nothing waiting on them) |
+| `runs-held` | a run queued 15+ min (`--held-minutes`) that GitHub has given no jobs: GitHub is holding it (fork enable banner), not waiting for a runner. PR runs on a commit that is no longer an open PR's head are ignored (old heads and closed PRs have nothing waiting on them), and so is a run that a newer run of the same workflow on the same commit replaced (GitHub refuses to cancel a frozen re-run) |
 
 Exit 1 means a finding, so a LaunchAgent or any watchdog can page on it:
 
