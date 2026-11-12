@@ -45,8 +45,11 @@ class FakeGitHub:
         pass
 
 
-def check(name, status="completed", conclusion="success", run_id=1, started=30):
-    return {"name": name, "status": status, "conclusion": conclusion, "id": run_id, "started_at": ts(started)}
+def check(name, status="completed", conclusion="success", run_id=1, started=30, completed=None):
+    run = {"name": name, "status": status, "conclusion": conclusion, "id": run_id, "started_at": ts(started)}
+    if completed is not None:
+        run["completed_at"] = ts(completed)
+    return run
 
 
 def repo_routes(repo="luci", prs=None, checks=None, statuses=None, merge="clean", auto_merge=True,
@@ -206,6 +209,40 @@ class RunOnceTest(unittest.TestCase):
         _, report, batch = cw.run_once(FakeGitHub(repo_routes(merge="behind", auto_merge=False)), args(), NOW, {})
         self.assertEqual(batch["new"], [])
         self.assertIn("green, behind base", report)
+
+    def test_red_head_reminds_after_six_hours_then_daily(self):
+        def red(failed_min):
+            return FakeGitHub(repo_routes(checks=[check("Build", conclusion="failure", started=failed_min + 20,
+                                                        completed=failed_min)]))
+        state, _, batch = cw.run_once(red(60), args(), NOW, {})
+        self.assertEqual([n["key"].split(":")[0] for n in batch["new"]], ["red"])
+        # 6 h after the failure with no new push: one reminder, naming the branch and auto-merge.
+        state, _, batch = cw.run_once(red(6 * 60), args(), NOW, state)
+        self.assertEqual(len(batch["new"]), 1)
+        self.assertIn("ghostnet-labs/luci #9 still red after 6.0h with no new push", batch["new"][0]["text"])
+        self.assertIn("auto-merge on", batch["new"][0]["text"])
+        self.assertIn("branch claude/x", batch["new"][0]["text"])
+        self.assertEqual(batch["new"][0]["level"], "crit")
+        # Same day: nothing new.
+        state, _, batch = cw.run_once(red(12 * 60), args(), NOW, state)
+        self.assertEqual((batch["new"], batch["cleared"]), ([], []))
+        # A day later: another reminder, and the old one does not read as "cleared".
+        state, _, batch = cw.run_once(red(30 * 60), args(), NOW, state)
+        self.assertEqual(len(batch["new"]), 1)
+        self.assertIn("still red after 30.0h", batch["new"][0]["text"])
+        self.assertEqual(batch["cleared"], [])
+        # Fixed: the red alert clears once; the reminder clears quietly.
+        _, _, batch = cw.run_once(FakeGitHub(repo_routes()), args(), NOW, state)
+        self.assertEqual([c["key"].split(":")[0] for c in batch["cleared"]], ["red"])
+
+    def test_red_reminder_off_with_zero(self):
+        gh = FakeGitHub(repo_routes(checks=[check("Build", conclusion="failure", completed=48 * 60)]))
+        _, _, batch = cw.run_once(gh, args(red_remind_hours=0), NOW, {})
+        self.assertFalse(any(n["key"].startswith("red-stale:") for n in batch["new"]))
+
+    def test_red_minutes_from_commit_status(self):
+        s = cw.summarize_checks([], [{"context": "buf", "state": "failure", "updated_at": ts(90)}], NOW)
+        self.assertEqual(s["red_minutes"], 90)
 
     def test_stuck_checks_warn(self):
         slow = [check("Build", status="in_progress", conclusion=None, started=200)]
