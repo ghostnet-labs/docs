@@ -1063,6 +1063,59 @@ class ProfileDriftTest(unittest.TestCase):
         self.assertEqual(state2["profiles"]["scan_iso"], state["profiles"]["scan_iso"])
 
 
+PIN_OLD = "ea86ea3986ca93b882b720b05ea5c21b7fbaa152"
+PIN_NEW = "a" * 40
+SWEEP_PINNED = GATE_PINNED.replace("gate:", "merge:")
+
+
+class PolicyPinDriftTest(unittest.TestCase):
+    def routes(self, pinned_policy="old policy", changed_minutes=120) -> dict:
+        docs = "/repos/ghostnet-labs/docs"
+        return {
+            f"{docs}/contents/project/scripts/merge_policy.py?ref=main": b64("new policy"),
+            f"{docs}/contents/project/scripts/merge_policy.py?ref={PIN_OLD}": b64(pinned_policy),
+            f"{docs}/commits?path=project%2Fscripts%2Fmerge_policy.py&sha=main&per_page=1": [
+                {"sha": PIN_NEW, "commit": {"committer": {"date": ts(changed_minutes)}}}],
+        }
+
+    def workflows(self):
+        return {cw.GATE_WORKFLOW: GATE_PINNED, cw.SWEEP_WORKFLOW: SWEEP_PINNED}
+
+    def test_pin_matching_docs_main_is_quiet(self):
+        found = cw.policy_pin_drift(FakeGitHub(self.routes(pinned_policy="new policy")), "packages", "24.10",
+                                    self.workflows(), NOW, {})
+        self.assertEqual(found, {})
+
+    def test_recent_change_not_rolled_out_is_warn(self):
+        found = cw.policy_pin_drift(FakeGitHub(self.routes()), "packages", "24.10", self.workflows(), NOW, {})
+        self.assertEqual(set(found), {"policy-pin:packages:manet-merge-gate.yml",
+                                      "policy-pin:packages:manet-auto-merge.yml"})
+        self.assertTrue(all(f["level"] == "warn" for f in found.values()))
+
+    def test_change_older_than_a_day_is_crit_with_link(self):
+        found = cw.policy_pin_drift(FakeGitHub(self.routes(changed_minutes=30 * 60)), "packages", "24.10",
+                                    self.workflows(), NOW, {})
+        item = found["policy-pin:packages:manet-auto-merge.yml"]
+        self.assertEqual(item["level"], "crit")
+        self.assertIn("ea86ea3", item["text"])
+        self.assertIn(PIN_NEW[:7], item["text"])
+        self.assertEqual(item["url"], "https://github.com/ghostnet-labs/packages/blob/24.10/"
+                                      ".github/workflows/manet-auto-merge.yml")
+
+    def test_unpinned_workflow_is_skipped(self):
+        found = cw.policy_pin_drift(FakeGitHub(self.routes()), "packages", "24.10",
+                                    {cw.GATE_WORKFLOW: "jobs: {}\n"}, NOW, {})
+        self.assertEqual(found, {})
+
+    def test_profile_drift_reports_it_when_given_now(self):
+        routes = ProfileDriftTest().routes(["boards/ekh-bcm2710/**", "package/kernel/**"])
+        routes.update(self.routes(changed_minutes=30 * 60))
+        local = {"firmware": profile((WF + "build-pr-bcm2710.yml", ["boards/ekh-bcm2710/**", "package/kernel/**"]))}
+        found = cw.profile_drift(FakeGitHub(routes), ["firmware"], local, now=NOW)
+        self.assertEqual(found["policy-pin:firmware:manet-merge-gate.yml"]["level"], "crit")
+        self.assertNotIn("policy-pin:firmware:manet-merge-gate.yml", cw.profile_drift(FakeGitHub(routes), ["firmware"], local))
+
+
 if __name__ == "__main__":
     unittest.main()
 

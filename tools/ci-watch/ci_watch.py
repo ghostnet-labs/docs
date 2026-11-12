@@ -1168,12 +1168,53 @@ def repo_workflows(gh, repo: str, ref: str) -> dict[str, str]:
     return out
 
 
-def profile_drift(gh, repos: list[str], local: dict | None = None) -> dict[str, dict]:
+POLICY_PATH = "project/scripts/merge_policy.py"
+SWEEP_WORKFLOW = ".github/workflows/manet-auto-merge.yml"
+# A merge_policy.py change on docs main is "rolled out" only once each repo's gate
+# and sweep pin a docs commit that has it. docs #165 (re-run cancelled checks) sat
+# unused for days because no repo's pin moved. Give a rollout this long, then crit.
+POLICY_PIN_LAG = timedelta(hours=24)
+
+
+def policy_pin_drift(gh, repo: str, branch: str, workflows: dict[str, str], now: datetime,
+                     cache: dict) -> dict[str, dict]:
+    """Findings for a repo whose gate or sweep runs a merge_policy.py that differs from docs main."""
+    docs = f"{ORG}/docs"
+    if "main" not in cache:
+        cache["main"] = repo_file(gh, docs, POLICY_PATH, "main")
+        latest = gh.get(f"/repos/{docs}/commits?path={urllib.parse.quote(POLICY_PATH, safe='')}&sha=main&per_page=1")
+        cache["latest"] = latest[0]["sha"] if latest else ""
+        cache["changed_at"] = sr.parse_ts(latest[0]["commit"]["committer"]["date"]) if latest else None
+    found: dict[str, dict] = {}
+    for path in (GATE_WORKFLOW, SWEEP_WORKFLOW):
+        pin = GATE_PIN.search(workflows.get(path, ""))
+        if not pin or cache["main"] is None:
+            continue
+        sha = pin.group(1)
+        if sha not in cache:
+            cache[sha] = repo_file(gh, docs, POLICY_PATH, sha)
+        if cache[sha] == cache["main"]:
+            continue
+        changed_at = cache["changed_at"]
+        late = changed_at is None or now - changed_at >= POLICY_PIN_LAG
+        age = "" if changed_at is None else f", changed {ts(changed_at)}"
+        name = path.rsplit("/", 1)[-1]
+        found[f"policy-pin:{repo}:{name}"] = {
+            "level": "crit" if late else "warn", "repo": repo,
+            "url": f"https://github.com/{ORG}/{repo}/blob/{branch}/{path}",
+            "text": (f"merge policy: {repo} {name} pins docs {sha[:7]}, whose merge_policy.py is not docs main's "
+                     f"(latest change {cache['latest'][:7]}{age}); bump its docs pin to docs main")}
+    return found
+
+
+def profile_drift(gh, repos: list[str], local: dict | None = None,
+                  now: datetime | None = None) -> dict[str, dict]:
     """Findings for each repo whose workflows disagree with the profile its gate uses or with docs main."""
     if local is None:
         local = json.loads(PROFILE_FILE.read_text(encoding="utf-8"))
     found: dict[str, dict] = {}
     pinned_cache: dict[str, dict] = {}
+    policy_cache: dict = {}
     for repo in repos:
         if repo not in local:
             continue
@@ -1183,6 +1224,8 @@ def profile_drift(gh, repos: list[str], local: dict | None = None) -> dict[str, 
             workflows = repo_workflows(gh, full, branch)
         except RuntimeError:
             continue  # unreadable this time (the PR scan reports read errors); try again next interval
+        if now is not None:
+            found.update(policy_pin_drift(gh, repo, branch, workflows, now, policy_cache))
         sources = [("docs main", local[repo], f"https://github.com/{ORG}/docs/blob/main/{PROFILE_PATH}")]
         pin = GATE_PIN.search(workflows.get(GATE_WORKFLOW, ""))
         if pin:
@@ -1439,7 +1482,7 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
     last_prof = sr.parse_ts(profiles.get("scan_iso"))
     if profile_hours > 0 and (last_prof is None or now - last_prof >= timedelta(hours=profile_hours)):
         try:
-            profiles = {"scan_iso": now.isoformat(), "found": profile_drift(gh, repos)}
+            profiles = {"scan_iso": now.isoformat(), "found": profile_drift(gh, repos, now=now)}
         except (RuntimeError, OSError, ValueError) as err:
             # Keep the last scan's findings and try again next interval, like the upstream scan.
             profiles = dict(profiles, scan_iso=now.isoformat(), error=f"{ts(now)}: {str(err)[:200]}")
