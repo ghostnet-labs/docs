@@ -422,6 +422,14 @@ class FixOnceTest(unittest.TestCase):
         self.assertIn("enable button", item["text"])
         self.assertIn("/actions/runs/77", item["text"])
         self.assertIn(key, b, "the key must not change as the run ages, or it re-alerts every cycle")
+        self.assertIn("https://github.com/ghostnet-labs/luci/settings/actions", item["text"])
+
+    def test_no_checks_alert_links_actions_page_and_settings(self):
+        found = cw.guard_findings(FakeGitHub(repo_routes(checks=[])), "luci", NOW)
+        item = next(v for k, v in found.items() if "pr-no-checks" in k)
+        self.assertEqual(item["url"], "https://github.com/ghostnet-labs/luci/pull/9")
+        self.assertIn("https://github.com/ghostnet-labs/luci/actions ", item["text"])
+        self.assertIn("https://github.com/ghostnet-labs/luci/settings/actions", item["text"])
 
     def page(self, *runners):
         return {"alerts": [{"level": "crit", "text": "Offline runners: " + ", ".join(r["name"] for r in runners)}],
@@ -858,6 +866,30 @@ class UpstreamTest(unittest.TestCase):
         self.assertEqual(rows[0]["behind"], 0)
         self.assertEqual(found, {})
 
+    def detached(self, present_at):
+        """packages detached from the fork network: the cross-repo compare 404s, and upstream's
+        newest commits are looked up one by one; present_at is the first one ours has."""
+        shas = [f"{i:040x}" for i in range(1, 41)]
+        r = {"/repos/OpenMANET/packages/commits?sha=24.10&per_page=30": [{"sha": x} for x in shas]}
+        if present_at is not None:
+            r[f"/repos/ghostnet-labs/packages/commits/{shas[present_at]}"] = {"sha": shas[present_at]}
+        return cw.upstream_drift(FakeGitHub(r), ["packages"])
+
+    def test_detached_repo_counts_upstream_commits_it_lacks(self):
+        rows, found = self.detached(3)
+        self.assertEqual(rows[0]["behind"], 3)
+        self.assertIn("3 commits behind OpenMANET/packages 24.10", found["upstream:packages"]["text"])
+        self.assertEqual(found["upstream:packages"]["url"], "https://github.com/OpenMANET/packages/commits/24.10")
+
+    def test_detached_repo_in_sync_is_quiet(self):
+        rows, found = self.detached(0)
+        self.assertEqual((rows[0]["behind"], found), (0, {}))
+
+    def test_detached_repo_far_behind_still_warns(self):
+        rows, found = self.detached(None)
+        self.assertIsNone(rows[0]["behind"])
+        self.assertIn("over 30 commits behind", found["upstream:packages"]["text"])
+
     def test_docs_and_setup_are_not_compared(self):
         rows, found = cw.upstream_drift(FakeGitHub({}), ["docs", "setup"])
         self.assertEqual((rows, found), ([], {}))
@@ -1061,6 +1093,59 @@ class ProfileDriftTest(unittest.TestCase):
         # An hour later the scan is not repeated.
         state2, _, _ = cw.run_once(gh, args(profile_hours=6, repos="luci"), NOW + timedelta(hours=1), state)
         self.assertEqual(state2["profiles"]["scan_iso"], state["profiles"]["scan_iso"])
+
+
+PIN_OLD = "ea86ea3986ca93b882b720b05ea5c21b7fbaa152"
+PIN_NEW = "a" * 40
+SWEEP_PINNED = GATE_PINNED.replace("gate:", "merge:")
+
+
+class PolicyPinDriftTest(unittest.TestCase):
+    def routes(self, pinned_policy="old policy", changed_minutes=120) -> dict:
+        docs = "/repos/ghostnet-labs/docs"
+        return {
+            f"{docs}/contents/project/scripts/merge_policy.py?ref=main": b64("new policy"),
+            f"{docs}/contents/project/scripts/merge_policy.py?ref={PIN_OLD}": b64(pinned_policy),
+            f"{docs}/commits?path=project%2Fscripts%2Fmerge_policy.py&sha=main&per_page=1": [
+                {"sha": PIN_NEW, "commit": {"committer": {"date": ts(changed_minutes)}}}],
+        }
+
+    def workflows(self):
+        return {cw.GATE_WORKFLOW: GATE_PINNED, cw.SWEEP_WORKFLOW: SWEEP_PINNED}
+
+    def test_pin_matching_docs_main_is_quiet(self):
+        found = cw.policy_pin_drift(FakeGitHub(self.routes(pinned_policy="new policy")), "packages", "24.10",
+                                    self.workflows(), NOW, {})
+        self.assertEqual(found, {})
+
+    def test_recent_change_not_rolled_out_is_warn(self):
+        found = cw.policy_pin_drift(FakeGitHub(self.routes()), "packages", "24.10", self.workflows(), NOW, {})
+        self.assertEqual(set(found), {"policy-pin:packages:manet-merge-gate.yml",
+                                      "policy-pin:packages:manet-auto-merge.yml"})
+        self.assertTrue(all(f["level"] == "warn" for f in found.values()))
+
+    def test_change_older_than_a_day_is_crit_with_link(self):
+        found = cw.policy_pin_drift(FakeGitHub(self.routes(changed_minutes=30 * 60)), "packages", "24.10",
+                                    self.workflows(), NOW, {})
+        item = found["policy-pin:packages:manet-auto-merge.yml"]
+        self.assertEqual(item["level"], "crit")
+        self.assertIn("ea86ea3", item["text"])
+        self.assertIn(PIN_NEW[:7], item["text"])
+        self.assertEqual(item["url"], "https://github.com/ghostnet-labs/packages/blob/24.10/"
+                                      ".github/workflows/manet-auto-merge.yml")
+
+    def test_unpinned_workflow_is_skipped(self):
+        found = cw.policy_pin_drift(FakeGitHub(self.routes()), "packages", "24.10",
+                                    {cw.GATE_WORKFLOW: "jobs: {}\n"}, NOW, {})
+        self.assertEqual(found, {})
+
+    def test_profile_drift_reports_it_when_given_now(self):
+        routes = ProfileDriftTest().routes(["boards/ekh-bcm2710/**", "package/kernel/**"])
+        routes.update(self.routes(changed_minutes=30 * 60))
+        local = {"firmware": profile((WF + "build-pr-bcm2710.yml", ["boards/ekh-bcm2710/**", "package/kernel/**"]))}
+        found = cw.profile_drift(FakeGitHub(routes), ["firmware"], local, now=NOW)
+        self.assertEqual(found["policy-pin:firmware:manet-merge-gate.yml"]["level"], "crit")
+        self.assertNotIn("policy-pin:firmware:manet-merge-gate.yml", cw.profile_drift(FakeGitHub(routes), ["firmware"], local))
 
 
 if __name__ == "__main__":

@@ -341,10 +341,15 @@ def guard_findings(gh, repo: str, now: datetime) -> dict[str, dict]:
         text = f"{ORG}/{repo} {f['kind']}: {f['detail']}"
         if f.get("pr"):
             url = f"https://github.com/{ORG}/{repo}/pull/{f['pr']}"
+            if f["kind"] == "pr-no-checks":
+                text += (f"; if no PR in this repo gets checks, GitHub stopped creating runs: click the fork "
+                         f"banner at https://github.com/{ORG}/{repo}/actions or set 'Allow all actions' at "
+                         f"https://github.com/{ORG}/{repo}/settings/actions")
         elif f["kind"] == "runs-held":
             url = f"https://github.com/{ORG}/{repo}/actions"
             text += ("; GitHub is holding the runs, not a runner shortage. Open the Actions tab and click "
-                     "the enable button on the fork banner (ci-watch has no admin token to do it). Runs: "
+                     "the enable button on the fork banner (ci-watch has no admin token to do it). No banner? "
+                     f"Set 'Allow all actions' at https://github.com/{ORG}/{repo}/settings/actions. Runs: "
                      + " ".join(f.get("runs") or []))
         elif f["kind"] == "workflow-off":
             url, how = enable_link(repo, f.get("state", ""), f.get("path", ""))
@@ -940,6 +945,31 @@ def behind_by(gh, repo: str, base: str, head: str) -> int:
     return int(gh.get(f"/repos/{repo}/compare/{quoted}?per_page=1").get("ahead_by", 0))
 
 
+UPSTREAM_WALK = 30  # upstream commits checked one by one when the repo is no longer in the fork network
+
+
+def behind_upstream(gh, repo: str, branch: str, upstream: str, up_branch: str) -> tuple[int | None, bool]:
+    """Commits on upstream's branch that repo lacks. The cross-repo compare only works while repo is
+    still a GitHub fork of upstream; a repo detached from the fork network (to stop GitHub's fork
+    Actions hold) falls back to walking upstream's newest commits until one is found in repo.
+    Returns (behind, forked): behind is None when none of the newest UPSTREAM_WALK commits are in
+    repo; forked says whether the cross-repo compare (and its compare page) still works."""
+    owner, name = upstream.split("/")
+    try:
+        return behind_by(gh, repo, branch, f"{owner}:{name}:{up_branch}"), True
+    except RuntimeError:
+        pass
+    commits = gh.get(f"/repos/{upstream}/commits?sha={urllib.parse.quote(up_branch, safe='')}"
+                     f"&per_page={UPSTREAM_WALK}")
+    for i, c in enumerate(commits[:UPSTREAM_WALK]):
+        try:
+            gh.get(f"/repos/{repo}/commits/{c['sha']}")
+        except RuntimeError:
+            continue
+        return i, False
+    return None, False
+
+
 def repo_file(gh, repo: str, path: str, ref: str) -> str | None:
     """A file's text on ref, or None when it does not exist there."""
     try:
@@ -977,8 +1007,17 @@ def upstream_drift(gh, repos: list[str]) -> tuple[list[dict], dict[str, dict]]:
         upstream, branch = UPSTREAMS[repo]
         owner, name = upstream.split("/")
         head = f"{owner}:{name}:{branch}"
-        add(repo, f"{ORG}/{repo} {branch}", f"{upstream} {branch}", behind_by(gh, f"{ORG}/{repo}", branch, head),
-            f"https://github.com/{ORG}/{repo}/compare/{branch}...{head}")
+        behind, forked = behind_upstream(gh, f"{ORG}/{repo}", branch, upstream, branch)
+        url = (f"https://github.com/{ORG}/{repo}/compare/{branch}...{head}" if forked
+               else f"https://github.com/{upstream}/commits/{branch}")
+        if behind is None:
+            behind_text = f"over {UPSTREAM_WALK} commits behind {upstream} {branch}"
+            rows.append({"what": f"{ORG}/{repo} {branch}", "upstream": f"{upstream} {branch}", "behind": None,
+                         "url": url, "note": behind_text})
+            found["upstream:" + repo] = {"level": "warn", "url": url,
+                                         "text": f"upstream: {ORG}/{repo} {branch} is {behind_text}"}
+            continue
+        add(repo, f"{ORG}/{repo} {branch}", f"{upstream} {branch}", behind, url)
 
     if "firmware" not in repos:
         return rows, found
@@ -1168,12 +1207,53 @@ def repo_workflows(gh, repo: str, ref: str) -> dict[str, str]:
     return out
 
 
-def profile_drift(gh, repos: list[str], local: dict | None = None) -> dict[str, dict]:
+POLICY_PATH = "project/scripts/merge_policy.py"
+SWEEP_WORKFLOW = ".github/workflows/manet-auto-merge.yml"
+# A merge_policy.py change on docs main is "rolled out" only once each repo's gate
+# and sweep pin a docs commit that has it. docs #165 (re-run cancelled checks) sat
+# unused for days because no repo's pin moved. Give a rollout this long, then crit.
+POLICY_PIN_LAG = timedelta(hours=24)
+
+
+def policy_pin_drift(gh, repo: str, branch: str, workflows: dict[str, str], now: datetime,
+                     cache: dict) -> dict[str, dict]:
+    """Findings for a repo whose gate or sweep runs a merge_policy.py that differs from docs main."""
+    docs = f"{ORG}/docs"
+    if "main" not in cache:
+        cache["main"] = repo_file(gh, docs, POLICY_PATH, "main")
+        latest = gh.get(f"/repos/{docs}/commits?path={urllib.parse.quote(POLICY_PATH, safe='')}&sha=main&per_page=1")
+        cache["latest"] = latest[0]["sha"] if latest else ""
+        cache["changed_at"] = sr.parse_ts(latest[0]["commit"]["committer"]["date"]) if latest else None
+    found: dict[str, dict] = {}
+    for path in (GATE_WORKFLOW, SWEEP_WORKFLOW):
+        pin = GATE_PIN.search(workflows.get(path, ""))
+        if not pin or cache["main"] is None:
+            continue
+        sha = pin.group(1)
+        if sha not in cache:
+            cache[sha] = repo_file(gh, docs, POLICY_PATH, sha)
+        if cache[sha] == cache["main"]:
+            continue
+        changed_at = cache["changed_at"]
+        late = changed_at is None or now - changed_at >= POLICY_PIN_LAG
+        age = "" if changed_at is None else f", changed {ts(changed_at)}"
+        name = path.rsplit("/", 1)[-1]
+        found[f"policy-pin:{repo}:{name}"] = {
+            "level": "crit" if late else "warn", "repo": repo,
+            "url": f"https://github.com/{ORG}/{repo}/blob/{branch}/{path}",
+            "text": (f"merge policy: {repo} {name} pins docs {sha[:7]}, whose merge_policy.py is not docs main's "
+                     f"(latest change {cache['latest'][:7]}{age}); bump its docs pin to docs main")}
+    return found
+
+
+def profile_drift(gh, repos: list[str], local: dict | None = None,
+                  now: datetime | None = None) -> dict[str, dict]:
     """Findings for each repo whose workflows disagree with the profile its gate uses or with docs main."""
     if local is None:
         local = json.loads(PROFILE_FILE.read_text(encoding="utf-8"))
     found: dict[str, dict] = {}
     pinned_cache: dict[str, dict] = {}
+    policy_cache: dict = {}
     for repo in repos:
         if repo not in local:
             continue
@@ -1183,6 +1263,8 @@ def profile_drift(gh, repos: list[str], local: dict | None = None) -> dict[str, 
             workflows = repo_workflows(gh, full, branch)
         except RuntimeError:
             continue  # unreadable this time (the PR scan reports read errors); try again next interval
+        if now is not None:
+            found.update(policy_pin_drift(gh, repo, branch, workflows, now, policy_cache))
         sources = [("docs main", local[repo], f"https://github.com/{ORG}/docs/blob/main/{PROFILE_PATH}")]
         pin = GATE_PIN.search(workflows.get(GATE_WORKFLOW, ""))
         if pin:
@@ -1439,7 +1521,7 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
     last_prof = sr.parse_ts(profiles.get("scan_iso"))
     if profile_hours > 0 and (last_prof is None or now - last_prof >= timedelta(hours=profile_hours)):
         try:
-            profiles = {"scan_iso": now.isoformat(), "found": profile_drift(gh, repos)}
+            profiles = {"scan_iso": now.isoformat(), "found": profile_drift(gh, repos, now=now)}
         except (RuntimeError, OSError, ValueError) as err:
             # Keep the last scan's findings and try again next interval, like the upstream scan.
             profiles = dict(profiles, scan_iso=now.isoformat(), error=f"{ts(now)}: {str(err)[:200]}")
