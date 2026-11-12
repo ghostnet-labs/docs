@@ -38,6 +38,7 @@ or writing.
 | Branches (hourly) | lists branches already in the default branch that no open PR uses; never deletes | report only |
 | Upstream drift (every 6 h, `--upstream-hours`) | an OpenMANET fork is behind its upstream branch; the firmware's OpenWrt base (`.openwrt-upstream`) is behind `openwrt-24.10`, or that file is missing; a firmware feed pin (openwrt packages, routing, telephony, OpenMANET luci, our packages) is behind its branch | warn |
 | Merge profile drift (every 6 h, `--profile-hours`) | a repo's PR workflow `on.pull_request.paths` disagrees with `project/scripts/merge_profiles.json`, checked against both the copy its merge gate pins and docs main. A path in the profile that the workflow ignores, a listed workflow that is gone, or one narrowed to some paths makes the gate wait for a run that never starts (crit); a workflow path or PR workflow the profile lacks means the gate does not wait for it (warn). Links the workflow file | crit / warn |
+| Merge policy pin (same 6 h scan) | a repo's merge gate or merge sweep (`manet-auto-merge.yml`) pins a docs commit whose `project/scripts/merge_policy.py` differs from docs main, so a merged policy fix is not running there. Warn while the latest policy change on main is under 24 h old, crit after that. Links the workflow file; the fix is bumping its docs pin | warn / crit |
 
 Upstream drift compares each fork with its upstream: `firmware` and
 `packages` with OpenMANET `24.10`, `luci` with `mm-23.05`, `openmanetd`,
