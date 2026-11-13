@@ -302,6 +302,22 @@ def pr_findings(prs: list[dict], now: datetime, stuck: timedelta, idle: timedelt
     return found
 
 
+LOG_URL = f"https://github.com/{ORG}/docs/tree/main/tools/ci-watch#install-on-the-mac-studio"
+# Runs are 10 minutes apart; a longer gap means ci-watch was crashing or not loaded.
+DOWN_GAP = timedelta(minutes=30)
+
+
+def downtime_events(state: dict, now: datetime) -> list[dict]:
+    """One crit when ci-watch comes back after DOWN_GAP or more with no finished run. Nothing
+    alerted in that gap (11-13: 12 hours of crashes on the Studio's Python 3.9 went unseen)."""
+    last = sr.parse_ts(state.get("at")) if state.get("initialized") else None
+    if last is None or now - last < DOWN_GAP:
+        return []
+    return [{"level": "crit", "url": LOG_URL,
+             "text": f"ci-watch was not running for {minutes(now - last)} (last finished run {ts(last)}), "
+                     "so nothing alerted in that time. Its log on the Studio is ~/Library/Logs/ci-watch.log"}]
+
+
 def pr_events(gh, previous: dict[str, dict], prs: list[dict], scanned: set[str],
               first_run: bool = False) -> list[dict]:
     """One-off news since the last run: opened, merged, closed, recovered."""
@@ -893,14 +909,30 @@ def host_memory(previous: dict | None = None, warn_gib: float = 4.0, crit_gib: f
     return {f"host:memory:{severity}": {"level": severity, "url": MEMORY_URL, "text": text}}
 
 
-def update_self(now: datetime, previous: dict, git=None, root: str | None = None) -> tuple[dict, dict]:
+def starts(root: str) -> tuple[bool, str]:
+    """Whether the ci_watch.py in root imports and parses its arguments on this Python."""
+    try:
+        r = subprocess.run([sys.executable, str(Path(root) / "tools" / "ci-watch" / "ci_watch.py"), "--help"],
+                           capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError) as err:
+        return False, str(err)
+    return r.returncode == 0, (r.stderr or r.stdout).strip()[-300:]
+
+
+def update_self(now: datetime, previous: dict, git=None, root: str | None = None,
+                check=None) -> tuple[dict, dict]:
     """Pull this clone hourly so new checks reach the Studio without anyone typing a line.
 
     Only fast-forwards a clean checkout of protected main; anything else is an
-    alert, never a forced update. The next run uses the new code.
+    alert, never a forced update. The next run uses the new code, so the new
+    code is started once first: if it fails to import on this Mac's Python
+    (11-13: a 3.10-only annotation crashed every run for 12 hours, and a
+    crashed ci-watch can't pull the fix), the clone goes back to the commit
+    that worked and the failure is a crit. The next hourly pull tries again.
     """
     git = git or run_git
     root = root or str(REPO_ROOT)
+    check = check or starts
     last = sr.parse_ts(previous.get("at"))
     if last and now - last < SELF_UPDATE_EVERY:
         return previous.get("found", {}), previous
@@ -913,10 +945,23 @@ def update_self(now: datetime, previous: dict, git=None, root: str | None = None
         found["self-update"] = {"level": "warn", "url": f"https://github.com/{ORG}/docs",
                                 "text": "ci-watch cannot update itself: its clone has local edits"}
     else:
+        _, before = git(root, "rev-parse", "HEAD")
         code, out = git(root, "pull", "--ff-only", "--quiet")
+        _, after = git(root, "rev-parse", "HEAD")
+        before, after = before.strip(), after.strip()
         if code != 0:
             found["self-update"] = {"level": "warn", "url": f"https://github.com/{ORG}/docs/commits/main",
                                     "text": f"ci-watch cannot update itself: git pull failed: {out[:160]}"}
+        elif before and after != before:
+            ok, err = check(root)
+            if not ok:
+                git(root, "reset", "--keep", before)
+                py = platform.python_version()
+                found["self-update"] = {
+                    "level": "crit", "url": f"https://github.com/{ORG}/docs/commit/{after}",
+                    "text": f"ci-watch did not update: docs {after[:7]} fails to start on this Mac's Python {py}, "
+                            f"so it stayed on {before[:7]} and retries hourly. Make it run on Python {py}: "
+                            f"{err[-160:]}"}
     return found, {"at": now.isoformat(), "found": found}
 
 
@@ -1352,6 +1397,7 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
 
     previous_prs = state.get("prs", {})
     events = pr_events(gh, previous_prs, prs, scanned, first_run=not state.get("initialized"))
+    events.extend(downtime_events(state, now))
     for key, old in previous_prs.items():  # unread repo: keep its PRs for next time
         if old.get("repo") not in scanned:
             prs.append(old)

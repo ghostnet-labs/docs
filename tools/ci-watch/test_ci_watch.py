@@ -767,7 +767,8 @@ class FixOnceTest(unittest.TestCase):
             return 0, ""
         found, st = cw.update_self(NOW, {}, git=git, root="/r")
         self.assertEqual(found, {})
-        self.assertEqual(calls, [("status", "--porcelain", "--untracked-files=no"), ("pull", "--ff-only", "--quiet")])
+        self.assertEqual(calls, [("status", "--porcelain", "--untracked-files=no"), ("rev-parse", "HEAD"),
+                                 ("pull", "--ff-only", "--quiet"), ("rev-parse", "HEAD")])
         calls.clear()
         cw.update_self(NOW + timedelta(minutes=10), st, git=git, root="/r")
         self.assertEqual(calls, [])  # not again within the hour
@@ -787,6 +788,60 @@ class FixOnceTest(unittest.TestCase):
             return (0, "") if a[0] == "status" else (1, "fatal: Not possible to fast-forward")
         found, _ = cw.update_self(NOW, {}, git=git, root="/r")
         self.assertIn("git pull failed", found["self-update"]["text"])
+
+
+    def pulled(self, starts_ok):
+        """A pull that moves HEAD from aaa to bbb; returns (found, git calls, check calls)."""
+        calls, checks, head = [], [], ["a" * 40]
+
+        def git(path, *a):
+            calls.append(a)
+            if a[0] == "pull":
+                head[0] = "b" * 40
+            return 0, head[0] + "\n" if a[0] == "rev-parse" else ""
+
+        def check(root):
+            checks.append(root)
+            return starts_ok, "TypeError: unsupported operand type(s) for |"
+        found, _ = cw.update_self(NOW, {}, git=git, root="/r", check=check)
+        return found, calls, checks
+
+    def test_self_update_keeps_new_code_that_starts(self):
+        found, calls, checks = self.pulled(True)
+        self.assertEqual((found, checks), ({}, ["/r"]))
+        self.assertNotIn("reset", [c[0] for c in calls])
+
+    def test_self_update_rolls_back_code_that_fails_to_start(self):
+        # 11-13: a 3.10-only annotation crashed every run on the Studio's Python 3.9 for 12 hours.
+        found, calls, _ = self.pulled(False)
+        self.assertEqual(calls[-1], ("reset", "--keep", "a" * 40))
+        item = found["self-update"]
+        self.assertEqual(item["level"], "crit")
+        self.assertIn("bbbbbbb fails to start", item["text"])
+        self.assertIn("stayed on aaaaaaa", item["text"])
+        self.assertIn("unsupported operand", item["text"])
+
+    def test_self_update_without_new_commits_skips_the_start_check(self):
+        checks = []
+        cw.update_self(NOW, {}, git=lambda p, *a: (0, "c" * 40 if a[0] == "rev-parse" else ""), root="/r",
+                       check=lambda r: checks.append(r) or (True, ""))
+        self.assertEqual(checks, [])
+
+    def test_this_ci_watch_starts(self):
+        ok, err = cw.starts(str(cw.REPO_ROOT))
+        self.assertTrue(ok, err)
+
+
+class DowntimeTest(unittest.TestCase):
+    def test_gap_of_30_minutes_or_more_is_one_crit(self):
+        (ev,) = cw.downtime_events({"initialized": True, "at": (NOW - timedelta(hours=12)).isoformat()}, NOW)
+        self.assertEqual(ev["level"], "crit")
+        self.assertIn("not running for 12.0h", ev["text"])
+
+    def test_normal_interval_and_first_run_are_quiet(self):
+        self.assertEqual(cw.downtime_events({"initialized": True, "at": (NOW - timedelta(minutes=10)).isoformat()},
+                                            NOW), [])
+        self.assertEqual(cw.downtime_events({}, NOW), [])
 
 
 class MainTest(unittest.TestCase):

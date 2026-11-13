@@ -33,7 +33,7 @@ or writing.
 | ci-k3s idle restart (`--idle-restart-status`) | `~/.config/ci-k3s-idle-restart/status.json` says ok is false or is over 2 h old while `com.ghostnet.ci-k3s-idle-restart` is loaded (crit); one info line while the agent is not loaded, and one per restart with its reason | crit / info |
 | Host memory (`--swap-warn-gb`, `--swap-crit-gb`) | read with `sysctl` and `top` on the Mac running ci-watch, no page needed: 4 GiB of swap in use or memory pressure "warn" (warn); 8 GiB, a swap file 90% full once over 2 GiB, or pressure "critical" (crit). Names the four biggest processes and the idle restart's last action; holds until swap is under 75 % of the threshold (3 GiB) so it does not flap. `--swap-warn-gb 0` turns it off, `--swap-crit-gb 0` stops swap alone making it crit. See [Host memory](#host-memory) | warn / crit |
 | Scheduled runs | a scheduled workflow's latest finished run failed or timed out. No PR shows these runs, so they could stay red for days (the firmware full build ended red on 2026-11-05 only because its report step needs issues, which the repo has turned off). Clears on the next green run. Links the run | warn; crit for the firmware full build, which blocks releases |
-| Itself | GitHub unreadable three runs in a row; the hourly self-update failed | crit / warn |
+| Itself | GitHub unreadable three runs in a row (crit); the hourly self-update failed (warn); a pulled commit that fails to start on this Mac's Python, which is rolled back (crit); ci-watch coming back after 30+ minutes with no finished run, e.g. after crashing (crit, one banner and #87 comment). setup's hourly guard job also comments a CRIT on #87 when its "Updated" line is 30+ minutes old | crit / warn |
 | News | a PR opened, merged, closed, or no longer red | info |
 | Branches (hourly) | lists branches already in the default branch that no open PR uses; never deletes | report only |
 | Upstream drift (every 6 h, `--upstream-hours`) | an OpenMANET fork is behind its upstream branch; the firmware's OpenWrt base (`.openwrt-upstream`) is behind `openwrt-24.10`, or that file is missing; a firmware feed pin (openwrt packages, routing, telephony, OpenMANET luci, our packages) is behind its branch | warn |
@@ -141,7 +141,14 @@ tail -f ~/Library/Logs/ci-watch.log
 
 It updates itself: once an hour it fast-forwards its own clone from main (only
 a clean checkout; local edits or a failed pull are an alert, never a forced
-update), and the next run uses the new code. `--no-self-update` turns that off.
+update), and the next run uses the new code. The new code is started once
+(`ci_watch.py --help`) with the Mac's own Python first; if that fails, the clone
+goes back to the commit that worked and the failure is a crit until main starts
+again. `--no-self-update` turns that off.
+
+The Studio runs the stock Python 3.9, so ci-watch, stale-runs and the merge
+policy must stay 3.9-compatible. "Studio Python 3.9 compatibility" in
+`project-record-checks.yml` runs their tests on 3.9 for every PR.
 Stop with `launchctl unload ~/Library/LaunchAgents/com.ghostnet.ci-watch.plist`.
 
 ## Scheduled tasks it replaces
@@ -165,3 +172,5 @@ one-off follow-ups a thread sets for itself.
 ```sh
 python3 -m unittest discover -s tools/ci-watch -v
 ```
+
+CI also runs them on Python 3.9, the Studio's version.
