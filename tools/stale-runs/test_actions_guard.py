@@ -64,9 +64,38 @@ def kinds(r: dict) -> list[str]:
     return [f["kind"] for f in ag.check_repo(FakeGitHub(r), "luci", NOW, GRACE, STALE)]
 
 
+def forbidden_checks(r: dict, runs: int) -> dict:
+    """check-runs answers 403 (fine-grained token on a private repo); Actions runs stand in."""
+    r[f"{BASE}/commits/{SHA}/check-runs?per_page=1"] = RuntimeError(
+        "GET check-runs: HTTP 403: Resource not accessible by personal access token")
+    r[f"{BASE}/actions/runs?head_sha={SHA}&per_page=1"] = {
+        "total_count": runs, "workflow_runs": [{"id": 1, "name": "PR checks", "status": "completed",
+                                                "conclusion": "success"}][:runs]}
+    return r
+
+
 class CheckRepoTest(unittest.TestCase):
     def test_healthy_repo_has_no_findings(self):
         self.assertEqual(kinds(routes(checks=2)), [])
+
+    def test_check_runs_403_falls_back_to_actions_runs(self):
+        self.assertEqual(kinds(forbidden_checks(routes(), runs=1)), [])
+
+    def test_check_runs_403_with_no_runs_or_statuses_is_no_checks(self):
+        self.assertEqual(kinds(forbidden_checks(routes(), runs=0)), ["pr-no-checks"])
+
+    def test_check_runs_other_errors_propagate(self):
+        r = routes()
+        r[f"{BASE}/commits/{SHA}/check-runs?per_page=1"] = RuntimeError("GET x: HTTP 500: boom")
+        with self.assertRaises(RuntimeError):
+            kinds(r)
+
+    def test_run_as_check_maps_states(self):
+        done = ag.run_as_check({"id": 5, "name": "CI", "status": "completed", "conclusion": "failure",
+                                "run_started_at": "s", "updated_at": "u"})
+        self.assertEqual((done["status"], done["conclusion"], done["completed_at"]), ("completed", "failure", "u"))
+        queued = ag.run_as_check({"id": 6, "name": "CI", "status": "queued", "created_at": "c"})
+        self.assertEqual((queued["status"], queued["conclusion"], queued["started_at"]), ("in_progress", None, "c"))
 
     def test_actions_off(self):
         self.assertIn("actions-off", kinds(routes(enabled=False, checks=2)))
