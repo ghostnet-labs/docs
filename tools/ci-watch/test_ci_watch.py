@@ -158,6 +158,72 @@ class PRStatusTest(unittest.TestCase):
         self.assertEqual(self.row(checks=red, mergeable_state="dirty"), "red")
 
 
+FORBIDDEN = RuntimeError("GET check-runs: HTTP 403: Resource not accessible by personal access token")
+
+
+def private_repo_routes(workflow_runs, repo="setup", **kw) -> dict:
+    """A repo whose check-runs API answers 403 (fine-grained token, private repo)."""
+    r = repo_routes(repo=repo, **kw)
+    base = f"/repos/ghostnet-labs/{repo}"
+    for per_page in (1, 100):
+        r[f"{base}/commits/{SHA}/check-runs?per_page={per_page}"] = FORBIDDEN
+        r[f"{base}/actions/runs?head_sha={SHA}&per_page={per_page}"] = {
+            "total_count": len(workflow_runs), "workflow_runs": workflow_runs[:per_page]}
+    return r
+
+
+def wf_run(name, status="completed", conclusion="success", run_id=1, started=30):
+    return {"id": run_id, "name": name, "status": status, "conclusion": conclusion if status == "completed" else None,
+            "run_started_at": ts(started), "created_at": ts(started + 1), "updated_at": ts(started - 5)}
+
+
+class ChecksForbiddenTest(unittest.TestCase):
+    """setup is private and the token is fine-grained: check-runs is 403, Actions runs stand in."""
+
+    def run_three(self, routes):
+        state: dict = {}
+        for i in range(3):
+            state, report, batch = cw.run_once(FakeGitHub(routes), args(repos="setup"),
+                                               NOW + timedelta(minutes=10 * i), state)
+        return state, report, batch, state["active"]
+
+    def test_green_actions_runs_are_green_with_one_info_and_no_crit(self):
+        state, _, _, active = self.run_three(private_repo_routes([wf_run("PR checks"), wf_run("CodeQL", run_id=2)]))
+        self.assertEqual(state["error_runs"], 0)
+        self.assertNotIn("watch:api-error", active)
+        self.assertEqual(state["prs"]["setup#9"]["category"], "green")
+        info = [k for k, v in active.items() if v["level"] == "info"]
+        self.assertEqual(info, ["checks-fallback:setup"])
+        self.assertNotIn("pr-no-checks", " ".join(active))
+
+    def test_failed_and_running_runs_map_to_red_and_running(self):
+        _, _, batch, active = self.run_three(private_repo_routes([wf_run("PR checks", conclusion="failure")]))
+        self.assertTrue(any("is red: PR checks" in v["text"] for v in active.values()))
+        prs = cw.collect_prs(FakeGitHub(private_repo_routes([wf_run("PR checks", status="in_progress")])),
+                             "setup", NOW)
+        self.assertEqual(prs[0]["checks"]["state"], "running")
+        self.assertEqual(prs[0]["checks_from"], "actions runs")
+
+    def test_rerun_replaces_failure_and_statuses_still_count(self):
+        runs = [wf_run("PR checks", conclusion="failure", run_id=1), wf_run("PR checks", run_id=2)]
+        bad = [{"context": "ci/external", "state": "failure", "updated_at": ts(3)}]
+        prs = cw.collect_prs(FakeGitHub(private_repo_routes(runs)), "setup", NOW)
+        self.assertEqual(prs[0]["checks"]["state"], "green")
+        prs = cw.collect_prs(FakeGitHub(private_repo_routes(runs, statuses=bad)), "setup", NOW)
+        self.assertEqual(prs[0]["checks"]["red"], ["ci/external"])
+
+    def test_readable_repo_has_no_info(self):
+        state, _, _ = cw.run_once(FakeGitHub(repo_routes()), args(), NOW, {})
+        self.assertFalse(any(k.startswith("checks-fallback") for k in state["active"]))
+
+    def test_other_errors_still_count_toward_the_crit(self):
+        r = private_repo_routes([wf_run("PR checks")])
+        r[f"/repos/ghostnet-labs/setup/actions/runs?head_sha={SHA}&per_page=100"] = RuntimeError("GET x: HTTP 403: no")
+        state, _, _, active = self.run_three(r)
+        self.assertEqual(state["error_runs"], 3)
+        self.assertIn("watch:api-error", active)
+
+
 class RunOnceTest(unittest.TestCase):
     def test_first_run_reports_problems_but_no_events(self):
         gh = FakeGitHub(repo_routes(checks=[check("Manet merge gate", conclusion="failure")]))

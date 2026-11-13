@@ -15,6 +15,7 @@ or writing.
 |---|---|---|
 | Actions guard (`tools/stale-runs/actions_guard.py`) | Actions off, a disabled workflow, a ready PR with no checks after 20 min, no workflow run for 3 h while PRs are open | crit |
 | PR head checks | a check fails, times out or needs action on the current head | crit |
+| Check runs unreadable | the token gets 403 on a repo's check-runs API (fine-grained tokens have no Checks permission; setup is private). That repo's PR checks then come from its Actions runs plus commit statuses, mapped to the same pass / fail / running states, and one info line says so. It does not count as a GitHub read error | info |
 | Red reminder (`--red-remind-hours`, 6; 0 = off) | the head is still red that long after its first failure with no new push, then once more each day; names the branch (which thread owns it) and whether auto-merge is on. packages #44 sat red with auto-merge on for four days in November 2026 after its one alert scrolled away | crit |
 | Cancelled check | a check on the head was cancelled and nothing replaced it (often the "Handle passing PRs" sweep) | warn |
 | Merge state | a merge conflict; green with auto-merge on but behind its base | warn |
@@ -107,9 +108,14 @@ Make one fine-grained token for it (the Studio has no other GitHub token):
    **All repositories**.
    Fine-grained tokens can always read public repositories, so the upstream
    checks of OpenMANET and openwrt need nothing extra.
-3. Repository permissions, all **Read-only**: Actions, Checks, Commit
-   statuses, Contents, Pull requests. Plus **Issues: Read and write**, so it
-   can keep setup #87 up to date.
+3. Repository permissions, all **Read-only**: Actions, Commit statuses,
+   Contents, Metadata, Pull requests. Plus **Issues: Read and write**, so it
+   can keep setup #87 up to date. Organization permissions: **Self-hosted
+   runners: Read-only** (for the idle and starved runner checks).
+   Fine-grained tokens have no Checks permission, so the check-runs API
+   answers 403 on a private repo (setup). There ci-watch reads the head
+   commit's Actions runs and commit statuses instead, which is why Actions is
+   needed, and shows one info line for that repo.
 4. Generate it, copy it, and on the Mac Studio run:
 
 ```sh

@@ -235,7 +235,7 @@ def collect_prs(gh, repo: str, now: datetime) -> list[dict]:
         number = pull["number"]
         sha = pull["head"]["sha"]
         detail = gh.get(f"{full}/pulls/{number}")
-        runs = gh.get(f"{full}/commits/{sha}/check-runs?per_page=100").get("check_runs", [])
+        runs, _, fell_back = ag.head_checks(gh, full, sha)
         statuses = gh.get(f"{full}/commits/{sha}/status").get("statuses", [])
         row = {
             "repo": repo, "number": number, "title": pull.get("title", ""),
@@ -248,6 +248,7 @@ def collect_prs(gh, repo: str, now: datetime) -> list[dict]:
             "updated_at": pull.get("updated_at"),
             "depends_on": DEPENDS.findall(pull.get("body") or ""),
             "checks": summarize_checks(runs, statuses, now),
+            "checks_from": "actions runs" if fell_back else "check runs",
         }
         row["category"], row["status"], row["next"] = pr_status(row)
         rows.append(row)
@@ -345,6 +346,20 @@ def pr_events(gh, previous: dict[str, dict], prs: list[dict], scanned: set[str],
         elif detail.get("state") == "closed":
             events.append({"level": "info", "url": old["url"], "text": f"{ref} closed without merging"})
     return events
+
+
+def checks_fallback_findings(prs: list[dict]) -> dict[str, dict]:
+    """One INFO per repo whose PR checks came from workflow runs because the token
+    can't read check runs there (see actions_guard.head_checks). Not an error."""
+    found: dict[str, dict] = {}
+    for repo in sorted({p["repo"] for p in prs if p.get("checks_from") == "actions runs"}):
+        found[f"checks-fallback:{repo}"] = {
+            "level": "info", "repo": repo, "url": "https://github.com/settings/personal-access-tokens",
+            "text": f"{ORG}/{repo}: ci-watch's token can't read check runs here (fine-grained tokens have no "
+                    "Checks permission, which a private repo needs), so PR checks come from Actions runs and "
+                    "commit statuses instead. Checks posted by non-Actions apps are not seen. Needs "
+                    "Actions: Read-only on the token."}
+    return found
 
 
 # ---------------------------------------------------------------- other sources
@@ -1363,6 +1378,7 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
             errors.append(f"{repo}: {str(err)[:160]}")
     found.update(pr_findings(prs, now, timedelta(hours=args.stuck_hours), timedelta(hours=args.idle_hours),
                              timedelta(hours=args.red_remind_hours)))
+    found.update(checks_fallback_findings(prs))
     retired_patterns = list(RETIRED_RUNNERS) + (args.retired_runner or [])
     if args.runner_page:
         found.update(runner_findings(args.runner_page, runner_fetch, args.stale_runner_hours, retired_patterns))

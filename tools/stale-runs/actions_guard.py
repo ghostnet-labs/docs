@@ -82,6 +82,35 @@ def _superseded(gh, full: str, run: dict, created: datetime) -> bool:
     return False
 
 
+def run_as_check(run: dict) -> dict:
+    """A workflow run in the shape of a check run (name, status, conclusion, times)."""
+    done = run.get("status") == "completed"
+    return {"id": run.get("id"), "name": run.get("name") or run.get("path") or "?",
+            "status": "completed" if done else "in_progress", "conclusion": run.get("conclusion") if done else None,
+            "started_at": run.get("run_started_at") or run.get("created_at"),
+            "completed_at": run.get("updated_at") if done else None, "html_url": run.get("html_url")}
+
+
+def head_checks(gh, full: str, sha: str, per_page: int = 100) -> tuple[list[dict], int, bool]:
+    """(check runs, total count, fell back) for one commit.
+
+    Fine-grained tokens have no Checks permission, so on a private repo (setup)
+    the check-runs API answers 403 "Resource not accessible by personal access
+    token". Then the commit's workflow runs (Actions: Read-only) stand in, shaped
+    like check runs. They miss checks posted by non-Actions apps; commit statuses
+    are read separately and still count.
+    """
+    try:
+        page = gh.get(f"{full}/commits/{sha}/check-runs?per_page={per_page}")
+        return page.get("check_runs", []), page.get("total_count", 0), False
+    except RuntimeError as err:
+        if "HTTP 403" not in str(err):
+            raise
+    page = gh.get(f"{full}/actions/runs?head_sha={sha}&per_page={per_page}")
+    runs = [run_as_check(r) for r in page.get("workflow_runs", [])]
+    return runs, page.get("total_count", len(runs)), True
+
+
 def check_repo(gh, repo: str, now: datetime, grace: timedelta, stale: timedelta,
                held: timedelta = HELD) -> list[dict]:
     """Return findings for one repo. `gh` needs only a .get(path) method."""
@@ -118,7 +147,7 @@ def check_repo(gh, repo: str, now: datetime, grace: timedelta, stale: timedelta,
         age = now - max(created, updated)
         if age < grace:
             continue
-        checks = gh.get(f"{full}/commits/{sha}/check-runs?per_page=1").get("total_count", 0)
+        _, checks, _ = head_checks(gh, full, sha, per_page=1)
         if checks:
             continue
         statuses = gh.get(f"{full}/commits/{sha}/status").get("total_count", 0)
