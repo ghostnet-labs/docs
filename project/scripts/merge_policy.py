@@ -443,6 +443,12 @@ def handle(api, repo, number, profile, updater=None):
         if error.code not in (405, 409):
             raise
         print(f"PR {number}: GitHub refused the merge (HTTP {error.code}); left open")
+        # A sibling PR merged after this one went green (firmware #98, 2026-11-13): the
+        # profile allows "behind", but a branch rule can still refuse a branch that is.
+        # Merge the base in with the update token so checks re-run, instead of leaving a
+        # green PR stuck until someone pushes by hand.
+        if error.code == 405 and pr["mergeable_state"] == "behind":
+            update_behind(updater, repo, number, pr)
         return
     if not result.get("merged"):
         raise RuntimeError("GitHub did not merge the validated PR")

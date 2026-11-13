@@ -418,6 +418,24 @@ class AutoMergeTests(unittest.TestCase):
             api = FakeMergeAPI(merge_error=code)
             self.assertIn(f"HTTP {code}", self.handle(api))
 
+    def test_refused_merge_of_a_behind_claude_pr_updates_the_branch(self):
+        body = "x\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+        api = FakeMergeAPI(mergeable_state="behind", merge_error=405, body=body)
+        updater = FakeMergeAPI()
+        out = self.handle_with(api, updater, dict(self.profile, requireUpToDate=False))
+        self.assertIn("HTTP 405", out)
+        self.assertIn("merged the base into the branch", out)
+        self.assertEqual(updater.writes, [("PUT", "repos/o/r/pulls/7/update-branch")])
+
+    def test_refused_merge_without_update_token_or_when_not_behind_updates_nothing(self):
+        body = "Generated with [Claude Code]"
+        out = self.handle_with(FakeMergeAPI(mergeable_state="behind", merge_error=405, body=body), None,
+                               dict(self.profile, requireUpToDate=False))
+        self.assertIn("no UPDATE_TOKEN", out)
+        updater = FakeMergeAPI()
+        self.handle_with(FakeMergeAPI(mergeable_state="clean", merge_error=405, body=body), updater)
+        self.assertEqual(updater.writes, [])
+
     def test_other_merge_errors_still_fail(self):
         with self.assertRaises(urllib.error.HTTPError):
             self.handle(FakeMergeAPI(merge_error=500))
