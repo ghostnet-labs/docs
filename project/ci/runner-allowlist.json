@@ -378,7 +378,7 @@
         "hosted-cron",
         "hosted-runner"
       ],
-      "reason": "Holds the MANET_UPDATE_TOKEN PAT to open profile and pin PRs; stays on GitHub-hosted runners so the token never shares a pool with PR jobs (same reason as manet-auto-merge.yml). Cron is a 2-hourly catch for workflows added in other repos."
+      "reason": "Holds the MANET_UPDATE_TOKEN PAT to open profile and pin PRs; stays on GitHub-hosted runners so the token never shares a pool with PR jobs (same reason as manet-auto-merge.yml). Cron is a 4-hourly catch for workflows added in other repos."
     }
   ]
 }

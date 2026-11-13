@@ -8,7 +8,7 @@ on:
       - project/scripts/merge_policy.py
   # Catches a workflow added in another repo; the gate blocks its PR until this lands.
   schedule:
-    - cron: '41 */2 * * *'
+    - cron: '41 */4 * * *'
   workflow_dispatch:
 permissions:
   contents: read
