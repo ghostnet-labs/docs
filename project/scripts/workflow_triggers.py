@@ -4,6 +4,8 @@ Shared by the merge gate (merge_policy.py, which blocks a PR that adds or change
 workflow the profile does not cover) and ci-watch (which audits every repo every 6 hours).
 Standard library only, so the gate runner and the Mac need no PyYAML.
 """
+from __future__ import annotations
+
 import re
 
 GATE_WORKFLOW = ".github/workflows/manet-merge-gate.yml"
