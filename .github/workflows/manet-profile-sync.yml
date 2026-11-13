@@ -1,0 +1,32 @@
+name: Manet profile sync
+on:
+  # A profile or policy change on main may leave a repo's pinned docs commit behind.
+  push:
+    branches: [main]
+    paths:
+      - project/scripts/merge_profiles.json
+      - project/scripts/merge_policy.py
+  # Catches a workflow added in another repo; the gate blocks its PR until this lands.
+  schedule:
+    - cron: '41 */4 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: manet-profile-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    name: Sync merge profiles and pins
+    # Hosted on purpose: this job holds the org update token, so it must not share a runner pool with PR jobs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # Skips with exit 0 until the MANET_UPDATE_TOKEN secret exists.
+      - name: Open profile and pin PRs when workflows moved
+        env:
+          MANET_UPDATE_TOKEN: ${{ secrets.MANET_UPDATE_TOKEN }}
+        run: python3 project/scripts/profile_sync.py

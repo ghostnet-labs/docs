@@ -570,6 +570,8 @@ class ProfileBlockerTests(unittest.TestCase):
         out = self.blockers({wf: self.PR_WORKFLOW}, [{"filename": wf, "status": "added"}], [])
         self.assertEqual(len(out), 1)
         self.assertIn("Workflow profile: " + wf, out[0])
+        self.assertIn("sync_merge_profile.py r ", out[0])
+        self.assertIn('{"path": "' + wf + '", "paths": ["a/**"]}', out[0])
         self.assertTrue(terminal_blocker(out[0]))
 
     def test_workflow_paths_wider_than_profile_blocks(self):

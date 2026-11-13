@@ -11,7 +11,7 @@ import time
 import urllib.error
 import urllib.request
 
-from workflow_triggers import profile_gaps
+from workflow_triggers import pr_trigger, profile_gaps
 
 GATE = "Manet merge gate"
 AUTOMATION = "Handle passing PRs"
@@ -224,7 +224,12 @@ def profile_blockers(api, repo, sha, records, profile):
         data = api.call(f"repos/{repo}/contents/{path}?ref={sha}")
         workflows[path] = base64.b64decode(data["content"]).decode()
     gaps = profile_gaps(profile, workflows)
-    return [f"{PROFILE_BLOCKER}{path} {problem}; fix project/scripts/merge_profiles.json in ghostnet-labs/docs"
+    name = repo.split("/")[-1]
+    return [f"{PROFILE_BLOCKER}{path} {problem}. Fix: in a ghostnet-labs/docs checkout run "
+            f"`python3 project/scripts/sync_merge_profile.py {name} <this repo's .github/workflows dir>`, "
+            f"open the docs PR (https://github.com/ghostnet-labs/docs/compare), then bump this repo's "
+            f"manet-merge-gate.yml docs pin. Entry needed: "
+            + json.dumps({"path": path, "paths": pr_trigger(workflows[path])[1]})
             for path, (_, problem) in sorted(gaps.items()) if path in workflows]
 
 
