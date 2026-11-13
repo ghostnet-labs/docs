@@ -547,3 +547,45 @@ class GateLoopTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProfileBlockerTests(unittest.TestCase):
+    PR_WORKFLOW = "on:\n  pull_request:\n    paths:\n      - a/**\n"
+
+    class FakeAPI:
+        def __init__(self, files):
+            self.files = files
+
+        def call(self, path):
+            name = path.split("/contents/")[1].split("?")[0]
+            return {"content": base64.b64encode(self.files[name].encode()).decode()}
+
+    def blockers(self, workflows, records, profile_workflows):
+        from merge_policy import profile_blockers
+        return profile_blockers(self.FakeAPI(workflows), "o/r", "sha", records,
+                                {"workflows": profile_workflows})
+
+    def test_new_pull_request_workflow_missing_from_profile_blocks(self):
+        wf = ".github/workflows/new.yml"
+        out = self.blockers({wf: self.PR_WORKFLOW}, [{"filename": wf, "status": "added"}], [])
+        self.assertEqual(len(out), 1)
+        self.assertIn("Workflow profile: " + wf, out[0])
+        self.assertTrue(terminal_blocker(out[0]))
+
+    def test_workflow_paths_wider_than_profile_blocks(self):
+        wf = ".github/workflows/a.yml"
+        out = self.blockers({wf: self.PR_WORKFLOW}, [{"filename": wf, "status": "modified"}],
+                            [{"path": wf, "paths": ["b/**"]}])
+        self.assertEqual(len(out), 1)
+
+    def test_described_workflow_passes(self):
+        wf = ".github/workflows/a.yml"
+        self.assertEqual(self.blockers({wf: self.PR_WORKFLOW}, [{"filename": wf, "status": "modified"}],
+                                       [{"path": wf, "paths": ["a/**"]}]), [])
+
+    def test_untouched_removed_and_non_pr_workflows_are_ignored(self):
+        push = ".github/workflows/push.yml"
+        gone = ".github/workflows/gone.yml"
+        records = [{"filename": push, "status": "added"}, {"filename": gone, "status": "removed"},
+                   {"filename": "src/main.go", "status": "modified"}]
+        self.assertEqual(self.blockers({push: "on: push\n"}, records, []), [])
