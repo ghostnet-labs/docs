@@ -11,6 +11,8 @@ import time
 import urllib.error
 import urllib.request
 
+from workflow_triggers import profile_gaps
+
 GATE = "Manet merge gate"
 AUTOMATION = "Handle passing PRs"
 MAX_GATE_ATTEMPTS = 3
@@ -189,6 +191,7 @@ def snapshot(api, repo, number, profile):
     files.extend(f["previous_filename"] for f in records if "previous_filename" in f)
     runs = api.pages(f"repos/{repo}/actions/runs?head_sha={pr['head']['sha']}&event=pull_request", "workflow_runs")
     blockers = evaluate(profile, files, runs, pr["head"]["sha"], number)
+    blockers.extend(profile_blockers(api, repo, pr["head"]["sha"], records, profile))
     if needs_external_build(profile, files):
         blockers = [b for b in blockers if not b.startswith("Package changes need a current-head integration build")]
         blockers.extend(external_build_blockers(api, repo, pr, files, profile))
@@ -200,6 +203,29 @@ def snapshot(api, repo, number, profile):
     if status["statuses"] and status["state"] != "success":
         blockers.append("Commit status has not passed")
     return pr, blockers
+
+
+WORKFLOW_DIR = ".github/workflows/"
+PROFILE_BLOCKER = "Workflow profile: "
+
+
+def profile_blockers(api, repo, sha, records, profile):
+    """Block a PR that adds or changes a pull_request workflow the merge profile does not describe.
+
+    Without this the gate does not wait for that workflow, so the PR can merge with its tests
+    red or unfinished (openmanetd build-frontend.yml and packages board-tests.yml, 2026-11-13).
+    Only workflows the PR touches are checked, so an older gap never blocks unrelated PRs.
+    """
+    changed = sorted({r["filename"] for r in records
+                      if r["filename"].startswith(WORKFLOW_DIR) and r["filename"].endswith((".yml", ".yaml"))
+                      and r.get("status") != "removed" and "/" not in r["filename"][len(WORKFLOW_DIR):]})
+    workflows = {}
+    for path in changed:
+        data = api.call(f"repos/{repo}/contents/{path}?ref={sha}")
+        workflows[path] = base64.b64decode(data["content"]).decode()
+    gaps = profile_gaps(profile, workflows)
+    return [f"{PROFILE_BLOCKER}{path} {problem}; fix project/scripts/merge_profiles.json in ghostnet-labs/docs"
+            for path, (_, problem) in sorted(gaps.items()) if path in workflows]
 
 
 def cancelled_head_runs(runs, sha, number):
@@ -419,7 +445,7 @@ def handle(api, repo, number, profile, updater=None):
 
 
 def terminal_blocker(blocker):
-    return blocker.startswith("External integration") or any(
+    return blocker.startswith(("External integration", PROFILE_BLOCKER)) or any(
         "completed/" + outcome in blocker
         for outcome in ("failure", "cancelled", "timed_out", "action_required", "skipped", "startup_failure", "stale"))
 

@@ -156,7 +156,9 @@
       {
         "path": ".github/workflows/build-frontend.yml",
         "paths": [
-          "frontend/**"
+          "frontend/**",
+          "static/**",
+          ".github/workflows/build-frontend.yml"
         ]
       },
       {
@@ -268,6 +270,15 @@
           "lib/airspyone_host/**",
           "tests/decoder-replay/**",
           ".github/workflows/decoder-replay.yml"
+        ]
+      },
+      {
+        "path": ".github/workflows/board-tests.yml",
+        "paths": [
+          "boards/**",
+          "utils/*/tests/**",
+          "utils/*/files/**",
+          ".github/workflows/board-tests.yml"
         ]
       }
     ]
