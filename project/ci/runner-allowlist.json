@@ -369,6 +369,16 @@
         "job-timeout"
       ],
       "reason": "Vendored from openwrt/actions-shared-workflows in firmware #41 (GHO-48); called only through kernel.yml (pull_request and push to 24.10 on kernel paths). Hosted and untimed as upstream ships it; set timeout-minutes and move to [self-hosted, openwrt-build] with the Mac board-build move."
+    },
+    {
+      "repo": "docs",
+      "workflow": "manet-profile-sync.yml",
+      "job": "sync",
+      "rules": [
+        "hosted-cron",
+        "hosted-runner"
+      ],
+      "reason": "Holds the MANET_UPDATE_TOKEN PAT to open profile and pin PRs; stays on GitHub-hosted runners so the token never shares a pool with PR jobs (same reason as manet-auto-merge.yml). Cron is a 2-hourly catch for workflows added in other repos."
     }
   ]
 }

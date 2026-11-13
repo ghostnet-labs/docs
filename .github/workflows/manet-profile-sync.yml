@@ -18,8 +18,8 @@ concurrency:
 jobs:
   sync:
     name: Sync merge profiles and pins
-    # Ephemeral ARC pool (no PR code runs here: push to main, schedule, dispatch only).
-    runs-on: ghostnet-linux-arm64
+    # Hosted on purpose: this job holds the org update token, so it must not share a runner pool with PR jobs.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
