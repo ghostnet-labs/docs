@@ -36,3 +36,28 @@ jobs:
         run: |
           python -m unittest discover -s project/ci/tests -v
           python project/scripts/check_runners.py --repo docs
+
+  studio-python:
+    # ci-watch, stale-runs and the merge gate run on the Mac Studio's stock
+    # Python 3.9. On 11-13 a 3.10-only annotation in workflow_triggers.py
+    # crashed ci-watch on every run for 12 hours; this job fails such a PR.
+    name: Studio Python 3.9 compatibility
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'ghostnet-linux-arm64' || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python 3.9
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uv-venv"
+          "$RUNNER_TEMP/uv-venv/bin/pip" install --quiet uv==0.5.11
+          "$RUNNER_TEMP/uv-venv/bin/uv" python install 3.9
+          echo "PY39=$("$RUNNER_TEMP/uv-venv/bin/uv" python find 3.9)" >> "$GITHUB_ENV"
+      - name: ci-watch starts on Python 3.9
+        run: |
+          "$PY39" --version
+          "$PY39" tools/ci-watch/ci_watch.py --help > /dev/null
+      - name: ci-watch, stale-runs and merge policy tests on Python 3.9
+        run: |
+          "$PY39" -m unittest discover -s tools/ci-watch
+          "$PY39" -m unittest discover -s tools/stale-runs
+          "$PY39" -m unittest discover -s project/tests
