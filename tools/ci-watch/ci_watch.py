@@ -36,6 +36,8 @@ Each run (every 10 minutes from a LaunchAgent on the Mac Studio):
   8. This Mac's memory: swap in use (--swap-warn-gb 4 warn, --swap-crit-gb 8
      crit) or macOS memory pressure warn/critical, naming the biggest
      processes, so nobody has to open a dashboard to see the Studio swapping.
+     One non-VM process over --process-crit-gb (8) or grown more than
+     --process-growth-gb (4) within an hour is a crit of its own, naming it.
 
 A finding alerts once, when it first appears, and once more when it clears.
 If GitHub cannot be read three runs in a row, that is an alert too.
@@ -924,6 +926,75 @@ def host_memory(previous: dict | None = None, warn_gib: float = 4.0, crit_gib: f
     return {f"host:memory:{severity}": {"level": severity, "url": MEMORY_URL, "text": text}}
 
 
+# One process using this much (top's MEM: its memory footprint, swapped-out pages included) is a crit
+# of its own, so a leak gets its own line instead of hiding in the swap line: on 2026-11-14 MenuBarAgent
+# went from 16 GB at 08:47Z to 39 GB at 15:32Z and filled 20.1 of 21 GiB of swap. VMs (every Lima and
+# Docker VM shows as com.apple.Virtua) are sized on purpose and left to the swap line.
+PROCESS_TOP = 15                      # processes read per run; the tracked set never grows past this
+PROCESS_WINDOW = timedelta(hours=1)   # growth is measured over this long
+VM_PROCESS = re.compile(r"^(com\.apple\.Virtua|qemu|vfkit|krunkit|limactl)")
+MEM_FIELD = re.compile(r"^([\d.]+)([BKMGT]?)[+-]?$")
+
+
+def top_processes(run) -> list[tuple[str, str, float]]:
+    """(pid, command, bytes) of the biggest processes by memory footprint, as top shows them."""
+    lines = run("top", "-l", "1", "-o", "mem", "-n", str(PROCESS_TOP), "-stats", "pid,command,mem").splitlines()
+    head = next((i for i, ln in enumerate(lines) if ln.split()[:2] == ["PID", "COMMAND"]), None)
+    rows = []
+    for ln in lines[head + 1:] if head is not None else []:
+        parts = ln.split()
+        m = MEM_FIELD.match(parts[-1]) if len(parts) >= 3 else None
+        if m and parts[0].isdigit():
+            rows.append((parts[0], " ".join(parts[1:-1]), float(m.group(1)) * UNIT.get(m.group(2), 1)))
+    return rows
+
+
+def process_memory(track: dict, now: datetime, crit_gib: float = 8.0, growth_gib: float = 4.0,
+                   previous: dict | None = None, run=None) -> tuple[dict[str, dict], dict]:
+    """A crit for any one non-VM process over crit_gib, or grown more than growth_gib in the last hour.
+
+    track keeps each top process's samples for an hour, keyed by pid and command, so a
+    restarted process starts over. Returns (findings, new track). 0 turns either test off.
+    An active size alert holds until the process is under MEMORY_CLEAR_RATIO of crit_gib.
+    """
+    if crit_gib <= 0 and growth_gib <= 0:
+        return {}, {}
+    if run is None:
+        if platform.system() != "Darwin":
+            return {}, {}
+        run = run_cmd
+    previous = previous or {}
+    found: dict[str, dict] = {}
+    new_track: dict[str, list] = {}
+    for pid, command, size in top_processes(run):
+        if VM_PROCESS.match(command):
+            continue
+        key = f"{pid}:{command}"
+        samples = [(at, n) for at, n in track.get(key, [])
+                   if (t := sr.parse_ts(at)) is not None and now - t <= PROCESS_WINDOW]
+        samples.append((now.isoformat(), size))
+        new_track[key] = samples
+        oldest_at, oldest = samples[0]
+        grown = size - min(n for _, n in samples)
+        hours = (now - sr.parse_ts(oldest_at)).total_seconds() / 3600
+        rate = f"{(size - oldest) / GIB / hours:+.1f} GiB/h over the last {int(hours * 60)} min" if hours > 0 else ""
+        fkey = f"host:process:{command}"
+        limit = crit_gib * GIB * (MEMORY_CLEAR_RATIO if fkey in previous else 1)
+        big = crit_gib > 0 and size >= limit
+        growing = growth_gib > 0 and grown > growth_gib * GIB
+        if not (big or growing):
+            continue
+        why = [f"over {crit_gib:g} GiB"] if big else []
+        why += [f"grew {gib(grown)} within an hour"] if growing else []
+        found[fkey] = {
+            "level": "crit", "url": MEMORY_URL,
+            "text": f"Process {command} (pid {pid}) on this Mac uses {gib(size)}"
+                    + (f", {rate}" if rate else "") + f" ({', '.join(why)}). A process this big or growing "
+                    "this fast is usually a leak: quit or restart it (Activity Monitor > Memory) before it "
+                    "fills swap"}
+    return found, new_track
+
+
 def starts(root: str) -> tuple[bool, str]:
     """Whether the ci_watch.py in root imports and parses its arguments on this Python."""
     try:
@@ -1474,6 +1545,10 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
                                      loaded=getattr(args, "idle_restart_loaded", None)))
     found.update(host_memory(previous_active, getattr(args, "swap_warn_gb", 4.0), getattr(args, "swap_crit_gb", 8.0),
                              getattr(args, "idle_restart_status", IDLE_RESTART), run=getattr(args, "run", None)))
+    proc_found, proc_track = process_memory(state.get("processes", {}), now, getattr(args, "process_crit_gb", 8.0),
+                                            getattr(args, "process_growth_gb", 4.0), previous_active,
+                                            run=getattr(args, "run", None))
+    found.update(proc_found)
     self_update = state.get("self_update", {})
     if args.self_update:
         self_found, self_update = update_self(now, self_update, git=getattr(args, "git", None))
@@ -1491,7 +1566,7 @@ def run_once(gh, args, now: datetime, state: dict, runner_fetch=None) -> tuple[d
         "active": found, "branches": branches, "branches_at": branches_at,
         "branches_scan_iso": state.get("branches_scan_iso"), "upstream": upstream,
         "deploy": drift_state, "self_update": self_update, "profiles": profiles,
-        "idle_runners": idle_track,
+        "idle_runners": idle_track, "processes": proc_track,
         "prs": {f"{p['repo']}#{p['number']}": p for p in prs},
     }
     return new_state, report, {"new": new, "cleared": cleared, "events": events}
@@ -1568,6 +1643,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="warn when this Mac has this much swap in use or memory pressure is warn (0 = off)")
     p.add_argument("--swap-crit-gb", type=float, default=8.0,
                    help="crit at this much swap in use or memory pressure critical (0 = no crit from swap)")
+    p.add_argument("--process-crit-gb", type=float, default=8.0,
+                   help="crit when one non-VM process uses this much memory (0 = off)")
+    p.add_argument("--process-growth-gb", type=float, default=4.0,
+                   help="crit when one non-VM process grows by more than this within an hour (0 = off)")
     p.add_argument("--no-queue-check", dest="queue_check", action="store_false",
                    help="skip reading runners and queued jobs from GitHub (starved label, idle runner)")
     p.add_argument("--no-self-update", dest="self_update", action="store_false",

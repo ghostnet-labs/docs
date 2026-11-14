@@ -697,6 +697,69 @@ class FixOnceTest(unittest.TestCase):
             found = self.mem(level="2", idle=path)
         self.assertIn("Idle restart last said wait (jobs running)", found["host:memory:warn"]["text"])
 
+    @staticmethod
+    def top(*rows):
+        body = "".join(f"{pid:<6} {cmd:<16} {mem}\n" for pid, cmd, mem in rows)
+        return lambda *cmd: "Processes: 600 total\n\nPID    COMMAND          MEM\n" + body
+
+    def procs(self, track, rows, now=NOW, previous=None, crit=8.0, growth=4.0):
+        return cw.process_memory(track, now, crit, growth, previous, run=self.top(*rows))
+
+    def test_small_processes_and_vms_are_quiet(self):
+        found, track = self.procs({}, [("1", "com.apple.Virtua", "20G+"), ("2", "Safari", "900M"),
+                                       ("3", "Google Chrome He", "2100M")])
+        self.assertEqual(found, {})
+        self.assertEqual(sorted(track), ["2:Safari", "3:Google Chrome He"])
+
+    def test_process_over_8_gib_is_its_own_crit(self):
+        found, _ = self.procs({}, [("4242", "MenuBarAgent", "39G+")])
+        item = found["host:process:MenuBarAgent"]
+        self.assertEqual(item["level"], "crit")
+        self.assertIn("Process MenuBarAgent (pid 4242) on this Mac uses 39.0 GiB", item["text"])
+        self.assertIn("over 8 GiB", item["text"])
+
+    def test_growth_over_4_gib_in_an_hour_names_the_rate(self):
+        _, track = self.procs({}, [("7", "MenuBarAgent", "1024M")], now=NOW - timedelta(minutes=50))
+        found, track = self.procs(track, [("7", "MenuBarAgent", "6G")])
+        text = found["host:process:MenuBarAgent"]["text"]
+        self.assertIn("uses 6.0 GiB, +6.0 GiB/h over the last 50 min", text)
+        self.assertIn("grew 5.0 GiB within an hour", text)
+        self.assertNotIn("over 8 GiB", text)
+        self.assertEqual(len(track["7:MenuBarAgent"]), 2)
+
+    def test_slow_growth_and_old_samples_do_not_alert(self):
+        _, track = self.procs({}, [("7", "Xcode", "1G")], now=NOW - timedelta(minutes=70))
+        found, track = self.procs(track, [("7", "Xcode", "6G")])
+        self.assertEqual(found, {})  # the 70-minute-old sample has left the window
+        self.assertEqual(len(track["7:Xcode"]), 1)
+
+    def test_restarted_process_starts_over(self):
+        _, track = self.procs({}, [("7", "MenuBarAgent", "1G")], now=NOW - timedelta(minutes=30))
+        found, track = self.procs(track, [("8", "MenuBarAgent", "6G")])
+        self.assertEqual(found, {})
+        self.assertEqual(sorted(track), ["8:MenuBarAgent"])
+
+    def test_active_size_alert_holds_until_under_6_gib(self):
+        active = {"host:process:MenuBarAgent": {}}
+        self.assertIn("host:process:MenuBarAgent", self.procs({}, [("7", "MenuBarAgent", "7G")], previous=active)[0])
+        self.assertEqual(self.procs({}, [("7", "MenuBarAgent", "5G")], previous=active)[0], {})
+
+    def test_process_thresholds_zero_turn_it_off(self):
+        self.assertEqual(self.procs({}, [("7", "MenuBarAgent", "39G")], crit=0, growth=0), ({}, {}))
+        self.assertEqual(self.procs({}, [("7", "MenuBarAgent", "39G")], crit=0)[0], {})
+
+    def test_run_once_carries_process_samples_between_runs(self):
+        a = args(run=lambda *cmd: self.top(("7", "MenuBarAgent", "1G"))() if cmd[0] == "top" else "")
+        state, _, _ = cw.run_once(FakeGitHub(repo_routes()), a, NOW - timedelta(minutes=40), {})
+        a.run = lambda *cmd: self.top(("7", "MenuBarAgent", "7G"))() if cmd[0] == "top" else ""
+        state, _, batch = cw.run_once(FakeGitHub(repo_routes()), a, NOW, state)
+        self.assertTrue(any("MenuBarAgent" in n["text"] and "grew 6.0 GiB" in n["text"] for n in batch["new"]))
+        self.assertEqual(len(state["processes"]["7:MenuBarAgent"]), 2)
+
+    def test_process_flags_parse(self):
+        a = cw.parse_args(["--process-crit-gb", "12", "--process-growth-gb", "0"])
+        self.assertEqual((a.process_crit_gb, a.process_growth_gb), (12.0, 0.0))
+
     def test_swap_flags_parse(self):
         a = cw.parse_args(["--swap-warn-gb", "0", "--swap-crit-gb", "6"])
         self.assertEqual((a.swap_warn_gb, a.swap_crit_gb), (0.0, 6.0))
