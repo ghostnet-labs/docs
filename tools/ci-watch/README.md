@@ -32,6 +32,7 @@ or writing.
 | Deploy drift | a deployed docs clone (`~/ci-watch-src`, `~/runner-status-src`, `~/stale-runs-src`, or `--clone`) misses `tools/` changes on main for over an hour, so whatever updates it has stopped | warn |
 | Runner-status autodeploy (`--deploy-status`) | `~/.config/runner-status/deploy-status.json` says ok is false, names a commit that is not `~/runner-status-src`'s HEAD, or was last written over 30 min ago; links the runner-status history on main | warn |
 | ci-k3s idle restart (`--idle-restart-status`) | `~/.config/ci-k3s-idle-restart/status.json` says ok is false or is over 2 h old while `com.ghostnet.ci-k3s-idle-restart` is loaded (crit); one info line while the agent is not loaded, and one per restart with its reason | crit / info |
+| Process leak (`--process-crit-gb`, `--process-growth-gb`) | one non-VM process over 8 GiB, or grown more than 4 GiB within an hour; names it, its pid and GiB/h. See [Host memory](#host-memory) | crit |
 | Host memory (`--swap-warn-gb`, `--swap-crit-gb`) | read with `sysctl` and `top` on the Mac running ci-watch, no page needed: 4 GiB of swap in use or memory pressure "warn" (warn); 8 GiB, a swap file 90% full once over 2 GiB, or pressure "critical" (crit). Names the four biggest processes and the idle restart's last action; holds until swap is under 75 % of the threshold (3 GiB) so it does not flap. `--swap-warn-gb 0` turns it off, `--swap-crit-gb 0` stops swap alone making it crit. See [Host memory](#host-memory) | warn / crit |
 | Scheduled runs | a scheduled workflow's latest finished run failed or timed out. No PR shows these runs, so they could stay red for days (the firmware full build ended red on 2026-11-05 only because its report step needs issues, which the repo has turned off). Clears on the next green run. Links the run | warn; crit for the firmware full build, which blocks releases |
 | Itself | GitHub unreadable three runs in a row (crit); the hourly self-update failed (warn); a pulled commit that fails to start on this Mac's Python, which is rolled back (crit); ci-watch coming back after 30+ minutes with no finished run, e.g. after crashing (crit, one banner and #87 comment). setup's hourly guard job also comments a CRIT on #87 when its "Updated" line is 30+ minutes old | crit / warn |
@@ -78,6 +79,17 @@ issue, with the four biggest processes in the text (`VM` is any Lima or
 Docker VM). What to do, in order: let the ci-k3s idle restart run (it frees
 ci-k3s when ARC is idle), lower Docker Desktop's memory, quit idle apps.
 This replaces the runner page's swap alert, so it works with `--runner-page` off.
+
+A leak gets its own line. On 2026-11-14 MenuBarAgent grew from 16 GB at 08:47Z
+to 39 GB at 15:32Z and filled 20.1 of 21 GiB of swap, and the only sign was the
+swap line. Now each run reads the 15 biggest processes from `top` (MEM, which
+counts swapped-out pages) and raises a crit, `host:process:<name>`, for any
+one non-VM process over `--process-crit-gb` (8) or grown by more than
+`--process-growth-gb` (4) within the last hour. The alert names the process,
+its pid, its size and its growth rate. VMs (Lima, Docker, qemu) are sized on
+purpose and stay on the swap line. Samples are kept per pid for an hour, so a
+restarted process starts over. A size alert holds until the process is under
+75 % of the threshold. Either flag set to 0 turns that test off.
 
 ## Where alerts go
 
