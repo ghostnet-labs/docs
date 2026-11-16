@@ -41,6 +41,15 @@ runs. Each rule names a failure that already happened once:
                     let push runs use self-hosted runners, so they pass only when
                     every trigger is pull_request, push, schedule,
                     workflow_dispatch or merge_group.
+  hosted-image-latest
+                    A job's runs-on names ubuntu-latest (or macos-latest,
+                    windows-latest), including the hosted fallback inside a
+                    fork guard. GitHub moves -latest to a new OS release
+                    without a PR here: on 2026-11-16 ubuntu-latest became
+                    Ubuntu 26.04 and openmanetd's Browser e2e job broke
+                    because Playwright 1.56 could not install Chromium. Pin a
+                    version (HOSTED_IMAGE, ubuntu-24.04) and move it on
+                    purpose in a PR.
 
 Exceptions live in project/ci/runner-allowlist.json with a reason, so each
 one is reviewed in a docs PR. Usage:
@@ -64,7 +73,13 @@ import yaml
 HERE = Path(__file__).resolve().parent
 DEFAULT_ALLOWLIST = HERE.parent / "ci" / "runner-allowlist.json"
 RULES = ("hosted-runner", "pr-concurrency", "hosted-cron", "pinned-reusable", "job-timeout",
-         "fork-pr-self-hosted")
+         "fork-pr-self-hosted", "hosted-image-latest")
+# The GitHub-hosted image every workflow pins; move it here and in the repos in one PR each.
+HOSTED_IMAGE = "ubuntu-24.04"
+LATEST_IMAGE = re.compile(r"(?<![A-Za-z0-9._-])(?:ubuntu|macos|windows)-latest(?![A-Za-z0-9._-])")
+# The quoted hosted label a fork guard falls back to, matched so the ARC routes
+# accept any pinned image (hosted-image-latest reports -latest separately).
+_HOSTED_LITERAL = re.compile(r"'(?:ubuntu|macos|windows)-[A-Za-z0-9._-]+'")
 PR_EVENTS = ("pull_request", "pull_request_target")
 SHA_RE = re.compile(r"@[0-9a-f]{40}$")
 # ARC scale sets route by their exact name rather than the self-hosted label.
@@ -76,21 +91,21 @@ ARC_RUNNER_LABELS = frozenset({"ghostnet-linux-arm64", "ghostnet-linux-arm64-lar
                                "ghostnet-gate"})
 
 
-def arc_fork_fallback(label: str) -> str:
+def arc_fork_fallback(label: str, hosted: str = HOSTED_IMAGE) -> str:
     """The reviewed route that sends trusted events to ARC pool `label` and forks to hosted."""
     return ("${{ (github.event_name != 'pull_request' || "
             "github.event.pull_request.head.repo.full_name == github.repository) "
-            f"&& '{label}' || 'ubuntu-latest' }}}}")
+            f"&& '{label}' || '{hosted}' }}}}")
 
 
-def arc_pr_only_fallback(label: str) -> str:
+def arc_pr_only_fallback(label: str, hosted: str = HOSTED_IMAGE) -> str:
     """The reviewed route that sends only same-repo pull requests to ARC pool `label`.
 
     Publishing/deletion jobs can keep their secrets on hosted runners.
     """
     return ("${{ github.event_name == 'pull_request' && "
             "github.event.pull_request.head.repo.full_name == github.repository "
-            f"&& '{label}' || 'ubuntu-latest' }}}}")
+            f"&& '{label}' || '{hosted}' }}}}")
 
 
 # The standard pool's routes, kept as names for existing callers and tests.
@@ -134,16 +149,27 @@ def _expression_tokens(value: str) -> str:
                   lambda match: match[0] if match[0].startswith("'") else "", value)
 
 
+def _route_shape(value: str) -> str:
+    """Layout-free tokens with the trailing hosted fallback label made generic."""
+    tokens = _expression_tokens(value)
+    m = None
+    for m in _HOSTED_LITERAL.finditer(tokens):
+        pass
+    if m is None or tokens[m.end():] != "}}":
+        return tokens
+    return tokens[:m.start()] + "'HOSTED'" + tokens[m.end():]
+
+
 def _arc_route_tokens(builder) -> frozenset:
-    return frozenset(_expression_tokens(builder(label)) for label in ARC_RUNNER_LABELS)
+    return frozenset(_route_shape(builder(label)) for label in ARC_RUNNER_LABELS)
 
 
 def is_arc_fork_fallback(runs_on) -> bool:
-    return isinstance(runs_on, str) and _expression_tokens(runs_on) in _arc_route_tokens(arc_fork_fallback)
+    return isinstance(runs_on, str) and _route_shape(runs_on) in _arc_route_tokens(arc_fork_fallback)
 
 
 def is_arc_pr_only_fallback(runs_on) -> bool:
-    return isinstance(runs_on, str) and _expression_tokens(runs_on) in _arc_route_tokens(arc_pr_only_fallback)
+    return isinstance(runs_on, str) and _route_shape(runs_on) in _arc_route_tokens(arc_pr_only_fallback)
 
 
 def is_self_hosted(runs_on) -> bool:
@@ -276,6 +302,11 @@ def check_workflow(repo: str, name: str, doc: dict) -> list[Finding]:
                                    f"(runs-on {_runs_on_text(job.get('runs-on'))!r} has no fork guard)"))
             if "timeout-minutes" not in job:
                 out.append(Finding(repo, name, job_id, "job-timeout", "no timeout-minutes"))
+            latest = LATEST_IMAGE.search(_runs_on_text(job.get("runs-on")))
+            if latest:
+                out.append(Finding(repo, name, job_id, "hosted-image-latest",
+                                   f"runs-on uses {latest[0]}, which GitHub moves to a new OS release "
+                                   f"without a PR (ubuntu-latest became 26.04 on 2026-11-16); pin {HOSTED_IMAGE}"))
         if on_pr and not wf_cancels and not _cancels(job.get("concurrency")):
             out.append(Finding(repo, name, job_id, "pr-concurrency",
                                "pull request runs are not cancelled by a newer push"))

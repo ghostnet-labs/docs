@@ -17,7 +17,7 @@ import yaml  # noqa: E402
 import check_runners as cr  # noqa: E402
 
 FORK_FALLBACK = ("${{ github.event.pull_request.head.repo.full_name == github.repository && "
-                 "fromJSON('[\"self-hosted\", \"macOS\", \"ARM64\"]') || 'ubuntu-latest' }}")
+                 "fromJSON('[\"self-hosted\", \"macOS\", \"ARM64\"]') || 'ubuntu-24.04' }}")
 
 
 def wf(text):
@@ -35,7 +35,7 @@ on: pull_request
 concurrency: {group: x, cancel-in-progress: true}
 jobs:
   t:
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "Linux", "ARM64"]') || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "Linux", "ARM64"]') || 'ubuntu-24.04' }}
     timeout-minutes: 10
     steps: []
 """)
@@ -47,7 +47,7 @@ on: [pull_request]
 concurrency: {group: x, cancel-in-progress: true}
 jobs:
   t: {runs-on: [self-hosted, Linux, ARM64], timeout-minutes: 10, steps: []}
-  u: {runs-on: ubuntu-latest, timeout-minutes: 10, steps: []}
+  u: {runs-on: ubuntu-24.04, timeout-minutes: 10, steps: []}
 """)
         found = cr.check_workflow("r", "w.yml", doc)
         self.assertEqual([(f.job, f.rule) for f in found if f.rule == "fork-pr-self-hosted"],
@@ -65,12 +65,12 @@ jobs:
         head = "github.event.pull_request.head.repo.full_name == github.repository"
         pick = "fromJSON('[\"self-hosted\"]')"
         ok = [
-            f"${{{{ {head} && {pick} || 'ubuntu-latest' }}}}",
-            f"${{{{ github.repository == github.event.pull_request.head.repo.full_name && {pick} || 'ubuntu-latest' }}}}",
-            f"${{{{ (github.event_name != 'pull_request' || {head}) && {pick} || 'ubuntu-latest' }}}}",
+            f"${{{{ {head} && {pick} || 'ubuntu-24.04' }}}}",
+            f"${{{{ github.repository == github.event.pull_request.head.repo.full_name && {pick} || 'ubuntu-24.04' }}}}",
+            f"${{{{ (github.event_name != 'pull_request' || {head}) && {pick} || 'ubuntu-24.04' }}}}",
             cr.ARC_FORK_FALLBACK,
         ]
-        pr_only = f"${{{{ github.event_name == 'pull_request' && {head} && {pick} || 'ubuntu-latest' }}}}"
+        pr_only = f"${{{{ github.event_name == 'pull_request' && {head} && {pick} || 'ubuntu-24.04' }}}}"
         ok += [pr_only, cr.ARC_PR_ONLY_FALLBACK]
         for text in ok:
             self.assertTrue(cr.has_fork_guard(text), text)
@@ -84,20 +84,20 @@ jobs:
             "self-hosted",
             "ghostnet-linux-arm64",
             ["ghostnet-linux-arm64"],
-            f"${{{{ github.actor == 'x' && {pick} || 'ubuntu-latest' }}}}",
+            f"${{{{ github.actor == 'x' && {pick} || 'ubuntu-24.04' }}}}",
             # inverted: forks get the Macs
-            f"${{{{ github.event.pull_request.head.repo.full_name != github.repository && {pick} || 'ubuntu-latest' }}}}",
+            f"${{{{ github.event.pull_request.head.repo.full_name != github.repository && {pick} || 'ubuntu-24.04' }}}}",
             # the head check is only one side of an ||, so it never restricts
-            f"${{{{ ({head} || github.event_name == 'pull_request') && {pick} || 'ubuntu-latest' }}}}",
+            f"${{{{ ({head} || github.event_name == 'pull_request') && {pick} || 'ubuntu-24.04' }}}}",
             f"${{{{ {head} || {pick} }}}}",
-            f"${{{{ github.event_name != 'pull_request' && {head} && {pick} || 'ubuntu-latest' }}}}",
-            f"${{{{ github.event_name == 'pull_request' && {pick} || 'ubuntu-latest' }}}}",
+            f"${{{{ github.event_name != 'pull_request' && {head} && {pick} || 'ubuntu-24.04' }}}}",
+            f"${{{{ github.event_name == 'pull_request' && {pick} || 'ubuntu-24.04' }}}}",
             # inverted selector: same-repo PRs get a hosted runner, forks get the Macs
-            f"${{{{ {head} && 'ubuntu-latest' || 'self-hosted' }}}}",
-            f"${{{{ {head} && fromJSON('[\"ubuntu-latest\"]') || 'ubuntu-latest' }}}}",
+            f"${{{{ {head} && 'ubuntu-24.04' || 'self-hosted' }}}}",
+            f"${{{{ {head} && fromJSON('[\"ubuntu-24.04\"]') || 'ubuntu-24.04' }}}}",
             # fallback must be a GitHub-hosted label, never a self-hosted one
             f"${{{{ {head} && {pick} || 'self-hosted' }}}}",
-            cr.ARC_FORK_FALLBACK.replace("|| 'ubuntu-latest'", "|| 'ghostnet-linux-arm64'"),
+            cr.ARC_FORK_FALLBACK.replace("|| 'ubuntu-24.04'", "|| 'ghostnet-linux-arm64'"),
             cr.ARC_PR_ONLY_FALLBACK.replace("full_name ==", "full_name !="),
             # guard in the fallback position instead of the selector
             f"${{{{ true && {pick} || ({head} && 'a' || 'b') }}}}",
@@ -108,7 +108,7 @@ jobs:
     def test_event_form_needs_only_safe_triggers(self):
         head = "github.event.pull_request.head.repo.full_name == github.repository"
         event_form = (f"${{{{ (github.event_name != 'pull_request' || {head}) && "
-                      "fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}")
+                      "fromJSON('[\"self-hosted\"]') || 'ubuntu-24.04' }}")
         doc = wf("on: [pull_request, workflow_run]\nconcurrency: {group: x, cancel-in-progress: true}\n"
                  "jobs:\n  t:\n    runs-on: \"" + event_form.replace('"', '\\"') + "}\"\n"
                  "    timeout-minutes: 5\n    steps: []\n")
@@ -117,8 +117,8 @@ jobs:
     def test_pull_request_target_rejects_event_name_disjunct(self):
         head = "github.event.pull_request.head.repo.full_name == github.repository"
         event_form = (f"${{{{ (github.event_name != 'pull_request' || {head}) && "
-                      "fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}")
-        plain = f"${{{{ {head} && fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}}}"
+                      "fromJSON('[\"self-hosted\"]') || 'ubuntu-24.04' }}")
+        plain = f"${{{{ {head} && fromJSON('[\"self-hosted\"]') || 'ubuntu-24.04' }}}}"
         self.assertTrue(cr.has_fork_guard(plain, allow_event_form=False))
         self.assertFalse(cr.has_fork_guard(event_form + "}", allow_event_form=False))
         doc = wf("on: pull_request_target\nconcurrency: {group: x, cancel-in-progress: true}\n"
@@ -133,11 +133,11 @@ jobs:
             return [f.rule for f in cr.check_workflow("r", "w.yml", doc)]
         head = "github.event.pull_request.head.repo.full_name == github.repository"
         event_form = (f"${{{{ (github.event_name != 'pull_request' || {head}) && "
-                      "fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}")
+                      "fromJSON('[\"self-hosted\"]') || 'ubuntu-24.04' }}")
         for route in (["self-hosted", "Linux"], "ghostnet-linux-arm64", event_form, cr.ARC_FORK_FALLBACK):
             with self.subTest(route=route):
                 self.assertIn("fork-pr-self-hosted", found(route))
-        for route in (f"${{{{ {head} && fromJSON('[\"self-hosted\"]') || 'ubuntu-latest' }}}}",
+        for route in (f"${{{{ {head} && fromJSON('[\"self-hosted\"]') || 'ubuntu-24.04' }}}}",
                       cr.ARC_PR_ONLY_FALLBACK):
             with self.subTest(route=route):
                 self.assertNotIn("fork-pr-self-hosted", found(route))
@@ -155,14 +155,14 @@ jobs:
 
     def test_fork_fallback_expression_counts_as_self_hosted(self):
         self.assertTrue(cr.is_self_hosted(FORK_FALLBACK))
-        self.assertFalse(cr.is_self_hosted("ubuntu-latest"))
+        self.assertFalse(cr.is_self_hosted("ubuntu-24.04"))
         self.assertFalse(cr.is_self_hosted(["ubuntu-24.04"]))
 
     def test_hosted_job_without_timeout_or_cancel(self):
         doc = wf("""
 on: [pull_request, push]
 jobs:
-  b: {runs-on: ubuntu-latest, steps: []}
+  b: {runs-on: ubuntu-24.04, steps: []}
 """)
         self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)),
                          [("b", "hosted-runner"), ("b", "job-timeout"), ("b", "pr-concurrency")])
@@ -183,12 +183,12 @@ jobs:
 
     def test_arc_substrings_and_non_label_fields_do_not_waive_policy(self):
         for route in ("ghostnet-linux-arm64-spoof", "prefix-ghostnet-linux-arm64",
-                      "ghostnet-linux-arm64 ubuntu-latest", "GHOSTNET-LINUX-ARM64",
+                      "ghostnet-linux-arm64 ubuntu-24.04", "GHOSTNET-LINUX-ARM64",
                       ["ghostnet-linux-arm64-spoof"],
-                      {"group": "ghostnet-linux-arm64", "labels": "ubuntu-latest"},
+                      {"group": "ghostnet-linux-arm64", "labels": "ubuntu-24.04"},
                       {"labels": {"nested": "ghostnet-linux-arm64"}},
                       "${{ inputs.ghostnet-linux-arm64 }}",
-                      "${{ contains('ghostnet-linux-arm64', 'arm') && 'ubuntu-latest' }}",
+                      "${{ contains('ghostnet-linux-arm64', 'arm') && 'ubuntu-24.04' }}",
                       "${{ 'ghostnet-linux-arm64' }}", None):
             with self.subTest(route=route):
                 doc = {"on": "push", "jobs": {"test": {"runs-on": route, "timeout-minutes": 10}}}
@@ -205,7 +205,7 @@ jobs:
     def test_canonical_arc_fork_fallback_is_recognized(self):
         route = ("${{ (github.event_name != 'pull_request' || "
                  "github.event.pull_request.head.repo.full_name == github.repository) "
-                 "&& 'ghostnet-linux-arm64' || 'ubuntu-latest' }}")
+                 "&& 'ghostnet-linux-arm64' || 'ubuntu-24.04' }}")
         for value in (route, route.replace(" || ", "\n  ||\t")):
             with self.subTest(route=value):
                 doc = {"on": "pull_request", "jobs": {"test": {"runs-on": value}}}
@@ -216,13 +216,13 @@ jobs:
         canonical = cr.ARC_FORK_FALLBACK
         for route in (canonical.replace("!= 'pull_request'", "== 'pull_request'"),
                       canonical.replace("full_name ==", "full_name !="),
-                      canonical.replace("|| 'ubuntu-latest'", "|| 'ghostnet-linux-arm64'"),
-                      canonical.replace("&& 'ghostnet-linux-arm64'", "&& 'ubuntu-latest'"),
+                      canonical.replace("|| 'ubuntu-24.04'", "|| 'ghostnet-linux-arm64'"),
+                      canonical.replace("&& 'ghostnet-linux-arm64'", "&& 'ubuntu-24.04'"),
                       canonical.replace("github.repository", "'attacker/repository'"),
                       canonical.replace("ghostnet-linux-arm64", "ghostnet-linux-arm64-spoof"),
                       canonical.replace("ghostnet-linux-arm64", "ghostnet- linux-arm64"),
-                      canonical.replace("|| 'ubuntu-latest'", "|| 'ubuntu-24.04'"),
-                      "${{ inputs.note == 'ghostnet-linux-arm64' && 'ubuntu-latest' }}"):
+                      canonical.replace("|| 'ubuntu-24.04'", "|| 'linux-arm64'"),
+                      "${{ inputs.note == 'ghostnet-linux-arm64' && 'ubuntu-24.04' }}"):
             with self.subTest(route=route):
                 self.assertFalse(cr.is_self_hosted(route))
 
@@ -246,7 +246,7 @@ jobs:
                       route.replace("pull_request", "pull_request_target"),
                       route.replace("ghostnet-linux-arm64", "ghostnet-linux-arm64-spoof"),
                       route.replace("github.repository", "inputs.repository"),
-                      route.replace("ubuntu-latest", "ghostnet-linux-arm64")):
+                      route.replace("ubuntu-24.04", "ghostnet-linux-arm64")):
             with self.subTest(route=value):
                 self.assertFalse(cr.is_self_hosted(value))
 
@@ -255,7 +255,7 @@ jobs:
         # The exact route openmanetd's codeql.yml uses for Go CodeQL.
         route = ("${{ (github.event_name != 'pull_request' || "
                  "github.event.pull_request.head.repo.full_name == github.repository) "
-                 "&& 'ghostnet-linux-arm64-large' || 'ubuntu-latest' }}")
+                 "&& 'ghostnet-linux-arm64-large' || 'ubuntu-24.04' }}")
         self.assertEqual(route, cr.arc_fork_fallback(large))
         doc = {"on": {"pull_request": {}, "push": {}, "schedule": [{"cron": "34 15 * * 0"}],
                       "workflow_dispatch": {}},
@@ -294,7 +294,7 @@ jobs:
         for value in ("ghostnet-linux-arm64-largeX", "ghostnet-linux-arm64-xl",
                       ["ghostnet-linux-arm64-large-spoof"],
                       route.replace("-large'", "-largeX'"),
-                      route.replace("|| 'ubuntu-latest'", "|| 'ghostnet-linux-arm64-large'"),
+                      route.replace("|| 'ubuntu-24.04'", "|| 'ghostnet-linux-arm64-large'"),
                       route.replace("full_name ==", "full_name !="),
                       route.replace("!= 'pull_request'", "== 'pull_request'"),
                       cr.arc_pr_only_fallback("ghostnet-linux-arm64-large").replace("event_name ==", "event_name !=")):
@@ -320,15 +320,15 @@ concurrency:
   group: g
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  a: {runs-on: "${{ github.event.pull_request.head.repo.full_name == github.repository && 'self-hosted' || 'ubuntu-latest' }}", timeout-minutes: 5, steps: []}
+  a: {runs-on: "${{ github.event.pull_request.head.repo.full_name == github.repository && 'self-hosted' || 'ubuntu-24.04' }}", timeout-minutes: 5, steps: []}
 """)
         self.assertEqual(cr.check_workflow("r", "w.yml", doc), [])
         doc = wf("""
 on: pull_request
 concurrency: {group: g, cancel-in-progress: false}
 jobs:
-  a: {runs-on: "${{ github.event.pull_request.head.repo.full_name == github.repository && 'self-hosted' || 'ubuntu-latest' }}", timeout-minutes: 5, concurrency: {group: j, cancel-in-progress: true}, steps: []}
-  b: {runs-on: "${{ github.event.pull_request.head.repo.full_name == github.repository && 'self-hosted' || 'ubuntu-latest' }}", timeout-minutes: 5, steps: []}
+  a: {runs-on: "${{ github.event.pull_request.head.repo.full_name == github.repository && 'self-hosted' || 'ubuntu-24.04' }}", timeout-minutes: 5, concurrency: {group: j, cancel-in-progress: true}, steps: []}
+  b: {runs-on: "${{ github.event.pull_request.head.repo.full_name == github.repository && 'self-hosted' || 'ubuntu-24.04' }}", timeout-minutes: 5, steps: []}
 """)
         self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)), [("b", "pr-concurrency")])
 
@@ -342,7 +342,7 @@ jobs:
 
     def test_subhourly_cron_only_flagged_on_hosted(self):
         cron = "on: {schedule: [{cron: '3,18,33,48 * * * *'}]}\n"
-        hosted = wf(cron + "jobs: {a: {runs-on: ubuntu-latest, timeout-minutes: 5, steps: []}}")
+        hosted = wf(cron + "jobs: {a: {runs-on: ubuntu-24.04, timeout-minutes: 5, steps: []}}")
         mac = wf(cron + "jobs: {a: {runs-on: [self-hosted], timeout-minutes: 5, steps: []}}")
         self.assertIn(("a", "hosted-cron"), rules(cr.check_workflow("r", "w.yml", hosted)))
         self.assertEqual(cr.check_workflow("r", "w.yml", mac), [])
@@ -371,6 +371,45 @@ jobs:
   k: {uses: org/repo/.github/workflows/k.yml@0123456789abcdef0123456789abcdef01234567}
 """)
         self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)), [("k", "hosted-cron")])
+
+
+class LatestImageTest(unittest.TestCase):
+    """2026-11-16: ubuntu-latest moved to 26.04 and openmanetd's Playwright job broke."""
+
+    def job_rules(self, runs_on, on="push"):
+        doc = {"on": on, "concurrency": {"group": "g", "cancel-in-progress": True},
+               "jobs": {"j": {"runs-on": runs_on, "timeout-minutes": 5}}}
+        return [r for _, r in rules(cr.check_workflow("r", "w.yml", doc))]
+
+    def test_plain_latest_labels_are_flagged(self):
+        for label in ("ubuntu-latest", "macos-latest", "windows-latest", ["ubuntu-latest"]):
+            with self.subTest(label=label):
+                self.assertIn("hosted-image-latest", self.job_rules(label))
+
+    def test_latest_fork_fallback_is_flagged_but_route_still_recognized(self):
+        for route in (cr.arc_fork_fallback("ghostnet-linux-arm64", "ubuntu-latest"),
+                      cr.arc_pr_only_fallback("ghostnet-gate", "ubuntu-latest"),
+                      "${{ github.event.pull_request.head.repo.full_name == github.repository && "
+                      "fromJSON('[\"self-hosted\", \"macOS\", \"ARM64\"]') || 'ubuntu-latest' }}"):
+            with self.subTest(route=route):
+                self.assertTrue(cr.is_self_hosted(route))
+                self.assertTrue(cr.has_fork_guard(route))
+                self.assertEqual(self.job_rules(route, on="pull_request"), ["hosted-image-latest"])
+
+    def test_pinned_images_pass(self):
+        self.assertNotIn("hosted-image-latest", self.job_rules("ubuntu-24.04"))
+        self.assertEqual(self.job_rules(cr.ARC_FORK_FALLBACK, on="pull_request"), [])
+        self.assertIn(f"|| '{cr.HOSTED_IMAGE}' }}}}", cr.ARC_FORK_FALLBACK)
+
+    def test_similar_names_are_not_latest(self):
+        for label in ("ubuntu-latest-arm", "my-ubuntu-latest", "ghostnet-linux-arm64"):
+            with self.subTest(label=label):
+                self.assertNotIn("hosted-image-latest", self.job_rules(label))
+
+    def test_finding_says_what_to_pin(self):
+        doc = {"on": "push", "jobs": {"j": {"runs-on": "ubuntu-latest", "timeout-minutes": 5}}}
+        detail = [f.detail for f in cr.check_workflow("r", "w.yml", doc) if f.rule == "hosted-image-latest"][0]
+        self.assertIn("pin ubuntu-24.04", detail)
 
 
 class AllowlistTest(unittest.TestCase):
@@ -409,7 +448,7 @@ class AllowlistTest(unittest.TestCase):
     def test_main_exit_codes(self):
         wfdir = self.tmp / "wf"
         wfdir.mkdir()
-        (wfdir / "ci.yml").write_text("on: pull_request\njobs:\n  a: {runs-on: ubuntu-latest, steps: []}\n")
+        (wfdir / "ci.yml").write_text("on: pull_request\njobs:\n  a: {runs-on: ubuntu-24.04, steps: []}\n")
         allow = self.write([])
         self.assertEqual(cr.main(["--repo", "r", "--workflows", str(wfdir), "--allowlist", str(allow)]), 1)
         allow = self.write([{"repo": "r", "workflow": "ci.yml", "job": "a",
