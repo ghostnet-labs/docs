@@ -150,7 +150,8 @@ The remaining pins, from CM5 datasheet Table 4:
 | 111 | VBUS_EN | No connect (USB 3.0 unused) | Proposed |
 | 116 / 118 | PCIe_RX_P / _N | PCIE_RX_P / _N | Record: ledger |
 | 122 / 124 | PCIe_TX_P / _N | PCIE_TX_P / _N (AC coupling is on the CM5) | Record: ledger |
-| 115 to 200, other | MIPI0/1, USB3-0, USB3-1, HDMI0/1 | No connect | Proposed: none of these interfaces is in V1 |
+| 163 / 165 | USB3-1 USB 2.0 pair DP / DM | DOCK_USB_DP / _DM to the B-31 dock Ethernet controller | Candidate (D-064); pins in [v1-pinout-and-sequencing.md](v1-pinout-and-sequencing.md) |
+| 115 to 200, other | MIPI0/1, USB3-0, USB3-1 SuperSpeed pairs, HDMI0/1 | No connect | Proposed: none of these interfaces is in V1. The USB3-1 SuperSpeed pairs stay unused unless the B-31 desense check passes |
 
 ### Defaults and rules on this sheet
 

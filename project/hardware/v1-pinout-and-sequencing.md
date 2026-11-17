@@ -25,6 +25,7 @@ These are CM5 connector pin numbers, not BCM GPIO numbers.
 | PCIe TX P/N | 122 / 124 |
 | USB2 D-/D+ (B-07 service port, device role; rpiboot) | 103 / 105 |
 | USB3-0 USB 2.0 pair DP/DM (TUSB4041I upstream) | 134 / 136 |
+| USB3-1 USB 2.0 pair DP/DM (B-31 dock Ethernet, Candidate; SuperSpeed pairs unused unless enabled after the desense check) | 163 / 165 |
 | GPIO_VREF | 78 |
 | CM5 3.3 V | 84 / 86 |
 | PMIC_Enable / nRPIBOOT | 99 / 93 |
@@ -149,6 +150,7 @@ This is the intended hardware-controlled order, not evidence that the bring-up f
 
 ## Open gates
 
+- Allocate GPIOs for the mast dock's detect input and force-whips output (B-30, D-064). Not allocated.
 - Verify GPIO23/24/25 boot defaults, device-tree behavior, electrical polarity, and schematic connectivity.
 - Verify device-tree mux/boot defaults and circuit direction for every retained logical GPIO; physical connector identity is verified in the table.
 - Confirm the AW7916-AED pin numbers above against a bench card (the AsiaRF drawing has no numbers), and whether the card holds W_DISABLE1# or PEWAKE# internally. GPIO16 and GPIO22 are freed (D-026).
