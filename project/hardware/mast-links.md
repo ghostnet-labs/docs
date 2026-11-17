@@ -62,6 +62,12 @@ Rules: 47 CFR 15.247 ([eCFR](https://www.ecfr.gov/current/title-47/chapter-I/sub
 7. batman-adv V then prefers the dish path and falls back to HaLow or 2.4 GHz by itself if it drops.
 8. If the Starlink mast is the mesh gate, its Ethernet port is also the WAN (docs/networking.md), so that mast needs a VLAN-capable switch to carry WAN and the star VLAN apart.
 
+**Routing algorithm.** The mesh already runs BATMAN_V: the node app writes `routing_algo 'BATMAN_V'` on `bat0` ([openmanetd internal/network/uci_network.go](https://github.com/ghostnet-labs/openmanetd/blob/main/internal/network/uci_network.go), checked by `setup_compat_test.go`), and [docs/networking.md](../../docs/networking.md) says the same. BATMAN_V picks routes by estimated throughput, so a dish link at a few hundred Mbps beats a HaLow link at a few Mbps with no extra work. Details:
+
+- On Ethernet, BATMAN_V reads the link speed from the port (1000 Mbps), hence `throughput_override` above.
+- The whole star is one VLAN, so one `throughput_override` value covers every neighbor on it. Set it to the slowest sector link, not the fastest. Two town masts in the same sector talk dish to sector to dish, which batman-adv sees as one hop.
+- Unlike a Wi-Fi hop, BATMAN_V does not halve the estimate when traffic arrives on one interface and leaves on a different one (Ethernet in, HaLow out), so routes that mix the dish and HaLow are not penalized beyond the normal hop penalty.
+
 The node app does not create this wired mesh link today. It would be one new setting. Not started.
 
 ## Home hub radio plan
