@@ -68,7 +68,7 @@ Rules: 47 CFR 15.247 ([eCFR](https://www.ecfr.gov/current/title-47/chapter-I/sub
 - The whole star is one VLAN, so one `throughput_override` value covers every neighbor on it. Set it to the slowest sector link, not the fastest. Two town masts in the same sector talk dish to sector to dish, which batman-adv sees as one hop.
 - Unlike a Wi-Fi hop, BATMAN_V does not halve the estimate when traffic arrives on one interface and leaves on a different one (Ethernet in, HaLow out), so routes that mix the dish and HaLow are not penalized beyond the normal hop penalty.
 
-The node app does not create this wired mesh link today. It would be one new setting. Not started.
+The node app does not create this wired mesh link today. It would be one new setting, and it must work on the dock's Ethernet (B-31) and on the sealed Ethernet port when a mast runs on the jumper backup ([mast-dock.md](mast-dock.md)). Not started.
 
 ## Mast build: node on the ground, antennas up the mast
 
@@ -84,6 +84,14 @@ Each mast node stays in a box at ground level. Only antennas go up the pole, so 
 | 5 GHz dish or home sectors | Below the omnis, pointing sideways. Radio and antenna are one unit | Ethernet, PoE injector at the base |
 | GNSS antenna | On the node box at ground level; a fixed mast does not move | Node's own lead |
 | 5 GHz phone access point | On the node box at ground level; phones at a mast are near its base | Node's own antennas |
+
+### Docking the radio
+
+**Status:** Selected, 2026-11-17 (D-064). Design: [mast-dock.md](mast-dock.md).
+
+The node sits in a rock-in dock at the base of the pole. Docking moves HaLow, LoRa and both 2.4 GHz chains to the mast antennas above, connects the dish Ethernet and runs the radio on mast power; lifting it out puts it back on its whips. The dock's four coax jumpers plug into the entry panel. The mast power box feeds the dock and, separately, the dish's PoE injector; the dock powers the radio only. The dock box lid is non-metal so the GNSS and 5 GHz phone antennas on the node work through it.
+
+Backup at every mast: with no dock, swap the node's HaLow, LoRa and two 2.4 GHz whips for jumpers from the entry panel, plug the dish Ethernet into the sealed Ethernet port (B-06) and charge over USB-C (B-07).
 
 ### Losses and gains
 
@@ -103,7 +111,7 @@ Each mast node stays in a box at ground level. Only antennas go up the pole, so 
 ### Open before a mast is built
 
 - **Antenna grants.** Check the GW16170, RAK3172 and AW7916 grants before choosing any antenna other than a certified one.
-- **Node antenna ports.** The node's antenna connectors and any bulkheads for a mast jumper follow the enclosure design (B-21); confirm them before ordering coax ends.
+- **Node antenna ports.** The node's antenna connectors and any bulkheads for a mast jumper follow the enclosure design (B-21); confirm them before ordering coax ends. The dock's jumpers and the backup jumpers end in the same connector at the entry panel.
 - **Rough parts per mast** beyond the node and pole (Unverified, typical prices): 900 MHz omni $50–150, LoRa omni $30–80, dual-feed 2.4 GHz omni $60–150, about 200 ft of coax $300–600, N connectors $10–15 each, four coax surge protectors $25–60 each, ground bar, rod and grounding kits $50–150; about $600–1,200.
 
 ## Home hub radio plan

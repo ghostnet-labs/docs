@@ -29,6 +29,7 @@ Every fact has exactly one owner. Everywhere else refers to it by ID or link and
 | Expanded networking/controller, channel recovery, monitoring and coexistence requirements | [requirements/maer-capabilities.md](requirements/maer-capabilities.md) |
 | What the V2 node is for: users, main job, range, jamming, size, runtime and its "gets through" targets (D-058) | [requirements/v2-definition.md](requirements/v2-definition.md) |
 | Mast-to-mast links: home hub topology, candidate backbone radios, how the wired link joins batman-adv, mast antenna build, terrain results and known weaknesses (D-062, D-063) | [hardware/mast-links.md](hardware/mast-links.md) |
+| Mast dock: how the radio docks, the contact patch, antenna switching, dock power and Ethernet, losses, the jumper backup and open checks (D-064) | [hardware/mast-dock.md](hardware/mast-dock.md) |
 | Channel migration protocol: plan message, authentication, staged switch, rediscovery, merge rule, recovery bound and default timers | [software/channel-migration.md](software/channel-migration.md) (requirements stay in maer-capabilities.md) |
 | Decisions (D-nnn) and retired or rejected items (R-nn) | [decisions.md](decisions.md) |
 | Track A part selections and rationale (A-nn), mounting, selection risks | [poc/track-a.md](poc/track-a.md) |

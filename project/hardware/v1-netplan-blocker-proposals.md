@@ -34,7 +34,7 @@ D-009 and B-07 say the sealed USB-C DATA / CHARGE port carries CM5 console and s
 
 ### What the CM5 offers (Datasheet)
 
-- The CM5 has a third USB 2.0 high-speed host path that the records do not use. Each of its two USB 3.0 ports carries its own USB 2.0 pair: USB3-0-DP/DM on pins 134/136 and USB3-1-DP/DM on pins 163/165 (CM5 datasheet, Release 3, Table 4 and Table 14, where they are marked "USB 2.0 signal"). The net plan currently marks these pins No connect.
+- The CM5 has a third USB 2.0 high-speed host path that the records do not use. Each of its two USB 3.0 ports carries its own USB 2.0 pair: USB3-0-DP/DM on pins 134/136 and USB3-1-DP/DM on pins 163/165 (CM5 datasheet, Release 3, Table 4 and Table 14, where they are marked "USB 2.0 signal"). Since D-064 the USB3-1 pair carries the B-31 dock Ethernet, so the hub uses the USB3-0 pair.
 - The dedicated USB 2.0 port (pins 103/105) is the port that the boot ROM's USB device boot uses. nRPI_BOOT means "hold low during boot to bypass eMMC and boot through USB 2.0 instead" (§2.12.2, Table 3). The pin must be low within 2 ms after the 5 V rail rises (§3.1). It has an internal 10 kΩ pull-up to CM5_3.3V (Table 4).
 - USB_OTG_ID is internally pulled up, and grounding it makes the CM5 a host (Table 4). The datasheet calls OTG/device use "not officially documented" (§2.4.2 note).
 - The Raspberry Pi CM5 IO board uses exactly this split. Its two USB 3.0 Type-A ports are for peripherals, and its USB 2.0 Type-C port is "primarily intended for data transfer and enabling board updates through rpiboot" (CM5IO datasheet §1.3 and §3.4). The eMMC flashing guide connects the host to that Type-C port with the nRPI_BOOT jumper fitted.
@@ -43,7 +43,7 @@ D-009 and B-07 say the sealed USB-C DATA / CHARGE port carries CM5 console and s
 
 | Item | Net plan today | Proposed |
 |---|---|---|
-| Hub upstream (USB_UP_DP / USB_UP_DM) | CM5 pins 105 / 103 | CM5 USB3-0-DP / USB3-0-DM, pins 134 / 136 (or USB3-1, pins 163 / 165, whichever the floorplan favours; GHO-7/GHO-14). The two USB 2.0 pairs may not be P/N swapped (§2.4) |
+| Hub upstream (USB_UP_DP / USB_UP_DM) | CM5 pins 105 / 103 | CM5 USB3-0-DP / USB3-0-DM, pins 134 / 136 (USB3-1 is taken by B-31, D-064; GHO-7/GHO-14). The two USB 2.0 pairs may not be P/N swapped (§2.4) |
 | USB 3.0 SuperSpeed pairs of that port (RX, TX) | No connect | Still no connect |
 | VBUS_EN (pin 111) | No connect | Still no connect. The hub's VBUS detect comes from its own divider (open item 11 in the net plan, unchanged) |
 | B-07 data (SVC_DP / SVC_DM) | No CM5 endpoint | B-07 A6/B6 and A7/B7 are tied at the receptacle, then go through the USB ESD array (GHO-11, O-3) and a 90 Ω differential pair, matched within 0.15 mm (§2.4.2), point to point to CM5 USB_P / USB_N, pins 105 / 103. Proposed: a DNP common-mode-choke footprint, only if EMC needs it; no other stubs or test pads on the pair |
@@ -91,7 +91,7 @@ Firmware and bootloader messages (BOOT_UART) go to the primary UART, which on th
 ### Signal integrity (option A)
 
 - B-07 to CM5: one connector, one ESD array and one 90 Ω pair. ESD capacitance is the only added load, so pick the array for low capacitance (GHO-11). The route length from the wall to pins 103/105 depends on the floorplan and needs a limit from GHO-14/GHO-15. Tie the receptacle's duplicated D+/D- pins at the pads, so the stubs are a few millimetres at most.
-- Hub upstream: unchanged in kind (CM5 pair to hub, 90 Ω, matched within 0.15 mm), but the pins move to the high-speed connector region (pins 134/136 or 163/165), which changes the route. GHO-14 re-plans it.
+- Hub upstream: unchanged in kind (CM5 pair to hub, 90 Ω, matched within 0.15 mm), but the pins move to the high-speed connector region (pins 134/136), which changes the route. GHO-14 re-plans it.
 
 ### Default state and failure modes (option A)
 
