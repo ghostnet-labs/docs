@@ -5,6 +5,7 @@ import os
 import sys
 import unittest
 import urllib.error
+from datetime import datetime, timezone
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
@@ -123,6 +124,91 @@ class ProfileSyncTests(unittest.TestCase):
         api = FakeAPI(entries, {WF + "new.yml": PR}, pin=NEW, policy_at_pin="old policy")
         self.run_sync(api)
         self.assertEqual(api.writes, [])
+
+
+NOW = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+
+
+class FakeResponse:
+    def __init__(self, expiry):
+        self.headers = {} if expiry is None else {"github-authentication-token-expiration": expiry}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def opener_for(expiry=None, code=None):
+    def opener(request, timeout=None):
+        if code:
+            raise urllib.error.HTTPError(request.full_url, code, "no", {}, None)
+        return FakeResponse(expiry)
+    return opener
+
+
+class TokenStatusTests(unittest.TestCase):
+    def status(self, **kwargs):
+        return ps.token_status("t", NOW, opener_for(**kwargs))
+
+    def test_far_expiry_is_fine(self):
+        self.assertEqual(self.status(expiry="2027-02-15 12:00:00 UTC"), (None, False))
+
+    def test_token_without_expiry_is_fine(self):
+        self.assertEqual(self.status(), (None, False))
+
+    def test_expiry_within_two_weeks_warns_and_names_the_renewal_page(self):
+        problem, rejected = self.status(expiry="2026-11-30 12:00:00 UTC")
+        self.assertIn("expires in 13 days (2026-11-30)", problem)
+        self.assertIn("https://github.com/organizations/ghostnet-labs/settings/secrets/actions/MANET_UPDATE_TOKEN", problem)
+        self.assertFalse(rejected)
+
+    def test_expiry_exactly_fourteen_days_out_warns(self):
+        self.assertIsNotNone(self.status(expiry="2026-12-01 12:00:00 UTC")[0])
+        self.assertIsNone(self.status(expiry="2026-12-01 12:00:01 UTC")[0])
+
+    def test_expired_token_is_rejected(self):
+        problem, rejected = self.status(expiry="2026-11-16 12:00:00 UTC")
+        self.assertIn("expired on 2026-11-16", problem)
+        self.assertTrue(rejected)
+
+    def test_rejected_token_is_reported(self):
+        for code in (401, 403):
+            problem, rejected = self.status(code=code)
+            self.assertIn(f"rejected by GitHub (HTTP {code})", problem)
+            self.assertTrue(rejected)
+
+    def test_other_http_errors_propagate(self):
+        with self.assertRaises(urllib.error.HTTPError):
+            self.status(code=500)
+
+
+class MainTokenTests(unittest.TestCase):
+    def main(self, status, run_status=0):
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, {"MANET_UPDATE_TOKEN": "t"}), \
+                mock.patch.object(ps, "token_status", return_value=status), \
+                mock.patch.object(ps, "run", return_value=run_status) as run, redirect_stdout(out):
+            code = ps.main()
+        return code, out.getvalue(), run
+
+    def test_healthy_token_syncs(self):
+        code, _, run = self.main((None, False))
+        self.assertEqual(code, 0)
+        run.assert_called_once()
+
+    def test_rejected_token_fails_without_syncing(self):
+        code, out, run = self.main(("MANET_UPDATE_TOKEN expired", True))
+        self.assertEqual(code, 1)
+        self.assertIn("::error::MANET_UPDATE_TOKEN expired", out)
+        run.assert_not_called()
+
+    def test_expiring_token_still_syncs_then_fails_the_run(self):
+        code, out, run = self.main(("MANET_UPDATE_TOKEN expires in 9 days", False))
+        self.assertEqual(code, 1)
+        self.assertIn("::error::", out)
+        run.assert_called_once()
 
 
 if __name__ == "__main__":

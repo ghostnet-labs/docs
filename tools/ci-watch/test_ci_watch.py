@@ -1354,6 +1354,16 @@ class ScheduleFindingsTest(unittest.TestCase):
         self.assertIn("/runs/7", item["url"])
         self.assertIn("Full firmware build failed (failure, 2026-11-05 07:00Z)", item["text"])
 
+    def test_failed_profile_sync_is_crit_and_says_how_to_renew_the_token(self):
+        gh = FakeGitHub({"/repos/ghostnet-labs/docs/actions/runs?event=schedule&status=completed&per_page=50":
+                         {"workflow_runs": [self.run_(5, ".github/workflows/manet-profile-sync.yml", "failure",
+                                                      name="Manet profile sync", run_id=9)]}})
+        item = cw.schedule_findings(gh, "docs")["schedule:docs:.github/workflows/manet-profile-sync.yml"]
+        self.assertEqual(item["level"], "crit")
+        self.assertIn("MANET_UPDATE_TOKEN", item["text"])
+        self.assertIn("https://github.com/organizations/ghostnet-labs/settings/secrets/actions/MANET_UPDATE_TOKEN",
+                      item["text"])
+
     def test_only_latest_run_per_workflow_counts(self):
         gh = FakeGitHub(self.runs(
             self.run_(1, ".github/workflows/build-full.yml", "success", run_id=8),

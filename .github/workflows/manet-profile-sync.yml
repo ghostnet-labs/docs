@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      # Skips with exit 0 until the MANET_UPDATE_TOKEN secret exists.
+      # Skips with exit 0 until the MANET_UPDATE_TOKEN secret exists; fails red when the token is rejected or within 14 days of expiry.
       - name: Open profile and pin PRs when workflows moved
         env:
           MANET_UPDATE_TOKEN: ${{ secrets.MANET_UPDATE_TOKEN }}
