@@ -5,6 +5,10 @@ Runs from .github/workflows/manet-profile-sync.yml with the MANET_UPDATE_TOKEN s
 Without that secret it prints a skip line and exits 0, so the manual fix printed by the
 merge gate (sync_merge_profile.py) stays the process until the secret exists.
 
+The same token lets "Handle passing PRs" update behind PRs, and it expires. This job is the
+token's canary: it fails when GitHub rejects the token or when 14 days or fewer are left, and
+ci_watch.py reports a failed run of this workflow, so Justin is warned before the sweep goes quiet.
+
 1. Profile: read every repo's workflows on its profile branch. If merge_profiles.json on docs
    main disagrees, open one docs PR (branch bot/profile-sync) with the corrected profile.
 2. Pins: once docs main's profile matches the workflows, any repo whose manet-merge-gate.yml or
@@ -19,6 +23,9 @@ import json
 import os
 import re
 import sys
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
 
 from merge_policy import API
 from sync_merge_profile import sync
@@ -29,6 +36,10 @@ PROFILE_PATH = "project/scripts/merge_profiles.json"
 POLICY_PATH = "project/scripts/merge_policy.py"
 PROFILE_BRANCH = "bot/profile-sync"
 PIN_BRANCH = "bot/docs-pin"
+EXPIRY_WARN_DAYS = 14
+# Where Justin renews the token, then updates the org secret.
+RENEW = ("Renew it at https://github.com/settings/personal-access-tokens, then paste the new value into "
+         "https://github.com/organizations/ghostnet-labs/settings/secrets/actions/MANET_UPDATE_TOKEN")
 PIN_FILES = (".github/workflows/manet-merge-gate.yml", ".github/workflows/manet-auto-merge.yml")
 # Only the checkout that runs the policy; the stale-run tool checkout has a `path:` key between.
 PIN = re.compile(r"(repository:\s*['\"]?" + re.escape(DOCS) + r"['\"]?\n\s+ref:\s*['\"]?)([0-9a-f]{40})(['\"]?\n\s+persist-credentials)")
@@ -136,6 +147,33 @@ def pin_prs(api, profiles):
     return opened
 
 
+def token_status(token, now=None, opener=urllib.request.urlopen):
+    """(problem, rejected): what is wrong with the token, or (None, False) when it is fine.
+
+    GitHub names a fine-grained token's expiry in a response header on every call made with it.
+    A classic token without an expiry sends no header and is fine.
+    """
+    now = now or datetime.now(timezone.utc)
+    request = urllib.request.Request("https://api.github.com/rate_limit", headers={
+        "Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"})
+    try:
+        with opener(request, timeout=30) as response:
+            expiry = response.headers.get("github-authentication-token-expiration")
+    except urllib.error.HTTPError as error:
+        if error.code in (401, 403):
+            return f"MANET_UPDATE_TOKEN was rejected by GitHub (HTTP {error.code}). {RENEW}", True
+        raise
+    if not expiry:
+        return None, False
+    expires = datetime.strptime(expiry.replace(" UTC", ""), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    days = (expires - now).total_seconds() / 86400
+    if days <= EXPIRY_WARN_DAYS:
+        when = f"expires in {days:.0f} days ({expires:%Y-%m-%d})" if days > 0 else f"expired on {expires:%Y-%m-%d}"
+        return f"MANET_UPDATE_TOKEN {when}. {RENEW}", days <= 0
+    return None, False
+
+
 def run(api):
     profiles = json.loads(file_text(api, DOCS, PROFILE_PATH, "main")[0])
     new, changes = desired_profiles(api, profiles)
@@ -153,7 +191,16 @@ def main():
     if not token:
         print("skip: MANET_UPDATE_TOKEN is not set; the merge gate message shows the manual fix")
         return 0
-    return run(API(token))
+    problem, rejected = token_status(token)
+    if rejected:
+        print("::error::" + problem)
+        return 1
+    status = run(API(token))
+    if problem:
+        # Still synced above; the red run is the warning ci_watch.py turns into a Mac banner.
+        print("::error::" + problem)
+        return 1
+    return status
 
 
 if __name__ == "__main__":

@@ -350,9 +350,9 @@ def stale_gate_run(gates, gate_blockers):
 
 
 BEHIND = "GitHub merge criteria are not satisfied: behind"
-# PRs opened by Claude threads carry this footer; Justin's own (Codex) branches are never
-# updated without his say-so.
-CLAUDE_FOOTER = re.compile(r"Generated (?:with|by) \[Claude Code\]")
+# PRs opened by Claude threads carry this footer, and the profile-sync job's PRs say who opened
+# them; Justin's own (Codex) branches are never updated without his say-so.
+CLAUDE_FOOTER = re.compile(r"Generated (?:with|by) \[Claude Code\]|Opened by project/scripts/profile_sync\.py")
 
 
 def update_behind(updater, repo, number, pr):

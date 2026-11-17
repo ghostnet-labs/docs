@@ -392,8 +392,15 @@ def guard_findings(gh, repo: str, now: datetime) -> dict[str, dict]:
     return found
 
 
-# A red scheduled run on the firmware full build blocks releases.
-SCHEDULE_CRIT = ("firmware", ".github/workflows/build-full.yml")
+# A red scheduled run on the firmware full build blocks releases. A red docs profile sync means
+# MANET_UPDATE_TOKEN expires within 14 days or GitHub rejected it: until it is renewed the merge
+# sweep stops updating behind PRs and the profile and pin PRs stop opening.
+SYNC_WORKFLOW = ("docs", ".github/workflows/manet-profile-sync.yml")
+SCHEDULE_CRIT = (("firmware", ".github/workflows/build-full.yml"), SYNC_WORKFLOW)
+SCHEDULE_HINTS = {SYNC_WORKFLOW: (
+    "MANET_UPDATE_TOKEN is rejected or expires within 14 days (the run log says which). Renew it at "
+    "https://github.com/settings/personal-access-tokens, then paste the new value into "
+    "https://github.com/organizations/ghostnet-labs/settings/secrets/actions/MANET_UPDATE_TOKEN")}
 
 
 def schedule_findings(gh, repo: str) -> dict[str, dict]:
@@ -415,11 +422,13 @@ def schedule_findings(gh, repo: str) -> dict[str, dict]:
         if run.get("conclusion") not in ("failure", "timed_out", "startup_failure"):
             continue
         path = run.get("path", "")
-        level = "crit" if (repo, path) == SCHEDULE_CRIT else "warn"
+        level = "crit" if (repo, path) in SCHEDULE_CRIT else "warn"
+        hint = SCHEDULE_HINTS.get((repo, path))
         found[f"schedule:{repo}:{path or wf}"] = {
             "level": level, "repo": repo, "url": run.get("html_url", f"https://github.com/{ORG}/{repo}/actions"),
             "text": f"{ORG}/{repo} scheduled run of {run.get('name', path)} failed "
-                    f"({run.get('conclusion')}, {str(run.get('created_at', ''))[:16].replace('T', ' ')}Z)"}
+                    f"({run.get('conclusion')}, {str(run.get('created_at', ''))[:16].replace('T', ' ')}Z)"
+                    + (f"; {hint}" if hint else "")}
     return found
 
 

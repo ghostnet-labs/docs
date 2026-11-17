@@ -370,6 +370,13 @@ class AutoMergeTests(unittest.TestCase):
         self.assertEqual(api.writes, [])  # never with the workflow token: its pushes start no CI
         self.assertEqual(updater.writes, [("PUT", "repos/o/r/pulls/7/update-branch")])
 
+    def test_behind_profile_sync_pr_is_updated_too(self):
+        api = FakeMergeAPI(mergeable_state="behind",
+                           body="Opened by project/scripts/profile_sync.py in ghostnet-labs/docs. The pinned docs commit")
+        updater = FakeMergeAPI()
+        self.assertIn("merged the base into the branch", self.handle_with(api, updater))
+        self.assertEqual(updater.writes, [("PUT", "repos/o/r/pulls/7/update-branch")])
+
     def test_behind_pr_without_claude_footer_is_left_alone(self):
         updater = FakeMergeAPI()
         out = self.handle_with(FakeMergeAPI(mergeable_state="behind", body="Codex change"), updater)
