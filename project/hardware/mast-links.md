@@ -70,26 +70,41 @@ Rules: 47 CFR 15.247 ([eCFR](https://www.ecfr.gov/current/title-47/chapter-I/sub
 
 The node app does not create this wired mesh link today. It would be one new setting. Not started.
 
-## Mast build: antennas up top
+## Mast build: node on the ground, antennas up the mast
 
-**Status:** Recommended, not decided (asked by Justin 2026-11-17).
+**Status:** Selected, 2026-11-17 (D-063). Coax, antenna and surge parts are Candidate; nothing bought.
 
-Field radios and phones reach a mast through antennas at the top of the pole, not through a radio at its base. The recommended build puts the whole node at the top: it is already sealed (D-022), so it can sit on the pole with short leads to its own antennas, and only one power cable runs down. No separate access point is needed: the node is the access point for field radios (HaLow, 2.4 GHz mesh) and phones (5 GHz, D-055). The same build applies to the home hub, with its three sectors below the omnis.
+Each mast node stays in a box at ground level. Only antennas go up the pole, so field radios reach the mast's antennas from far off while the node stays easy to reach. No separate access point is needed: the node is the access point for field radios (HaLow, 2.4 GHz mesh) and for phones (5 GHz, D-055). The home hub is built the same way, with its three sectors on the pole.
 
-Order on the pole, top down: HaLow omni at the very top so nothing shadows it; the LoRa antenna (B-28) 1 to 2 m lower, because it shares 902–928 MHz with HaLow (size the gap with the isolation check on [GHO-90](https://linear.app/ghostnet-labs/issue/GHO-90)); the node with its Wi-Fi antennas and GNSS antenna; then the 5 GHz dish (town mast) or sectors (home), pointing sideways. A base box holds the power supply or solar, battery backup and surge protection.
+| Item | Where | Feed |
+|---|---|---|
+| HaLow omni | Very top of the pole, so nothing shadows it | LMR-600 coax |
+| LoRa antenna (B-28) | 1 to 2 m below the HaLow omni, because both use 902–928 MHz; size the gap with the isolation check on [GHO-90](https://linear.app/ghostnet-labs/issue/GHO-90) | LMR-400 coax |
+| 2.4 GHz mesh omni | Below the LoRa antenna. The AW7916 2.4 GHz radio is 2x2, so use a dual-feed omni or two antennas | Two LMR-600 runs |
+| 5 GHz dish or home sectors | Below the omnis, pointing sideways. Radio and antenna are one unit | Ethernet, PoE injector at the base |
+| GNSS antenna | On the node box at ground level; a fixed mast does not move | Node's own lead |
+| 5 GHz phone access point | On the node box at ground level; phones at a mast are near its base | Node's own antennas |
+
+### Losses and gains
 
 | Choice | Effect on a field radio | Basis |
 |---|---|---|
-| Mast antenna at 15 m instead of 3 m | About 14 dB past about 330 m, roughly twice the range over flat ground; in town it mostly clears roofs and trees | Calculated, two-ray model: 20 log10(15/3); breakpoint 4 h_t h_r / λ with h_r = 1.8 m at 915 MHz. The 30 m terrain data shows only 88% vs 91% town coverage for 3 m vs 15 m because it has no buildings or trees |
-| 6 dBi HaLow omni instead of the 1 dBi certified antenna | About 5 dB both ways, roughly a third more range | Calculated, 40 dB per decade. Legal only if the antenna is on the module's grant: [47 CFR 15.204(c)(4)](https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-15/subpart-C/section-15.204) allows only same type and equal or lower gain without retesting, and the GW16170's certified antenna is the Pulse W1063, 1.0 dBi ([v1-rf-coexistence.md](v1-rf-coexistence.md)). Unverified whether its grant lists any higher-gain antenna |
-| Node at the base with 50 ft of LMR-400 to the antennas | Loses about 2.5 dB at 900 MHz, 4 dB at 2.4 GHz, 6 dB at 5.8 GHz | Calculated from the [LMR-400 datasheet](https://www.rfparts.com/old_site/pdf_docs/LMR/LMR-400.pdf) (3.9 / 6.8 / 10.8 dB per 100 ft) plus an assumed 0.5 dB for connectors and a surge protector |
+| 50 ft of coax plus jumpers and a surge protector | LMR-600: 1.8 dB at 900 MHz, 2.7 dB at 2.4 GHz. LMR-400: 2.5 dB and 3.9 dB | Calculated from the [LMR-600](https://www.rfparts.com/old_site/pdf_docs/LMR/LMR-600.pdf) (2.5 / 4.4 dB per 100 ft) and [LMR-400](https://www.rfparts.com/old_site/pdf_docs/LMR/LMR-400.pdf) (3.9 / 6.8 dB per 100 ft) datasheets, plus an assumed 0.5 dB for jumpers and the protector |
+| Mast antenna at 15 m instead of 3 m | About 14 dB past about 330 m; net of LMR-600 loss about +12 dB on HaLow, close to twice the range over flat ground. In town it mostly clears roofs and trees | Calculated, two-ray model: 20 log10(15/3); breakpoint 4 h_t h_r / λ with h_r = 1.8 m at 915 MHz. The 30 m terrain data shows only 88% vs 91% town coverage for 3 m vs 15 m because it has no buildings or trees |
+| 6 dBi HaLow omni instead of the 1 dBi certified antenna | About 5 dB both ways | Calculated. Legal only if the antenna is on the module's grant: [47 CFR 15.204(c)(4)](https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-15/subpart-C/section-15.204) allows only same type and equal or lower gain without retesting, and the GW16170's certified antenna is the Pulse W1063, 1.0 dBi ([v1-rf-coexistence.md](v1-rf-coexistence.md)). Unverified whether its grant lists any higher-gain antenna |
+| Mast-top amplifier | Not used | 47 CFR 15.204(a) and (b) bar an external power amplifier on a Part 15 radio unless radio, amplifier and antenna were authorized together as a system. The height gain makes one unnecessary |
 
-Open before a mast is built:
+### Lightning and grounding
 
-- **Fixed power.** The node has no PoE (B-06, D-022). How a mast node takes outside DC power up the pole is not designed.
+- Ground each coax shield at the top of the mast and again at the entry.
+- Bring every coax and the dish Ethernet through one grounded entry panel with a surge protector on each line, bonded to the mast ground rod and the building's grounding electrode, following NEC Article 810. Parts not chosen.
+- Leave a drip loop on each cable before the entry.
+
+### Open before a mast is built
+
 - **Antenna grants.** Check the GW16170, RAK3172 and AW7916 grants before choosing any antenna other than a certified one.
-- **Lightning.** Ground the mast and add surge protection on the DC and Ethernet lines at both ends. Parts not chosen.
-- **Rough parts per mast** beyond the node and pole (Unverified, typical prices): 900 MHz fiberglass omni $50–150, 2.4 GHz omni $30–80, LoRa omni $30–80, surge protectors $20–40 each, short coax jumpers $20–40 each; about $150–400.
+- **Node antenna ports.** The node's antenna connectors and any bulkheads for a mast jumper follow the enclosure design (B-21); confirm them before ordering coax ends.
+- **Rough parts per mast** beyond the node and pole (Unverified, typical prices): 900 MHz omni $50–150, LoRa omni $30–80, dual-feed 2.4 GHz omni $60–150, about 200 ft of coax $300–600, N connectors $10–15 each, four coax surge protectors $25–60 each, ground bar, rod and grounding kits $50–150; about $600–1,200.
 
 ## Home hub radio plan
 
