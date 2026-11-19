@@ -125,6 +125,21 @@ class ProfileSyncTests(unittest.TestCase):
         self.run_sync(api)
         self.assertEqual(api.writes, [])
 
+    def test_docs_own_pins_are_bumped_too(self):
+        entry = {"branch": "main", "workflows": []}
+        api = FakeAPI([], {})
+
+        def file_text(_api, repo, path, ref):
+            if repo.endswith("/docs") and path in ps.PIN_FILES:
+                return PIN_YML.format(sha=OLD, tool=TOOL), "blob"
+            if path == ps.PROFILE_PATH:
+                return json.dumps({"docs": entry}), "blob"
+            return ("p2" if ref in ("main", NEW) else "old policy"), "blob"
+
+        with mock.patch.object(ps, "file_text", file_text):
+            opened = ps.pin_prs(api, {"docs": entry})
+        self.assertEqual(opened, ["https://github.com/ghostnet-labs/docs/pull/1"])
+
 
 NOW = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
 
