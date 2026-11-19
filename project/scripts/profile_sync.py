@@ -126,8 +126,6 @@ def pin_prs(api, profiles):
     opened = []
     for name, profile in profiles.items():
         repo, branch = f"{ORG}/{name}", profile["branch"]
-        if name == "docs":
-            continue
         files = {path: file_text(api, repo, path, branch)[0] for path in PIN_FILES}
         stale = False
         for text in files.values():
