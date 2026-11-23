@@ -1,6 +1,6 @@
 # Bench compute tracks compared
 
-**This is a dated snapshot from 2026-11-11, not a purchasing record.** Nothing has been bought, so no board has booted our image and nothing here is measured. Every power, runtime and RF figure is calculated from datasheets and schematics in the track folders. Purchases go through [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36) and the Linear "OpenMANET POC — Purchase BOM". The visual version, with photos and the full 187-board screen, is the [Manet Bench Compute Screen](https://claude.ai/artifact/Sm3hWVZPsHHcJnTMRVeCXe). A daily refresh keeps this file and that page in step.
+**This is a dated snapshot from 2026-11-23, not a purchasing record.** Nothing has been bought, so no board has booted our image and nothing here is measured. Every power, runtime and RF figure is calculated from datasheets and schematics in the track folders. Purchases go through [GHO-36](https://linear.app/ghostnet-labs/issue/GHO-36) and the Linear "OpenMANET POC — Purchase BOM". The visual version, with photos and the full 187-board screen, is the [Manet Bench Compute Screen](https://claude.ai/artifact/Sm3hWVZPsHHcJnTMRVeCXe). A daily refresh keeps this file and that page in step.
 
 Per-track detail stays in each track folder; this file only lines the tracks up.
 
@@ -26,7 +26,7 @@ Costs come from each track's `build-list.md`; draw and runtime from each `power-
 
 | | CM5 | Venice | NanoPC-T6 LTS | Protectli |
 |---|---|---|---|---|
-| One node, full build | about $484 | about $1,182 | about $463 | about $1,130 |
+| One node, full build | about $497 | about $1,182 | about $463 | about $1,130 |
 | Draw from pack, typical | about 10.5 W | 9 to 13 W | 8 to 15 W | about 15 W |
 | Draw, peak | about 27 W | 15.8 W worst case | about 24 W worst case | about 38 W |
 | Runtime, typical | about 7.4 h | 5.8 to 8.4 h | 5.0 to 9.5 h | about 5.2 h |
@@ -57,4 +57,4 @@ Both Waveshare carriers are in use, for different jobs, and run the same `bcm271
 - The CM5-DUAL-ETH-BASE buck computes to about 5.40 V; measure it before seating a CM5.
 - The firmware CI boots the x86-64 image in QEMU, checks first boot, the UI and OTA, and runs three copies as a batman-adv mesh (firmware 90b8ba3, 51ee8f5). This is emulation: the VP2430e's Wi-Fi card, PPS and power are not exercised. Firmware PRs build a smoke set of boards, every board builds every 6 hours, and the rockchip and bcm27xx kernel patches were refreshed for 6.6.159 (firmware 2c23aca).
 - [D-052](../decisions.md) adds four USB receivers to each POC node (A-27): a FlightAware Pro Stick Plus, a FlightAware Pro Stick, an Airspy R2 and a Nooelec NESDR SMArt v5, on a battery-powered Waveshare 4-port hub. Their USB bandwidth and power on each board are Unverified, and the power and runtime figures here leave them out.
-- Seller pages on 2026-10-28: SparkFun's CM5104064 and MAX-M10S breakout show backorder. Seeed lists the CM5104016 as made to order with a 25-unit minimum, and its only button reads Discontinued, so a single unit cannot be ordered there. The NanoPC-T6 LTS and the GW11048-2 kit show in stock. Protectli's VP2430e page offers it for sale but states no stock level.
+- Seller pages on 2026-11-23: SparkFun's CM5104064 and MAX-M10S breakout show backorder. Seeed sells the CM5104016 at $143 (it was $130), limited to one per account, so a two-node order needs a second seller for the other CM5. Protectli shows the VP2430e on backorder. The NanoPC-T6 LTS and the GW11048-2 kit show in stock.
