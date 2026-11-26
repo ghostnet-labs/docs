@@ -13,10 +13,12 @@ spent only during an outage.
           with `needs.studio.outputs.<pool> != 'false' && <self-hosted> || <hosted>`,
           so a missing or failed answer keeps today's self-hosted route.
           Never exits non-zero.
-  rescue  cancels and re-runs this repository's runs that wait on an offline
-          pool, so they start again on hosted runners. Used by the hosted
-          "Handle passing PRs" job. Only touches runs whose workflow has a
-          "Studio runners" job (others would only queue on the Studio again).
+  rescue  cancels and re-runs this repository's runs that have waited 30+
+          minutes on an offline pool, so they start again on hosted runners.
+          Used by the hosted "Handle passing PRs" job. Only touches runs whose
+          workflow has a "Studio runners" job (others would only queue on the
+          Studio again). Runs GitHub already cancelled are merge_policy's
+          rerun_cancelled() job.
 
 How a pool counts as offline:
 
@@ -306,34 +308,16 @@ def has_selector(run: dict) -> bool:
     return any((job.get("name") or "").strip().lower().startswith(SELECTOR_JOB) for job in run.get("jobs", []))
 
 
-def offline_waits(run: dict, offline: set, now: datetime, live: bool) -> List[dict]:
+def offline_waits(run: dict, offline: set, now: datetime) -> List[dict]:
+    """Jobs of a live run that have waited STUCK or longer on an offline pool."""
     found = []
     for job in run.get("jobs", []):
         if pool_of(job.get("labels")) not in offline or job.get("runner_name"):
             continue
         created = parse_time(job.get("created_at"))
-        if created is None:
-            continue
-        if live and job.get("status") in ("queued", "waiting", "pending") and now - created >= STUCK:
-            found.append(job)
-        if not live and job.get("status") == "completed" and job.get("conclusion") == "cancelled":
+        if created and job.get("status") in ("queued", "waiting", "pending") and now - created >= STUCK:
             found.append(job)
     return found
-
-
-def is_latest_for_open_pr(gh: GitHub, repo: str, run: dict) -> bool:
-    """A cancelled PR run is worth re-running only for the PR's current head, and
-    only when no newer run of the same workflow exists (re-running an older run
-    in a cancel-in-progress group would cancel the newer one)."""
-    if run.get("event") != "pull_request" or not run.get("pull_requests"):
-        return False
-    pr = gh.get(f"/repos/{repo}/pulls/{run['pull_requests'][0]['number']}") or {}
-    if pr.get("state") != "open" or (pr.get("head") or {}).get("sha") != run.get("head_sha"):
-        return False
-    q = urllib.parse.urlencode({"head_sha": run["head_sha"], "per_page": 100})
-    same = [r for r in (gh.get(f"/repos/{repo}/actions/runs?{q}") or {}).get("workflow_runs", [])
-            if r.get("workflow_id") == run.get("workflow_id")]
-    return all(r["id"] <= run["id"] for r in same)
 
 
 def wait_completed(gh: GitHub, repo: str, run_id, sleep=time.sleep, tries: int = 12) -> bool:
@@ -354,35 +338,23 @@ def rescue(gh: GitHub, repo: str, now: datetime, runner_token: str = "", dry_run
     if not offline:
         print("Studio runner pools are online; nothing to rescue.")
         return done
-    if problem is None:
-        # With a working token status() skipped the cancelled runs; rescue needs them.
-        for run in list_runs(gh, repo, "cancelled", now, 4):
-            if all(run["id"] != r["id"] for r in runs):
-                run["jobs"] = run_jobs(gh, repo, run["id"])
-                runs.append(run)
     for run in runs:
         if len(done) >= limit:
             break
         if not has_selector(run) or (run.get("run_attempt") or 1) >= MAX_ATTEMPTS:
             continue
         url = run.get("html_url") or str(run["id"])
-        if run.get("status") in ("queued", "in_progress", "waiting", "pending"):
-            if not offline_waits(run, offline, now, live=True):
-                continue
-            if dry_run:
-                done.append(f"would cancel and re-run {url}")
-                continue
-            gh.post(f"/repos/{repo}/actions/runs/{run['id']}/cancel")
-            if not wait_completed(gh, repo, run["id"], sleep=sleep):
-                print(f"::warning::{url} did not finish cancelling; the next sweep re-runs it")
-                continue
-        elif run.get("conclusion") == "cancelled":
-            if not offline_waits(run, offline, now, live=False) or not is_latest_for_open_pr(gh, repo, run):
-                continue
-            if dry_run:
-                done.append(f"would re-run {url}")
-                continue
-        else:
+        if run.get("status") not in ("queued", "in_progress", "waiting", "pending"):
+            continue
+        if not offline_waits(run, offline, now):
+            continue
+        if dry_run:
+            done.append(f"would cancel and re-run {url}")
+            continue
+        gh.post(f"/repos/{repo}/actions/runs/{run['id']}/cancel")
+        if not wait_completed(gh, repo, run["id"], sleep=sleep):
+            # merge_policy's rerun_cancelled() picks it up on a later sweep.
+            print(f"::warning::{url} did not finish cancelling; a later sweep re-runs it")
             continue
         try:
             gh.post(f"/repos/{repo}/actions/runs/{run['id']}/rerun")

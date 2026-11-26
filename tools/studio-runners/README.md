@@ -71,14 +71,14 @@ carries a `Studio runners offline` warning.
 ## Rescuing runs that were already waiting
 
 Runs queued before the Studio went off keep waiting on it. "Handle passing PRs"
-(hosted, in every repo) runs `studio_runners.py rescue`: for offline pools it
-cancels and re-runs runs waiting 30+ minutes on them, and re-runs PR runs that
-GitHub cancelled after a day without a runner, when they are the newest run of
-their workflow on the PR's current head. It only touches runs whose workflow
-has a `Studio runners` job (anything else would wait on the Studio again), at
-most 5 per sweep and never past the third attempt. A PR opened before its repo
-got the fallback needs its branch updated first; the sweep does that for
-Claude PRs that are behind.
+(hosted, in every repo) runs `studio_runners.py rescue`: for each offline pool
+it cancels and re-runs runs that have waited 30+ minutes on it, so they start
+again on hosted runners. It only touches runs whose workflow has a `Studio
+runners` job (anything else would wait on the Studio again), at most 5 per
+sweep and never past the third attempt. Runs GitHub already cancelled after a
+day are re-run by the same sweep's merge policy (`rerun_cancelled`). A PR
+opened before its repo got the fallback needs its branch updated first; the
+sweep does that for Claude PRs that are behind.
 
 ## The token
 

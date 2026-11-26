@@ -286,42 +286,6 @@ class RescueTest(unittest.TestCase):
         self.assertEqual(gh.posts, [])
         self.assertTrue(done[0].startswith("would cancel"))
 
-    def cancelled_setup(self, pr_head="abc", newer=False):
-        run = {"id": 20, "status": "completed", "conclusion": "cancelled", "run_attempt": 1,
-               "event": "pull_request", "head_sha": "abc", "workflow_id": 7,
-               "pull_requests": [{"number": 197}], "html_url": "https://example/run/20"}
-        created = NOW - timedelta(hours=30)
-        jobs = [job(HOSTED, name="Studio runners", created=created, started=created, runner="GitHub Actions 2"),
-                job(MAC, conclusion="cancelled", name="Manet merge gate", created=created,
-                    completed=created + timedelta(hours=24))]
-        same = [{"id": 20, "workflow_id": 7}] + ([{"id": 21, "workflow_id": 7}] if newer else [])
-
-        def runs(path):
-            if "head_sha=" in path:
-                return {"workflow_runs": same}
-            return runs_route({"cancelled": [run]})(path)
-        return self.gh({}, jobs, {
-            f"/repos/{REPO}/actions/runs?": runs,
-            f"/repos/{REPO}/pulls/197": {"state": "open", "head": {"sha": pr_head}},
-        })
-
-    def test_reruns_expired_run_of_open_pr_head(self):
-        gh = self.cancelled_setup()
-        with redirect_stdout(io.StringIO()):
-            sr.rescue(gh, REPO, NOW, "", sleep=lambda s: None)
-        self.assertEqual(gh.posts, [f"/repos/{REPO}/actions/runs/20/rerun"])
-
-    def test_skips_old_head(self):
-        gh = self.cancelled_setup(pr_head="def")
-        with redirect_stdout(io.StringIO()):
-            sr.rescue(gh, REPO, NOW, "", sleep=lambda s: None)
-        self.assertEqual(gh.posts, [])
-
-    def test_skips_when_newer_run_exists(self):
-        gh = self.cancelled_setup(newer=True)
-        with redirect_stdout(io.StringIO()):
-            sr.rescue(gh, REPO, NOW, "", sleep=lambda s: None)
-        self.assertEqual(gh.posts, [])
 
 
 if __name__ == "__main__":
