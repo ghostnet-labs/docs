@@ -153,6 +153,14 @@ class DecideFromJobsTest(unittest.TestCase):
         v = sr.decide(None, sr.job_evidence([cancelled], NOW))
         self.assertTrue(v["mac"]["online"])
 
+    def test_rerun_sees_its_cancelled_attempt(self):
+        # The rescue (or a person) cancelled an attempt whose gate waited 35 minutes.
+        created = NOW - timedelta(minutes=40)
+        first = job(MAC, conclusion="cancelled", created=created, completed=created + timedelta(minutes=35))
+        v = sr.decide(None, sr.job_evidence([first], NOW))
+        self.assertFalse(v["mac"]["online"])
+        self.assertIn("30+ minutes", v["mac"]["why"])
+
     def test_live_wait(self):
         stuck = job(ARC, status="queued", conclusion=None, created=NOW - timedelta(minutes=40))
         busy = job(MAC, status="in_progress", conclusion=None, created=NOW - timedelta(minutes=5),

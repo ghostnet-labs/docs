@@ -42,7 +42,8 @@ runs. Each rule names a failure that already happened once:
                     every trigger is pull_request, push, schedule,
                     workflow_dispatch or merge_group.
                     Each form may add the Studio fallback term
-                    `needs.studio.outputs.<pool> != 'false' &&` right before
+                    `needs.studio.outputs.<pool> != 'false' &&` (or, in a
+                    reusable workflow, `inputs.studio_<pool> != 'false' &&`) right before
                     the self-hosted pick (mac, arc or build, matching the
                     labels), so same-repo work also goes hosted while that
                     Studio pool is offline. The `studio` job itself runs on
@@ -213,7 +214,8 @@ _PICK = r"(?:fromJSON\('(?P<sel>[^']*)'\)|'(?P<lit>[^']*)')"
 # sends same-repository work to the hosted fallback too while the Studio pool
 # is offline (docs .github/actions/studio-runners). It can only add hosted
 # routes, never self-hosted ones, and must name the pool the labels belong to.
-_STUDIO = r"(?:needs\.studio\.outputs\.(?P<pool>mac|arc|build) != 'false' && )?"
+# A reusable workflow gets the answer from its caller as `inputs.studio_<pool>`.
+_STUDIO = r"(?:(?:needs\.studio\.outputs\.|inputs\.studio_)(?P<pool>mac|arc|build) != 'false' && )?"
 STUDIO_ACTION = re.compile(r"^ghostnet-labs/docs/\.github/actions/studio-runners@[0-9a-f]{40}$")
 _FALLBACK = r"'(?P<fb>(?:ubuntu|macos|windows)-[A-Za-z0-9._-]+)'"
 # `${{ HEAD && self-hosted-labels || 'hosted' }}`: forks never get the Macs.
@@ -291,7 +293,7 @@ def has_fork_guard(runs_on, allow_event_form: bool = True) -> bool:
     return m is not None and _guard_picks_self_hosted(m)
 
 
-_STUDIO_TERM = re.compile(r"needs\.studio\.outputs\.(mac|arc|build) != 'false' && ")
+_STUDIO_TERM = re.compile(r"(?:needs\.studio\.outputs\.|inputs\.studio_)(mac|arc|build) != 'false' && ")
 
 
 def _studio_split(runs_on):

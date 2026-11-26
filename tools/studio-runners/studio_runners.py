@@ -31,8 +31,9 @@ How a pool counts as offline:
     offline too.
   * Without it (or when GitHub rejects it), this repository's own jobs decide:
     a pool is offline when one of its jobs has waited 30+ minutes, or was
-    cancelled after waiting 6+ hours without a runner, and no job on that pool
-    got a runner after it was queued. A pool with no evidence of its own
+    cancelled after waiting 30+ minutes without a runner, and no job on that
+    pool got a runner after it was queued. Earlier attempts of a run count, so
+    a run re-run after its jobs waited goes to the hosted fallback. A pool with no evidence of its own
     follows another Studio pool that is offline.
 
 Python 3.9 standard library only (the Studio runs stock Python 3.9).
@@ -59,7 +60,6 @@ ARC_LABELS = frozenset({"ghostnet-linux-arm64", "ghostnet-linux-arm64-large", "g
 # Retired VMs stay listed as offline forever; they say nothing about the Studio.
 RETIRED = (re.compile(r"^studio-ubuntu-"), re.compile(r"^gh-ubuntu"))
 STUCK = timedelta(minutes=30)     # a queued job this old means its pool is not taking work
-EXPIRED = timedelta(hours=6)      # a job cancelled after this long without a runner
 LOOKBACK = timedelta(hours=48)
 SELECTOR_JOB = "studio runners"   # the caller job's name, lower case
 MAX_ATTEMPTS = 3                  # never re-run a run more often than this
@@ -142,7 +142,8 @@ def job_evidence(jobs: List[dict], now: datetime) -> Dict[str, dict]:
     """Per pool: when a job last got a runner, and the oldest unanswered wait.
 
     A wait is a job still queued for STUCK or longer, or one cancelled after
-    EXPIRED or longer without ever getting a runner. Its time is when it was
+    waiting STUCK or longer without ever getting a runner (GitHub's 24-hour
+    expiry, or the attempt the rescue cancelled before re-running it). Its time is when it was
     queued, so a runner that took any job on the pool after that clears it.
     """
     ev: Dict[str, dict] = {pool: {"alive": None, "waits": []} for pool in POOLS}
@@ -163,7 +164,7 @@ def job_evidence(jobs: List[dict], now: datetime) -> Dict[str, dict]:
             ev[pool]["waits"].append({"since": created, "url": job.get("html_url"), "live": True})
         elif status == "completed" and conclusion == "cancelled":
             done = parse_time(job.get("completed_at"))
-            if done and done - created >= EXPIRED:
+            if done and done - created >= STUCK:
                 ev[pool]["waits"].append({"since": created, "url": job.get("html_url"), "live": False})
     return ev
 
@@ -195,7 +196,7 @@ def decide(online: Optional[Dict[str, int]], ev: Dict[str, dict]) -> Dict[str, d
         waits = unanswered(ev[pool])
         if waits:
             w = min(waits, key=lambda x: x["since"])
-            kind = "has waited 30+ minutes" if w["live"] else "was cancelled after waiting 6+ hours"
+            kind = "has waited 30+ minutes" if w["live"] else "was cancelled after waiting 30+ minutes"
             out[pool] = {"online": False, "why": f"a job {kind} without a runner: {w['url']}"}
         elif ev[pool]["alive"] is not None or ev[pool]["waits"]:
             out[pool] = {"online": True, "why": "its jobs are getting runners"}
@@ -217,7 +218,8 @@ def list_runs(gh: GitHub, repo: str, status: str, now: datetime, per_page: int) 
 
 
 def run_jobs(gh: GitHub, repo: str, run_id) -> List[dict]:
-    return (gh.get(f"/repos/{repo}/actions/runs/{run_id}/jobs?filter=latest&per_page=100") or {}).get("jobs", [])
+    # filter=all: a re-run's earlier attempt shows the jobs that waited for a runner.
+    return (gh.get(f"/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100") or {}).get("jobs", [])
 
 
 def collect(gh: GitHub, repo: str, now: datetime, deep: bool) -> List[dict]:
