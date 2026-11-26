@@ -241,10 +241,10 @@ class PickTest(unittest.TestCase):
 
 
     def test_reads_old_cancelled_runs_past_fresh_cancels(self):
-        # firmware #104: a push cancelled 12 fresh runs, and the run that waited
-        # 38 minutes for the Studio was further down the cancelled list.
+        # firmware #104: four pushes cancelled 48 fresh runs, and the run that
+        # waited 38 minutes for the Studio was on the second page.
         fresh = [{"id": i, "created_at": iso(NOW - timedelta(minutes=2)),
-                  "updated_at": iso(NOW - timedelta(minutes=1))} for i in range(1, 13)]
+                  "updated_at": iso(NOW - timedelta(minutes=1))} for i in range(1, 149)]
         created = NOW - timedelta(minutes=40)
         waited = {"id": 99, "created_at": iso(created), "updated_at": iso(created + timedelta(minutes=38))}
         jobs = {99: [job(MAC, conclusion="cancelled", created=created, completed=created + timedelta(minutes=38))]}
@@ -255,7 +255,10 @@ class PickTest(unittest.TestCase):
                 run_id = int(path.split("/runs/")[1].split("/")[0])
                 fetched.append(run_id)
                 return {"jobs": jobs.get(run_id, [])}
-            return runs_route({"cancelled": fresh + [waited]})(path)
+            if "status=cancelled&" in path:
+                page = int(path.split("page=")[-1].split("&")[0])
+                return {"workflow_runs": (fresh + [waited])[(page - 1) * 100:page * 100]}
+            return {"workflow_runs": []}
         gh = FakeGitHub({"/repos/": answer})
         out, summary, log = self.run_pick(gh)
         self.assertEqual(out, "mac=false\narc=false\nbuild=false\n")

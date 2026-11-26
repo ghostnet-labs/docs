@@ -63,6 +63,8 @@ STUCK = timedelta(minutes=30)     # a queued job this old means its pool is not 
 LOOKBACK = timedelta(hours=48)
 SELECTOR_JOB = "studio runners"   # the caller job's name, lower case
 MAX_ATTEMPTS = 3                  # never re-run a run more often than this
+CANCELLED_PAGES = 3               # cancelled runs are listed 100 per page
+LONG_CANCELS = 8                  # cancelled runs open 30+ minutes whose jobs are read
 TOKEN_PAGE = "https://github.com/settings/personal-access-tokens"
 SECRET_PAGE = f"https://github.com/organizations/{ORG}/settings/secrets/actions"
 
@@ -211,9 +213,9 @@ def decide(online: Optional[Dict[str, int]], ev: Dict[str, dict]) -> Dict[str, d
     return out
 
 
-def list_runs(gh: GitHub, repo: str, status: str, now: datetime, per_page: int) -> List[dict]:
+def list_runs(gh: GitHub, repo: str, status: str, now: datetime, per_page: int, page: int = 1) -> List[dict]:
     since = (now - LOOKBACK).strftime("%Y-%m-%dT%H:%M:%SZ")
-    q = urllib.parse.urlencode({"status": status, "per_page": per_page, "created": f">={since}"})
+    q = urllib.parse.urlencode({"status": status, "per_page": per_page, "created": f">={since}", "page": page})
     return (gh.get(f"/repos/{repo}/actions/runs?{q}") or {}).get("workflow_runs", [])
 
 
@@ -225,22 +227,38 @@ def run_jobs(gh: GitHub, repo: str, run_id) -> List[dict]:
 def collect(gh: GitHub, repo: str, now: datetime, deep: bool) -> List[dict]:
     """Recent runs with their jobs attached. deep adds cancelled and successful runs.
 
-    A push cancels the runs it supersedes within seconds, so in a busy repo the
-    newest cancelled runs say nothing about the Studio. Cancelled runs are read
-    30 at a time and only those that lasted 30+ minutes have their jobs fetched.
+    Each push cancels the runs it supersedes within seconds, so in a busy repo
+    (firmware cancels a dozen per push) the run that waited for the Studio sits
+    far down the cancelled list. Up to CANCELLED_PAGES pages of cancelled runs
+    are listed, and jobs are fetched only for the newest LONG_CANCELS runs that
+    stayed open 30+ minutes, so fresh cancels cost no job lookups.
     """
-    wanted = [("queued", 5), ("in_progress", 5)]
-    if deep:
-        wanted += [("cancelled", 30), ("success", 3)]
     runs: List[dict] = []
     seen = set()
-    for status, per_page in wanted:
+
+    def add(run):
+        seen.add(run["id"])
+        run["jobs"] = run_jobs(gh, repo, run["id"])
+        runs.append(run)
+
+    for status, per_page in [("queued", 5), ("in_progress", 5)]:
         for run in list_runs(gh, repo, status, now, per_page):
-            if run["id"] in seen or (status == "cancelled" and not lasted(run, STUCK)):
-                continue
-            seen.add(run["id"])
-            run["jobs"] = run_jobs(gh, repo, run["id"])
-            runs.append(run)
+            if run["id"] not in seen:
+                add(run)
+    if not deep:
+        return runs
+    long_cancels = 0
+    for page in range(1, CANCELLED_PAGES + 1):
+        batch = list_runs(gh, repo, "cancelled", now, 100, page)
+        for run in batch:
+            if long_cancels < LONG_CANCELS and run["id"] not in seen and lasted(run, STUCK):
+                add(run)
+                long_cancels += 1
+        if len(batch) < 100 or long_cancels >= LONG_CANCELS:
+            break
+    for run in list_runs(gh, repo, "success", now, 3):
+        if run["id"] not in seen:
+            add(run)
     return runs
 
 
