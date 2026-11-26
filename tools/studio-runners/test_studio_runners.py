@@ -240,6 +240,28 @@ class PickTest(unittest.TestCase):
         self.assertEqual(gh.calls, 2)  # queued and in_progress lists only
 
 
+    def test_reads_old_cancelled_runs_past_fresh_cancels(self):
+        # firmware #104: a push cancelled 12 fresh runs, and the run that waited
+        # 38 minutes for the Studio was further down the cancelled list.
+        fresh = [{"id": i, "created_at": iso(NOW - timedelta(minutes=2)),
+                  "updated_at": iso(NOW - timedelta(minutes=1))} for i in range(1, 13)]
+        created = NOW - timedelta(minutes=40)
+        waited = {"id": 99, "created_at": iso(created), "updated_at": iso(created + timedelta(minutes=38))}
+        jobs = {99: [job(MAC, conclusion="cancelled", created=created, completed=created + timedelta(minutes=38))]}
+        fetched = []
+
+        def answer(path):
+            if "/jobs" in path:
+                run_id = int(path.split("/runs/")[1].split("/")[0])
+                fetched.append(run_id)
+                return {"jobs": jobs.get(run_id, [])}
+            return runs_route({"cancelled": fresh + [waited]})(path)
+        gh = FakeGitHub({"/repos/": answer})
+        out, summary, log = self.run_pick(gh)
+        self.assertEqual(out, "mac=false\narc=false\nbuild=false\n")
+        self.assertEqual(fetched, [99])  # fresh cancels cost no job lookups
+
+
 class RescueTest(unittest.TestCase):
     def setUp(self):
         self.queued_run = {"id": 10, "status": "queued", "run_attempt": 1, "event": "pull_request",

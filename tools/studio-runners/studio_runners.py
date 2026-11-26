@@ -223,19 +223,31 @@ def run_jobs(gh: GitHub, repo: str, run_id) -> List[dict]:
 
 
 def collect(gh: GitHub, repo: str, now: datetime, deep: bool) -> List[dict]:
-    """Recent runs with their jobs attached. deep adds cancelled and successful runs."""
+    """Recent runs with their jobs attached. deep adds cancelled and successful runs.
+
+    A push cancels the runs it supersedes within seconds, so in a busy repo the
+    newest cancelled runs say nothing about the Studio. Cancelled runs are read
+    30 at a time and only those that lasted 30+ minutes have their jobs fetched.
+    """
     wanted = [("queued", 5), ("in_progress", 5)]
     if deep:
-        wanted += [("cancelled", 4), ("success", 3)]
+        wanted += [("cancelled", 30), ("success", 3)]
     runs: List[dict] = []
     seen = set()
     for status, per_page in wanted:
         for run in list_runs(gh, repo, status, now, per_page):
-            if run["id"] not in seen:
-                seen.add(run["id"])
-                run["jobs"] = run_jobs(gh, repo, run["id"])
-                runs.append(run)
+            if run["id"] in seen or (status == "cancelled" and not lasted(run, STUCK)):
+                continue
+            seen.add(run["id"])
+            run["jobs"] = run_jobs(gh, repo, run["id"])
+            runs.append(run)
     return runs
+
+
+def lasted(run: dict, span: timedelta) -> bool:
+    """Whether a run was open for at least span (unknown times count as yes)."""
+    created, updated = parse_time(run.get("created_at")), parse_time(run.get("updated_at"))
+    return created is None or updated is None or updated - created >= span
 
 
 def read_runners(token: str, fetch: Optional[Callable] = None):
