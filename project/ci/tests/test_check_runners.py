@@ -539,6 +539,17 @@ jobs:{studio}
               "|| 'ubuntu-24.04' }}")
         self.assertEqual(self.check(ro), [("t", "fork-pr-self-hosted")])
 
+    def test_reusable_input_form(self):
+        doc = wf("""
+on: {workflow_call: {inputs: {studio_mac: {type: string, default: 'true'}}}}
+jobs:
+  t:
+    runs-on: ${{ github.event.pull_request.head.repo.full_name == github.repository && inputs.studio_mac != 'false' && fromJSON('["self-hosted", "macOS", "ARM64"]') || 'ubuntu-24.04' }}
+    timeout-minutes: 10
+    steps: []
+""")
+        self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)), [])
+
     def test_selector_needs_pinned_action(self):
         unpinned = STUDIO_JOB.replace(f"@{SHA}", "@main")
         self.assertEqual(self.check("ubuntu-24.04", studio=unpinned),
