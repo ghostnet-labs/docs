@@ -41,6 +41,13 @@ runs. Each rule names a failure that already happened once:
                     let push runs use self-hosted runners, so they pass only when
                     every trigger is pull_request, push, schedule,
                     workflow_dispatch or merge_group.
+                    Each form may add the Studio fallback term
+                    `needs.studio.outputs.<pool> != 'false' &&` right before
+                    the self-hosted pick (mac, arc or build, matching the
+                    labels), so same-repo work also goes hosted while that
+                    Studio pool is offline. The `studio` job itself runs on
+                    HOSTED_IMAGE with one step, the pinned docs
+                    studio-runners action, and is not a hosted-runner finding.
   hosted-image-latest
                     A job's runs-on names ubuntu-latest (or macos-latest,
                     windows-latest), including the hosted fallback inside a
@@ -185,6 +192,9 @@ def is_self_hosted(runs_on) -> bool:
         return True
     if is_arc_fork_fallback(runs_on) or is_arc_pr_only_fallback(runs_on):
         return True
+    pool, plain = _studio_split(runs_on)
+    if pool == "arc" and (is_arc_fork_fallback(plain) or is_arc_pr_only_fallback(plain)):
+        return True  # a reviewed ARC route with the Studio fallback term
     labels = runs_on.get("labels") if isinstance(runs_on, dict) else runs_on
     if isinstance(labels, str):
         labels = [labels]
@@ -199,25 +209,49 @@ _HEAD_IS_REPO = (r"(?:github\.event\.pull_request\.head\.repo\.full_name == gith
 # the fallback for everything else a GitHub-hosted runner. Checking both stops
 # an inverted guard (`head == repo && 'ubuntu-latest' || 'self-hosted'`).
 _PICK = r"(?:fromJSON\('(?P<sel>[^']*)'\)|'(?P<lit>[^']*)')"
+# Optional Studio fallback term: `needs.studio.outputs.<pool> != 'false' && `
+# sends same-repository work to the hosted fallback too while the Studio pool
+# is offline (docs .github/actions/studio-runners). It can only add hosted
+# routes, never self-hosted ones, and must name the pool the labels belong to.
+_STUDIO = r"(?:needs\.studio\.outputs\.(?P<pool>mac|arc|build) != 'false' && )?"
+STUDIO_ACTION = re.compile(r"^ghostnet-labs/docs/\.github/actions/studio-runners@[0-9a-f]{40}$")
 _FALLBACK = r"'(?P<fb>(?:ubuntu|macos|windows)-[A-Za-z0-9._-]+)'"
 # `${{ HEAD && self-hosted-labels || 'hosted' }}`: forks never get the Macs.
-_GUARD_PLAIN = re.compile(r"^\$\{\{ " + _HEAD_IS_REPO + " && " + _PICK + r" \|\| " + _FALLBACK + r" \}\}$")
+_GUARD_PLAIN = re.compile(r"^\$\{\{ " + _HEAD_IS_REPO + " && " + _STUDIO + _PICK + r" \|\| " + _FALLBACK + r" \}\}$")
 # `${{ (event_name != 'pull_request' || HEAD) && ... }}`: lets push events use
 # the Macs. Only safe when every trigger is one where event_name cannot be a
 # pull_request_target-style event (see SAFE_FOR_EVENT_GUARD).
 _GUARD_EVENT = re.compile(r"^\$\{\{ \(github\.event_name != 'pull_request' \|\| " + _HEAD_IS_REPO
-                          + r"\) && " + _PICK + r" \|\| " + _FALLBACK + r" \}\}$")
+                          + r"\) && " + _STUDIO + _PICK + r" \|\| " + _FALLBACK + r" \}\}$")
 # `${{ event_name == 'pull_request' && HEAD && ... }}`: only a same-repository
 # pull_request run gets the Macs; push, delete and every other event stay on the
 # hosted fallback. Safe whatever else the workflow triggers on, because a
 # pull_request_target event never matches the first term.
-_GUARD_PR_ONLY = re.compile(r"^\$\{\{ github\.event_name == 'pull_request' && " + _HEAD_IS_REPO + " && " + _PICK
+_GUARD_PR_ONLY = re.compile(r"^\$\{\{ github\.event_name == 'pull_request' && " + _HEAD_IS_REPO + " && " + _STUDIO + _PICK
                             + r" \|\| " + _FALLBACK + r" \}\}$")
 SAFE_FOR_EVENT_GUARD = frozenset({"pull_request", "push", "schedule", "workflow_dispatch", "merge_group"})
 
 
+def _picked_pool(sel: str):
+    """The Studio pool (mac, arc, build) a guard's self-hosted pick belongs to."""
+    try:
+        labels = json.loads(sel)
+    except ValueError:
+        labels = [sel]
+    names = {str(x).lower() for x in (labels if isinstance(labels, list) else [labels])}
+    if names & ARC_RUNNER_LABELS:
+        return "arc"
+    if "openwrt-build" in names:
+        return "build"
+    if "self-hosted" in names and "macos" in names:
+        return "mac"
+    return None
+
+
 def _guard_picks_self_hosted(m: "re.Match[str]") -> bool:
     sel = m.group("sel") or m.group("lit") or ""
+    if m.group("pool") and _picked_pool(sel) != m.group("pool"):
+        return False  # a Studio term must name the pool its labels route to
     if "self-hosted" in sel:
         return True
     # ARC names must match exactly: 'ghostnet-linux-arm64-largeX' is not a pool.
@@ -244,15 +278,43 @@ def has_fork_guard(runs_on, allow_event_form: bool = True) -> bool:
     """
     if not isinstance(runs_on, str):
         return False
-    if is_arc_pr_only_fallback(runs_on):
+    pool, plain = _studio_split(runs_on)
+    arc_route = plain if pool == "arc" else runs_on
+    if is_arc_pr_only_fallback(arc_route):
         return True
-    if is_arc_fork_fallback(runs_on):
+    if is_arc_fork_fallback(arc_route):
         return allow_event_form
     text = " ".join(runs_on.split())
     m = _GUARD_PLAIN.match(text) or _GUARD_PR_ONLY.match(text)
     if m is None and allow_event_form:
         m = _GUARD_EVENT.match(text)
     return m is not None and _guard_picks_self_hosted(m)
+
+
+_STUDIO_TERM = re.compile(r"needs\.studio\.outputs\.(mac|arc|build) != 'false' && ")
+
+
+def _studio_split(runs_on):
+    """(pool, runs-on without the Studio term) for a route with exactly one term."""
+    if not isinstance(runs_on, str):
+        return None, runs_on
+    text = " ".join(runs_on.split())
+    terms = _STUDIO_TERM.findall(text)
+    if len(terms) != 1:
+        return None, runs_on
+    return terms[0], _STUDIO_TERM.sub("", text)
+
+
+def is_studio_selector(job: dict) -> bool:
+    """The hosted job that decides whether the Studio pools are online.
+
+    It has to run on a GitHub-hosted runner (it exists for when the Studio is
+    off), so it is not a hosted-runner finding as long as it is exactly one
+    step: the pinned docs studio-runners action, on the pinned hosted image.
+    """
+    steps = job.get("steps") or []
+    return (job.get("runs-on") == HOSTED_IMAGE and len(steps) == 1 and isinstance(steps[0], dict)
+            and bool(STUDIO_ACTION.match(str(steps[0].get("uses", "")))) and "run" not in steps[0])
 
 
 def _cancels(conc) -> bool:
@@ -291,7 +353,7 @@ def check_workflow(repo: str, name: str, doc: dict) -> list[Finding]:
             # Runner choice belongs to the called workflow, which is checked itself.
             hosted = not uses.startswith("./")
         else:
-            hosted = not is_self_hosted(job.get("runs-on"))
+            hosted = not is_self_hosted(job.get("runs-on")) and not is_studio_selector(job)
             if hosted:
                 out.append(Finding(repo, name, job_id, "hosted-runner",
                                    f"runs-on {_runs_on_text(job.get('runs-on'))!r}"))
