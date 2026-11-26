@@ -60,8 +60,8 @@ Safety:
   pod is listed and an ARC job has waited 30+ minutes.
 - **Without it**, or when GitHub rejects it: this repository's own recent jobs.
   A pool is offline when one of its jobs has waited 30+ minutes, or was
-  cancelled after waiting 6+ hours without a runner, and no job on that pool got
-  a runner after it was queued. A pool with no evidence of its own follows an
+  cancelled after waiting 30+ minutes without a runner (earlier attempts of a
+  re-run count), and no job on that pool got a runner after it was queued. A pool with no evidence of its own follows an
   offline Studio pool. This is slower to notice an outage and slower to notice
   the Studio is back (up to 48 hours), so set the token.
 
