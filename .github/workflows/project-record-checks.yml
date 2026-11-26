@@ -13,9 +13,28 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  studio:
+    # Which Mac Studio runner pools are online. While one is offline the jobs
+    # below use their GitHub-hosted fallback (docs tools/studio-runners).
+    name: Studio runners
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      mac: ${{ steps.pick.outputs.mac }}
+      arc: ${{ steps.pick.outputs.arc }}
+      build: ${{ steps.pick.outputs.build }}
+    steps:
+      - id: pick
+        uses: ghostnet-labs/docs/.github/actions/studio-runners@2018620d06cb3d4a70c373557ce68b75cc5df0c9
+        with:
+          runner-token: ${{ secrets.RUNNER_READ_TOKEN }}
   records:
     name: Project record validation
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'ghostnet-linux-arm64' || 'ubuntu-24.04' }}
+    needs: studio
+    if: ${{ !cancelled() }}
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.studio.outputs.arc != 'false' && 'ghostnet-linux-arm64' || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -36,13 +55,17 @@ jobs:
         run: |
           python -m unittest discover -s project/ci/tests -v
           python project/scripts/check_runners.py --repo docs
+      - name: Studio runner fallback tests
+        run: python -m unittest discover -s tools/studio-runners -v
 
   studio-python:
     # ci-watch, stale-runs and the merge gate run on the Mac Studio's stock
     # Python 3.9. On 11-13 a 3.10-only annotation in workflow_triggers.py
     # crashed ci-watch on every run for 12 hours; this job fails such a PR.
     name: Studio Python 3.9 compatibility
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'ghostnet-linux-arm64' || 'ubuntu-24.04' }}
+    needs: studio
+    if: ${{ !cancelled() }}
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.studio.outputs.arc != 'false' && 'ghostnet-linux-arm64' || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -56,8 +79,9 @@ jobs:
         run: |
           "$PY39" --version
           "$PY39" tools/ci-watch/ci_watch.py --help > /dev/null
-      - name: ci-watch, stale-runs and merge policy tests on Python 3.9
+      - name: ci-watch, stale-runs, merge policy and studio-runners tests on Python 3.9
         run: |
           "$PY39" -m unittest discover -s tools/ci-watch
           "$PY39" -m unittest discover -s tools/stale-runs
           "$PY39" -m unittest discover -s project/tests
+          "$PY39" -m unittest discover -s tools/studio-runners
