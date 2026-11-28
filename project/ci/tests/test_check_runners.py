@@ -471,3 +471,158 @@ class RepositoryAllowlistTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+
+
+SHA = "0123456789abcdef0123456789abcdef01234567"
+STUDIO_JOB = f"""
+  studio:
+    name: Studio runners
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: ghostnet-labs/docs/.github/actions/studio-runners@{SHA}
+"""
+
+
+class StudioFallbackTest(unittest.TestCase):
+    """Routes that also go hosted while a Studio pool is offline (tools/studio-runners)."""
+
+    def check(self, runs_on, on="pull_request", studio=STUDIO_JOB):
+        doc = wf(f"""
+on: {on}
+concurrency: {{group: x, cancel-in-progress: true}}
+jobs:{studio}
+  t:
+    needs: studio
+    runs-on: {runs_on}
+    timeout-minutes: 10
+    steps: []
+""")
+        return rules(cr.check_workflow("r", "w.yml", doc))
+
+    def test_mac_plain_form(self):
+        ro = ("${{ github.event.pull_request.head.repo.full_name == github.repository && "
+              "needs.studio.outputs.mac != 'false' && fromJSON('[\"self-hosted\", \"macOS\", \"ARM64\"]') "
+              "|| 'ubuntu-24.04' }}")
+        self.assertEqual(self.check(ro), [])
+
+    def test_arc_event_form(self):
+        ro = ("${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == "
+              "github.repository) && needs.studio.outputs.arc != 'false' && 'ghostnet-linux-arm64' || 'ubuntu-24.04' }}")
+        self.assertEqual(self.check(ro, on="[pull_request, push]"), [])
+
+    def test_arc_pr_only_form(self):
+        ro = ("${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == "
+              "github.repository && needs.studio.outputs.arc != 'false' && 'ghostnet-gate' || 'ubuntu-24.04' }}")
+        self.assertEqual(self.check(ro), [])
+
+    def test_build_form(self):
+        ro = ("${{ github.event.pull_request.head.repo.full_name == github.repository && "
+              "needs.studio.outputs.build != 'false' && fromJSON('[\"self-hosted\", \"openwrt-build\"]') "
+              "|| 'ubuntu-24.04' }}")
+        self.assertEqual(self.check(ro), [])
+
+    def test_pool_must_match_labels(self):
+        ro = ("${{ github.event.pull_request.head.repo.full_name == github.repository && "
+              "needs.studio.outputs.arc != 'false' && fromJSON('[\"self-hosted\", \"macOS\", \"ARM64\"]') "
+              "|| 'ubuntu-24.04' }}")
+        self.assertEqual(self.check(ro), [("t", "fork-pr-self-hosted")])
+
+    def test_term_cannot_replace_the_fork_guard(self):
+        ro = ("${{ needs.studio.outputs.mac != 'false' && fromJSON('[\"self-hosted\", \"macOS\", \"ARM64\"]') "
+              "|| 'ubuntu-24.04' }}")
+        self.assertEqual(self.check(ro), [("t", "fork-pr-self-hosted")])
+
+    def test_inverted_term_rejected(self):
+        ro = ("${{ github.event.pull_request.head.repo.full_name == github.repository && "
+              "needs.studio.outputs.mac == 'false' && fromJSON('[\"self-hosted\", \"macOS\", \"ARM64\"]') "
+              "|| 'ubuntu-24.04' }}")
+        self.assertEqual(self.check(ro), [("t", "fork-pr-self-hosted")])
+
+    def test_reusable_input_form(self):
+        doc = wf("""
+on: {workflow_call: {inputs: {studio_mac: {type: string, default: 'true'}}}}
+jobs:
+  t:
+    runs-on: ${{ github.event.pull_request.head.repo.full_name == github.repository && inputs.studio_mac != 'false' && fromJSON('["self-hosted", "macOS", "ARM64"]') || 'ubuntu-24.04' }}
+    timeout-minutes: 10
+    steps: []
+""")
+        self.assertEqual(rules(cr.check_workflow("r", "w.yml", doc)), [])
+
+    def test_selector_needs_pinned_action(self):
+        unpinned = STUDIO_JOB.replace(f"@{SHA}", "@main")
+        self.assertEqual(self.check("ubuntu-24.04", studio=unpinned),
+                         [("studio", "hosted-runner"), ("t", "hosted-runner")])
+
+    def test_selector_must_be_only_that_step(self):
+        extra = STUDIO_JOB + "      - run: echo hi\n"
+        self.assertIn(("studio", "hosted-runner"), self.check("ubuntu-24.04", studio=extra))
+
+    def test_selector_on_latest_image_is_a_finding(self):
+        latest = STUDIO_JOB.replace("runs-on: ubuntu-24.04", "runs-on: ubuntu-latest")
+        self.assertIn(("studio", "hosted-runner"), self.check("ubuntu-24.04", studio=latest))
+
+
+sys.path.insert(0, str(ROOT / "project" / "scripts"))
+import add_studio_fallback as asf  # noqa: E402
+
+GATE = """name: Manet merge gate
+on:
+  pull_request:
+    types: [opened, synchronize, closed]
+permissions:
+  contents: read
+concurrency:
+  group: manet-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  gate:
+    name: Manet merge gate
+    if: github.event.action != 'closed'
+    runs-on: ${{ github.event.pull_request.head.repo.full_name == github.repository && fromJSON('["self-hosted", "macOS", "ARM64"]') || 'ubuntu-24.04' }}
+    timeout-minutes: 350
+    steps:
+      - run: echo gate
+"""
+
+TESTS = """name: Go tests
+on: [pull_request, workflow_dispatch]
+concurrency: {group: x, cancel-in-progress: true}
+jobs:
+  lint:
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'ghostnet-linux-arm64' || 'ubuntu-24.04' }}
+    timeout-minutes: 10
+    steps: []
+  test:
+    needs: lint
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'ghostnet-linux-arm64' || 'ubuntu-24.04' }}
+    timeout-minutes: 10
+    steps: []
+"""
+
+
+class AddStudioFallbackTest(unittest.TestCase):
+    def test_gate_passes_policy(self):
+        out = asf.apply(GATE, SHA, {"gate": "mac"}, "github.event.action != 'closed'")
+        doc = yaml.safe_load(out)
+        self.assertEqual(cr.check_workflow("r", "w.yml", doc), [])
+        gate = doc["jobs"]["gate"]
+        self.assertEqual(gate["needs"], "studio")
+        self.assertEqual(gate["if"], "${{ !cancelled() && github.event.action != 'closed' }}")
+        self.assertIn("needs.studio.outputs.mac != 'false' && fromJSON", gate["runs-on"])
+        self.assertEqual(doc["jobs"]["studio"]["if"], "github.event.action != 'closed'")
+
+    def test_chained_jobs_keep_their_needs(self):
+        out = asf.apply(TESTS, SHA, {"lint": "arc", "test": "arc"})
+        doc = yaml.safe_load(out)
+        self.assertEqual(cr.check_workflow("r", "w.yml", doc), [])
+        test = doc["jobs"]["test"]
+        self.assertEqual(test["needs"], ["lint", "studio"])
+        self.assertEqual(test["if"], "${{ !cancelled() && needs.lint.result == 'success' }}")
+
+    def test_rerun_moves_only_the_pin(self):
+        once = asf.apply(GATE, SHA, {"gate": "mac"})
+        other = "f" * 40
+        twice = asf.apply(once, other, {"gate": "mac"})
+        self.assertEqual(twice, once.replace(SHA, other))
